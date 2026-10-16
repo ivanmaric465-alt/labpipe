@@ -19,8 +19,7 @@ from typing import Any
 import yaml
 
 from labpipe import manifest as mf
-from labpipe.naming import derive_sample_id
-from labpipe.registry import classify, load_methods
+from labpipe.registry import load_methods
 from labpipe.safety import PROJECT_ROOT, SetupError, load_pipeline_config
 
 SYNC_MARKERS = ("koofr", "onedrive", "dropbox", "google drive", "googledrive", "icloud",
@@ -146,43 +145,47 @@ def _raw_roots(config: dict) -> tuple[list[dict[str, Any]], list[tuple[str, Path
 
 
 def _files(config: dict, usable: list[tuple[str, Path]]) -> list[dict[str, Any]]:
-    methods = load_methods()
-    overrides_file = PROJECT_ROOT / config["sample_id"]["overrides_file"]
-    overrides = {}
-    if overrides_file.exists():
-        overrides = (yaml.safe_load(overrides_file.read_text(encoding="utf-8")) or {}).get(
-            "overrides") or {}
+    from labpipe.inventory import inventory
     items = []
-    for root_id, root in usable:
-        kinds: Counter[str] = Counter()
-        unclaimed_ext: Counter[str] = Counter()
-        unclear: list[str] = []
-        for directory, _, names in os.walk(root):
-            for name in names:
-                relative = (Path(directory) / name).relative_to(root).as_posix()
-                method, kind = classify(relative, methods)
-                if method is None:
-                    unclaimed_ext[Path(name).suffix.lower() or "(none)"] += 1
-                    continue
-                kinds[f"{method}/{kind}"] += 1
-                if kind == "analyse":
-                    _, _, problem = derive_sample_id(relative, pattern=config["sample_id"]["pattern"],
-                                                     overrides=overrides)
-                    if problem:
-                        unclear.append(relative)
-        analysable = sum(n for key, n in kinds.items() if key.endswith("/analyse"))
-        items.append(_item(f"files:{root_id}", "ok" if analysable else "todo",
-                           f"{analysable} file(s) a method can analyse; by method: {dict(kinds)}",
-                           None if analysable else "check methods.yaml patterns against the "
-                           "user's file types", unclaimed_extensions=dict(unclaimed_ext.most_common(10))))
+    usable_ids = {root_id for root_id, _ in usable}
+    for root in inventory(config)["roots"]:
+        if root["id"] not in usable_ids:
+            continue
+        folders = (f"add new files to {root['data_folder']}; " if root["data_folder"] else "") \
+            + f"labpipe reads them from {root['reads_from']} (read-only)"
+        items.append(_item(f"data_folder:{root['id']}", "ok", folders))
+        analysable = sum(n for info in root["recognised"].values()
+                         for kind, n in info["files"].items() if kind.endswith("(analysed)"))
+        unknown = {ext: info["files"] for ext, info in root["not_recognised"].items()}
+        items.append(_item(f"files:{root['id']}", "ok" if analysable else "todo",
+                           f"{analysable} file(s) a method can analyse; recognised: "
+                           + ", ".join(f"{m} {info['files']}" for m, info in root["recognised"].items())
+                           + (f"; not recognised: {unknown}" if unknown else ""),
+                           ("show the user `labpipe inventory` and ask what the unrecognised "
+                            "files are (AGENTS.md → Recognising the user's files)" if unknown
+                            else None)
+                           if analysable else "show the user `labpipe inventory`; ask what their "
+                           "files are (AGENTS.md → Recognising the user's files)"))
+        unclear = root["no_sample_id"]
         if analysable:
-            items.append(_item(f"sample_ids:{root_id}", "warn" if unclear else "ok",
-                               f"{len(unclear)} of {analysable} file name(s) give no sample ID "
-                               f"with pattern {config['sample_id']['pattern']}",
+            items.append(_item(f"sample_ids:{root['id']}", "warn" if unclear["files"] else "ok",
+                               f"{unclear['files']} of {analysable} file name(s) give no sample ID "
+                               f"with pattern {unclear['pattern']}",
                                "show the user these names; adapt sample_id.pattern in "
                                "config/pipeline.yaml or add overrides in config/sample_ids.yaml"
-                               if unclear else None, examples=unclear[:8]))
+                               if unclear["files"] else None, examples=unclear["examples"]))
     return items
+
+
+def _automation(config: dict) -> list[dict[str, Any]]:
+    """Is automatic processing (if set up) running, and did its last run succeed?"""
+    if not config.get("automation"):
+        return [_item("automation", "ok", "automatic processing not set up (optional: "
+                      "`labpipe automation setup` in your terminal)")]
+    from labpipe.automation import health
+    report = health(config)
+    return [_item("automation", report["status"], report["message"], report["next"],
+                  **report["details"])]
 
 
 def _method_setup() -> list[dict[str, Any]]:
@@ -246,6 +249,7 @@ def run() -> dict[str, Any]:
     if config is not None and (PROJECT_ROOT / config["manifest"]).exists():
         counts = Counter(e["status"] for e in mf.load(config)["entries"].values())
         items.append(_item("manifest", "ok", f"manifest entries by status: {dict(counts)}"))
+        items += _automation(config)
     elif config is not None:
         items.append(_item("manifest", "todo", "nothing scanned yet",
                            "labpipe scan, then analyse one file with the user"))

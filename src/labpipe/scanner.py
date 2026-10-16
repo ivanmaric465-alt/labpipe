@@ -8,7 +8,10 @@
   budget for this file hash is not used up;
 * needs_review: back to pending once a human override resolves it;
 * files modified within settle_minutes are skipped (a sync client or the instrument PC may still be writing);
-* entries whose file disappeared: status missing (outputs are kept).
+* entries whose file disappeared: status missing (outputs are kept);
+* baseline=True (setup, "only new files from now on"): files seen for the first
+  time are recorded as baseline, not analysed; they become pending when their
+  content changes or on `labpipe requeue --baseline | --entry ID`.
 
 Raw files are only ever opened for reading (hashing).
 """
@@ -49,7 +52,7 @@ def _walk(root: Path):
             yield full, full.relative_to(root).as_posix()
 
 
-def scan(config: dict) -> dict[str, Any]:
+def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
     methods = load_methods()
     overrides = _overrides(config)
     pattern = config["sample_id"]["pattern"]
@@ -126,6 +129,9 @@ def scan(config: dict) -> dict[str, Any]:
                     entry["duplicate_of"] = entry_id(method, root["id"], primary)
                     mf.set_status(entry, "duplicate",
                                   f"same measurement as {primary} (primary format)")
+                elif baseline and is_new:
+                    mf.set_status(entry, "baseline", "already in the data folder when labpipe "
+                                  "was set up; not analysed (labpipe requeue --baseline)")
                 elif problem:
                     mf.set_status(entry, "needs_review", f"sample ID unclear: {problem}")
                 elif is_new or previous_hash != digest or old_status in (None, "missing"):

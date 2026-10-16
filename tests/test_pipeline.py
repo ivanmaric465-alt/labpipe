@@ -305,3 +305,55 @@ def test_try_exclusive_does_not_wait(tmp_path):
 def test_stored_sample_id_may_extend_the_file_name_id(stored, agree):
     from labpipe.naming import sample_ids_agree
     assert sample_ids_agree("S-15", stored) is agree
+
+
+def test_inventory_baseline_and_batches(tmp_path):
+    project, raw, env = _project(tmp_path)
+    x, y = synthetic_pattern([(40.0, 5000.0, 1.0, 0.5)])
+    for n in (1, 2, 3):
+        (raw / "XRD" / f"SYN-{n}_test.xrdml").write_text(xrdml_text(x, y, f"SYN-{n}"))
+    (raw / "report.docx").write_bytes(b"not data")
+    root = _labpipe(env, "inventory")["roots"][0]
+    assert root["recognised"]["xrd"]["files"] == {".xrdml (analysed)": 3}
+    assert root["not_recognised"] == {".docx": {"files": 1, "examples": ["report.docx"]}}
+    assert root["already_in_manifest"] == 0
+
+    # "only new files from now on": existing files are recorded, not queued
+    assert _labpipe(env, "scan", "--baseline")["counts"] == {"baseline": 3, "unclaimed": 1}
+    assert _labpipe(env, "scan")["changes"] == []
+    assert _labpipe(env, "pending") == []
+    (raw / "XRD" / "SYN-4_test.xrdml").write_text(xrdml_text(x, y, "SYN-4"))
+    assert _labpipe(env, "scan")["counts"] == {"baseline": 3, "pending": 1, "unclaimed": 1}
+
+    assert len(_labpipe(env, "requeue", "--baseline")["requeued"]) == 3
+    pending = _labpipe(env, "pending")
+    assert len(pending) == 4
+    # inside an automatic run the agents only see that run's batch
+    batch = dict(env, LABPIPE_BATCH=pending[0]["entry_id"])
+    assert [row["entry_id"] for row in _labpipe(batch, "pending")] == [pending[0]["entry_id"]]
+
+
+def test_automation_health_reports_failed_runs(tmp_path, monkeypatch):
+    from labpipe import automation, manifest
+    monkeypatch.setattr(automation, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(manifest, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(automation, "_services", lambda: {"labpipe-watch.service": "active"})
+    config = {"logs_dir": "logs", "manifest": "manifest.json", "automation": {}}
+    log = tmp_path / "logs" / "automation.log"
+    log.parent.mkdir()
+    assert automation.health(config)["status"] == "ok"   # no run yet
+    log.write_text(json.dumps({"utc": "2026-10-16T21:08:00Z", "event": "run_finished",
+                               "exit_code": 0, "done": ["a"], "failed": [],
+                               "cost_usd": 0.395}) + "\n")
+    report = automation.health(config)
+    assert report["status"] == "ok" and "cost 0.40 USD" in report["message"]
+    with open(log, "a") as stream:
+        stream.write(json.dumps({"utc": "2026-10-17T02:00:00Z", "event": "scan_failed",
+                                 "reason": "raw root not available"}) + "\n")
+    report = automation.health(config)
+    assert report["status"] == "warn" and "FAILED" in report["message"] and report["next"]
+    (tmp_path / "manifest.json").write_text(json.dumps({"schema": "labpipe.manifest/1", "entries": {
+        "x": {"entry_id": "x", "status": "pending",
+              "events": [{"utc": "2026-10-10T00:00:00Z", "to": "pending"}]}}}))
+    report = automation.health(config, now=time.time())
+    assert report["details"]["waiting_long"] == ["x"]

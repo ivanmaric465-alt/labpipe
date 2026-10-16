@@ -132,6 +132,12 @@ def test_agents_render_per_harness():
         agents._render(role, "claude-code", {"analyst": "openai/gpt-5"})
 
 
+def test_guard_unattended_refuses_baseline(config):
+    event = {"tool_name": "Bash", "tool_input": {"command": "labpipe scan --baseline"},
+             "cwd": str(PROJECT_ROOT)}
+    assert "baseline" in guard.decide(event, config, "unattended")
+
+
 def test_guard_unattended_allows_only_pipeline_subcommands(config):
     for allowed in ("labpipe notes verify --entry x", "labpipe xrd summary --entry x",
                     "labpipe report"):
@@ -177,7 +183,7 @@ def test_setup_raw_data_accepts_a_read_only_folder(local_project, tmp_path_facto
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
     wizard.raw_data(wizard.load_pipeline_config())
     config = wizard.load_pipeline_config()
-    assert config["raw_roots"] == [{"id": "lab", "path": str(raw)}]
+    assert config["raw_roots"] == [{"id": "lab", "path": str(raw), "source": str(raw)}]
     assert config["protected_paths"] == ["/old"]
 
 

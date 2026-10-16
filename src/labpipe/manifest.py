@@ -11,6 +11,8 @@ Entry status values:
   stale         analysed with an older code version or different settings;
                 reprocessed only on request
   missing       file no longer present under the raw root (outputs kept)
+  baseline      already there when labpipe was set up and the user chose "only new
+                files"; not analysed until its content changes or it is requeued
 
 Writes are atomic and serialised with an exclusive lock on logs/.manifest.mutex
 (labpipe.locking: fcntl on Linux/macOS, msvcrt on Windows).

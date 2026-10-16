@@ -14,15 +14,16 @@ Run `labpipe doctor` first (it only reads). If `ready` is true, skip to what the
 
 - Take `next` from the doctor output, explain in two or three plain sentences what it is and why it matters, do it together with the user, rerun `labpipe doctor`, repeat.
 - If `labpipe` itself is not found, the user has not installed it yet: have them run `./install.sh` (Linux/macOS) or `.\install.ps1` (Windows) from the repository folder, and explain what it does (README → Install). It creates the virtual environment outside synced folders and never needs admin rights.
-- **`labpipe setup`** is the guided alternative for the raw-data folder, the sandbox check, models per role and automation (the installers offer it). It asks questions, so the user runs it in their own terminal: suggest it, you cannot run it. Single steps: `labpipe setup --only raw-data|sandbox|agents|automation`. If the user prefers to do it with you, follow the items below.
+- **`labpipe setup`** is the guided alternative for the raw-data folder, the sandbox check, models per role and automation (the installers offer it). It asks questions, so the user runs it in their own terminal: suggest it, you cannot run it. Single steps: `labpipe setup --only raw-data|files|sandbox|agents|automation`. If the user prefers to do it with you, follow the items below.
 - **The user runs anything that needs admin rights** (mounts, shares, `sudo`, `New-SmbShare`). Get the exact commands with `labpipe readonly-view --source <their raw folder>` (it prints them for their OS, paths filled in), show them step by step, and explain each. Never run it yourself.
-- **Raw data location** (`config/local.yaml`): ask where the instrument files are and how they get there (copied by hand, exported from the instrument PC, a network drive, a sync client; none is required). Explain that labpipe needs a folder it can only read, and the two ways to get one (`docs/SAFETY.md`): a read-only view of the folder (recommended) or making the folder itself read-only. List the writable original behind a view under `protected_paths`. Editing `local.yaml` always asks the user for approval; that is intended.
+- **Raw data location** (`config/local.yaml`): ask where the instrument files are and how they get there (copied by hand, exported from the instrument PC, a network drive, a sync client; none is required). Explain the two folders in plain words: their **data folder**, where they put files, and the **read-only view** labpipe reads from (README → Your data folder). The two ways to get a read-only folder are in `docs/SAFETY.md`: a read-only view (recommended) or making the folder itself read-only. Record the data folder as `source:` of the raw root and list it under `protected_paths`. Editing `local.yaml` always asks the user for approval; that is intended.
+- **Recognising the user's files**: see the section of that name below. Do it right after the data folder is set.
 - **Sample IDs**: doctor shows file names that give no sample ID. Show them, ask the user how their files are named, then adapt `config/pipeline.yaml` → `sample_id.pattern` (or add overrides in `config/sample_ids.yaml`). Rerun doctor until the examples look right to the user.
-- **Methods and references**: if doctor reports files no method claims, ask what they are. For XRD, ask which phases they expect and whether references are missing (see "Adding a reference phase"). For an unsupported technique, offer "Adding a new analysis method".
+- **References**: for XRD, ask which phases they expect and whether references are missing (see "Adding a reference phase").
 - **Instrument specifics**: ask about internal standards (certificate values), sample holders that give peaks, supports or substrates. Put the answers into settings, never code.
 - **First analysis**: `labpipe scan`, pick one file with the user, `labpipe <method> analyze --entry ID`, show `plot.png`, walk through `results.json` and its checks, write the notes (delegate to the method's analyst agent). Then explain steering (below) with their own plot.
 - **Agents and models**: ask which agent harness the user works with and which model each role should use (`supervisor`, `analyst`). Explain the trade-off: the supervisor only runs commands and keeps the books, so a small, fast model is enough; the analyst looks at plots and writes for people, so a stronger model writes better notes. `labpipe notes verify` rejects invented numbers whatever the model. Write the answer into `config/local.yaml` → `agents`, then run `labpipe agents sync`.
-- **Automatic processing** (optional, last): explain what `labpipe automation` does (a watcher that checks for new files, waits until they stop changing, then runs the pipeline; a nightly safety-net run; notifications when work starts and ends; the AI starts only when there is work). The user installs it by running `labpipe automation setup` in their own terminal: it asks for the timings and shows the service files before installing. Agents cannot run it.
+- **Automatic processing** (optional, last): explain what `labpipe automation` does (a watcher that checks for new files, waits until they stop changing, then runs the pipeline in batches of at most 10 measurements per AI run; a nightly safety-net run; notifications when work starts and ends; the AI starts only when there is work). Doctor's `automation` item reports whether the last run succeeded; if it warns, show the user the reason and the log. The user installs it by running `labpipe automation setup` in their own terminal: it asks for the timings and shows the service files before installing. Agents cannot run it.
 
 Keep a short record of the setup decisions (paths chosen, naming rule, standards) in the `note:` fields of the settings files you change, so the next person knows why.
 
@@ -57,6 +58,8 @@ All commands print JSON.
 | `labpipe review` | Write `logs/review_queue.md` |
 | `labpipe replay PROVENANCE.json` | Regenerate outputs and compare hashes |
 | `labpipe xrd refs list \| add \| build` | XRD reference phases |
+| `labpipe inventory` | What labpipe recognises in the data folder(s): files per method, unrecognised types with examples, names without a sample ID |
+| `labpipe scan --baseline` / `labpipe requeue --baseline` | Record existing files as `baseline` (not analysed) / queue them later; only when the user asks |
 | `labpipe init` | Create `config/local.yaml` on a new machine |
 | `labpipe setup [--only STEP]` | Guided setup; interactive, for the user's terminal only |
 | `labpipe readonly-view --source PATH` | Print this OS's commands for a read-only view of the raw data (runs nothing) |
@@ -113,6 +116,19 @@ src/labpipe/                                       code; methods/<name>/ per met
 - `ignored`: matches an ignore pattern.
 - `stale`: the code or settings changed since the analysis. Redone only on request (`requeue --stale`).
 - `missing`: the file has gone from the raw root. Its outputs are kept.
+- `baseline`: already in the data folder when labpipe was set up, and the user chose "only new files". Not analysed until its content changes or the user asks (`requeue --baseline` or `--entry ID`).
+
+## Recognising the user's files
+
+Do this after the data folder is set, and whenever doctor reports unrecognised files. **Show, ask, then act; never guess.**
+
+1. Run `labpipe inventory`. Show the user, in plain words: which files each method recognised (counts, two examples), which file types no method reads (with examples), and which names give no sample ID.
+2. Ask: *"Is this right?"* Then go through what is off, one thing at a time:
+   - **recognised but wrong** (e.g. a `.txt` that is not what the method thinks): ask what it is; narrow that method's `patterns` in `methods.yaml` or add an `ignore` pattern, with the user's OK;
+   - **not recognised**: ask what these files are. Not data (reports, photos, slides): leave them, nothing to do. Exports of a format a method already reads: propose a pattern. A technique labpipe cannot analyse yet: offer to design a new method with the user ("Adding a new analysis method");
+   - **no sample ID**: as in "Sample IDs" above.
+3. Rerun `labpipe inventory` and show the difference. Repeat until the user says it is right.
+4. If the manifest is still empty for this folder, ask whether to analyse everything already there, or only files added from now on (`labpipe scan --baseline` records the existing ones without analysing them). This is the user's decision; explain that analysis is free but AI notes cost money.
 
 ## Steering an analysis (how the user changes an analysis)
 

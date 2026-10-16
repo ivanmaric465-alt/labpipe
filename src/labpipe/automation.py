@@ -1,11 +1,15 @@
 """Automatic processing: `labpipe automation watch | run | setup | status`.
 
 * `run`: one pass. Takes a lock (a second run exits at once), scans, and starts
-  the AI supervisor only if there is work (pending entries or missing notes).
-  Notifies when work is found and when it is done.
+  the AI supervisor only if there is work (pending entries or missing notes),
+  for at most `max_measurements_per_run` of them (the batch, passed to the
+  agents' `labpipe pending` / `notes todo` as LABPIPE_BATCH). Notifies when
+  work is found and when it is done, with what is left.
 * `watch`: checks the raw roots every `check_every_seconds` (file sizes and
   modification times only, no hashing). After a change, once nothing has
-  changed for `settle_minutes`, it calls `run`.
+  changed for `settle_minutes`, it calls `run`. If work is left after a clean
+  run that made progress, the next batch runs at the next check.
+* `health`: for `labpipe doctor` (services running, last run ok, nothing stuck).
 * `setup`: asks the user, writes `automation:` into config/local.yaml and the
   service files for this OS (Linux: systemd user units; macOS/Windows: printed,
   untested), and installs them only after the user confirms. Needs a terminal:
@@ -17,6 +21,7 @@ Settings (config/local.yaml):
       check_every_seconds: 60
       settle_minutes: 3            # also used by `labpipe scan`
       nightly_at: "02:00"          # safety net
+      max_measurements_per_run: 10 # the rest follows in the next run
       max_budget_usd: 5            # per AI run
       claude: /home/me/.local/bin/claude
       notify: {desktop: true, command: null}   # command: ["prog", "{message}"]
@@ -24,6 +29,7 @@ Settings (config/local.yaml):
 
 from __future__ import annotations
 
+import calendar
 import json
 import os
 import platform
@@ -43,7 +49,9 @@ from labpipe.registry import classify, load_methods
 from labpipe.safety import PROJECT_ROOT, assert_pipeline_writable, set_local_block
 
 DEFAULTS = {"check_every_seconds": 60, "settle_minutes": 3, "nightly_at": "02:00",
-            "max_budget_usd": 5, "claude": None, "notify": {"desktop": True, "command": None}}
+            "max_measurements_per_run": 10, "max_budget_usd": 5, "claude": None,
+            "notify": {"desktop": True, "command": None}}
+WAITING_TOO_LONG_HOURS = 24
 
 
 def settings(config: dict) -> dict[str, Any]:
@@ -142,14 +150,18 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
         if not work["pending"] and not work["notes"]:
             _log(config, {"event": "nothing_to_do", "trigger": reason})
             return {"status": "nothing_to_do"}
-        todo_ids = work["pending"] + work["notes"]
-        notify(config, f"labpipe: {len(work['pending'])} new/changed measurement(s) "
-                       f"({_describe(config, todo_ids)}); analysis started")
+        queued = work["pending"] + [i for i in work["notes"] if i not in work["pending"]]
+        todo_ids = queued[:max(1, int(chosen["max_measurements_per_run"]))]
+        remaining = len(queued) - len(todo_ids)
+        notify(config, f"labpipe: analysis started for {len(todo_ids)} measurement(s) "
+                       f"({_describe(config, todo_ids)})"
+                       + (f"; {remaining} more queued for the next run" if remaining else ""))
         stamp = utc_now().replace(":", "").replace("-", "")
         transcript = PROJECT_ROOT / config["logs_dir"] / "runs" / f"auto-{stamp}.jsonl"
         assert_pipeline_writable(transcript, config)
         transcript.parent.mkdir(parents=True, exist_ok=True)
-        env = dict(os.environ, LABPIPE_AGENT_MODE="unattended")
+        # `labpipe pending` and `labpipe notes todo` show the agents only this batch.
+        env = dict(os.environ, LABPIPE_AGENT_MODE="unattended", LABPIPE_BATCH=",".join(todo_ids))
         env.pop("CLAUDECODE", None)
         env.pop("LABPIPE_RAW_ROOT", None)
         try:
@@ -180,11 +192,13 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
                    + (f", {len(failed)} failed" if failed else "")
                    + (f", {len(still_missing & set(todo_ids))} without notes"
                       if still_missing & set(todo_ids) else "")
-                   + "; see analysis/report.html")
+                   + "; see analysis/report.html"
+                   + (f"; {remaining} left for the next run" if remaining else ""))
         notify(config, message)
         summary = {"event": "run_finished", "trigger": reason, "exit_code": completed.returncode,
                    "transcript": str(transcript.relative_to(PROJECT_ROOT)),
-                   "cost_usd": result.get("total_cost_usd"), "done": done, "failed": failed}
+                   "cost_usd": result.get("total_cost_usd"), "done": done, "failed": failed,
+                   "remaining": remaining}
         _log(config, summary)
         return {"status": "finished", **summary}
 
@@ -213,7 +227,7 @@ def watch(config: dict) -> None:
     interval, settle = chosen["check_every_seconds"], 60 * chosen["settle_minutes"]
     _log(config, {"event": "watch_started", "check_every_seconds": interval,
                   "settle_minutes": chosen["settle_minutes"]})
-    run(config, reason="watch started")
+    more = _more_batches(run(config, reason="watch started"))
     last, changed_at = _snapshot(config), None
     started_with = code_version()
     while True:
@@ -229,7 +243,15 @@ def watch(config: dict) -> None:
             changed_at, last = time.time(), current
         elif changed_at is not None and time.time() - changed_at >= settle:
             changed_at = None
-            run(config, reason="change detected")
+            more = _more_batches(run(config, reason="change detected"))
+        elif more:
+            more = _more_batches(run(config, reason="next batch"))
+
+
+def _more_batches(result: dict[str, Any]) -> bool:
+    """Run the next batch at the next check? Only after a clean run that made progress."""
+    return (result.get("status") == "finished" and result.get("exit_code") == 0
+            and bool(result.get("done")) and bool(result.get("remaining")))
 
 
 # ---- setup -------------------------------------------------------------------------------
@@ -273,6 +295,9 @@ def setup(config: dict, *, assume_yes: bool = False) -> int:
         "settle_minutes": float(_ask("How long must a file stay unchanged before it counts as "
                                      "complete (minutes)?", str(current["settle_minutes"]))),
         "nightly_at": _ask("Time of the nightly safety-net run (HH:MM)?", current["nightly_at"]),
+        "max_measurements_per_run": int(_ask("At most how many measurements per AI run "
+                                             "(the rest follow in the next run)?",
+                                             str(current["max_measurements_per_run"]))),
         "max_budget_usd": float(_ask("Maximum AI cost per run (USD)?",
                                      str(current["max_budget_usd"]))),
         "claude": _ask("Path to the claude command", current["claude"] or shutil.which("claude")
@@ -311,15 +336,76 @@ def setup(config: dict, *, assume_yes: bool = False) -> int:
     return 0
 
 
-def status(config: dict) -> dict[str, Any]:
-    out: dict[str, Any] = {"settings": settings(config)}
-    if platform.system() == "Linux" and shutil.which("systemctl"):
-        for unit in ("labpipe-watch.service", "labpipe-nightly.timer"):
-            state = subprocess.run(["systemctl", "--user", "is-active", unit],
-                                   capture_output=True, text=True)
-            out[unit] = state.stdout.strip() or state.stderr.strip()
+def _services() -> dict[str, str]:
+    if platform.system() != "Linux" or not shutil.which("systemctl"):
+        return {}
+    states = {}
+    for unit in ("labpipe-watch.service", "labpipe-nightly.timer"):
+        state = subprocess.run(["systemctl", "--user", "is-active", unit],
+                               capture_output=True, text=True)
+        states[unit] = state.stdout.strip() or state.stderr.strip()
+    return states
+
+
+def _events(config: dict) -> list[dict[str, Any]]:
     log = PROJECT_ROOT / config["logs_dir"] / "automation.log"
-    if log.exists():
-        out["last_events"] = [json.loads(line) for line in
-                              log.read_text(encoding="utf-8").splitlines()[-5:]]
-    return out
+    if not log.exists():
+        return []
+    events = []
+    for line in log.read_text(encoding="utf-8").splitlines():
+        try:
+            events.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return events
+
+
+def health(config: dict, now: float | None = None) -> dict[str, Any]:
+    """For doctor: services running, last run succeeded, nothing waiting too long. Reads only."""
+    now = time.time() if now is None else now
+    problems, fixes = [], []
+    services = _services()
+    stopped = [unit for unit, state in services.items() if state != "active"]
+    if stopped:
+        problems.append(f"not running: {', '.join(stopped)}")
+        fixes.append("`systemctl --user enable --now " + " ".join(stopped)
+                     + "` (or rerun `labpipe automation setup`)")
+    runs = [e for e in _events(config)
+            if e.get("event") in ("run_finished", "run_failed", "scan_failed")]
+    last = runs[-1] if runs else None
+    if last is None:
+        state = "no automatic run yet"
+    elif last["event"] != "run_finished":
+        state = f"last run {last['utc']} FAILED: {last.get('reason')}"
+        problems.append(state)
+        fixes.append("read logs/automation.log; retry with `labpipe automation run`")
+    elif last.get("exit_code") != 0:
+        state = f"last run {last['utc']} ended with exit code {last.get('exit_code')}"
+        problems.append(state)
+        fixes.append(f"read the transcript {last.get('transcript')}")
+    else:
+        state = (f"last run {last['utc']}: {len(last.get('done') or [])} done, "
+                 f"{len(last.get('failed') or [])} failed, cost "
+                 + (f"{last['cost_usd']:.2f} USD" if isinstance(last.get("cost_usd"), (int, float))
+                    else "unknown"))
+    waiting = []
+    for entry in mf.load(config)["entries"].values():
+        if entry.get("status") == "pending" and entry.get("events"):
+            since = calendar.timegm(time.strptime(entry["events"][-1]["utc"],
+                                                  "%Y-%m-%dT%H:%M:%SZ"))
+            if now - since > WAITING_TOO_LONG_HOURS * 3600:
+                waiting.append(entry["entry_id"])
+    if waiting and services.get("labpipe-watch.service") == "active":
+        problems.append(f"{len(waiting)} file(s) pending for more than "
+                        f"{WAITING_TOO_LONG_HOURS} h although the watcher runs")
+        fixes.append("read logs/automation.log; `labpipe automation run` processes them now")
+    others = [p for p in problems if p != state]
+    return {"status": "warn" if problems else "ok",
+            "message": "; ".join([state, *others]) if problems
+                       else f"automatic processing running; {state}",
+            "next": " · ".join(fixes) or None,
+            "details": {"services": services, "last_run": last, "waiting_long": waiting[:8]}}
+
+
+def status(config: dict) -> dict[str, Any]:
+    return {"settings": settings(config), **_services(), "last_events": _events(config)[-5:]}

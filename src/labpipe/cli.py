@@ -2,9 +2,10 @@
 
   labpipe doctor                            setup state of this installation (read-only)
   labpipe init                              create config/local.yaml (this machine's paths)
-  labpipe setup [--only STEP]               guided setup in your terminal (raw data, sandbox, agents, automation)
+  labpipe setup [--only STEP]               guided setup in your terminal (data folder, files, sandbox, agents, automation)
   labpipe readonly-view --source PATH       print this OS's commands for a read-only view (runs nothing)
-  labpipe scan [--json]                     update manifest.json from the raw roots
+  labpipe inventory                         what labpipe recognises in the data folder(s)
+  labpipe scan [--baseline]                 update manifest.json from the raw roots
   labpipe pending [--json]                  entries waiting for analysis (+ subagent)
   labpipe status [ENTRY] [--json]           manifest summary or one entry
   labpipe <method> analyze --entry ID [--rerun]   analyse one entry (e.g. labpipe xrd analyze)
@@ -15,7 +16,7 @@
   labpipe roots rename OLD NEW              keep manifest entries when a raw root's id changes
   labpipe automation setup|watch|run|status automatic processing (setup asks you; needs a terminal)
   labpipe analyze --pending [--limit N]     analyse all pending entries (deterministic loop)
-  labpipe requeue (--stale | --entry ID)    put entries back to pending
+  labpipe requeue (--stale | --baseline | --entry ID)   put entries back to pending
   labpipe review                            write logs/review_queue.md
   labpipe replay PROVENANCE.json            regenerate outputs from provenance and compare hashes
   labpipe xrd refs list|add|build           manage XRD reference phases (CIFs)
@@ -33,6 +34,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import os
 import shutil
 import sys
 from collections import Counter
@@ -80,9 +82,24 @@ def cmd_doctor(args, config) -> int:
     return 0 if result["ready"] else 1
 
 
+def _batch(rows: list[dict]) -> list[dict]:
+    """Inside an automatic run, show the agents only that run's batch (LABPIPE_BATCH)."""
+    batch = os.environ.get("LABPIPE_BATCH")
+    if batch is None:
+        return rows
+    chosen = set(filter(None, batch.split(",")))
+    return [row for row in rows if row["entry_id"] in chosen]
+
+
 def cmd_notes_todo(args, config) -> int:
     from labpipe.notes import todo
-    _print(todo(config))
+    _print(_batch(todo(config)))
+    return 0
+
+
+def cmd_inventory(args, config) -> int:
+    from labpipe.inventory import inventory
+    _print(inventory(config))
     return 0
 
 
@@ -196,7 +213,7 @@ def cmd_guard(args, config) -> int:
 
 
 def cmd_scan(args, config) -> int:
-    summary = scanner.scan(config)
+    summary = scanner.scan(config, baseline=args.baseline)
     summary["review_queue"] = pipeline.review_queue(config)
     _print(summary)
     return 0
@@ -208,7 +225,7 @@ def cmd_pending(args, config) -> int:
              "sample_id": e["sample_id"], "relative_path": e["relative_path"]}
             for e in data["entries"].values() if e.get("status") == "pending"]
     rows.sort(key=lambda row: (row["method"], row["relative_path"]))
-    _print(rows)
+    _print(_batch(rows))
     return 0
 
 
@@ -268,7 +285,9 @@ def cmd_requeue(args, config) -> int:
     changed = []
     with mf.locked(config) as data:
         for entry in data["entries"].values():
-            if (args.stale and entry.get("status") == "stale") or entry["entry_id"] == args.entry:
+            if ((args.stale and entry.get("status") == "stale")
+                    or (args.baseline and entry.get("status") == "baseline")
+                    or entry["entry_id"] == args.entry):
                 if entry.get("status") in ("duplicate", "ignored", "missing", "needs_review"):
                     continue
                 mf.set_status(entry, "pending", "requeued by user")
@@ -299,7 +318,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("init").set_defaults(func=cmd_init, needs_config=False)
     setup = sub.add_parser("setup", help="guided setup in your terminal: raw data, sandbox, "
                                          "agents, automation")
-    setup.add_argument("--only", choices=["raw-data", "sandbox", "agents", "automation"])
+    setup.add_argument("--only", choices=["raw-data", "files", "sandbox", "agents", "automation"])
     setup.set_defaults(func=cmd_setup, needs_config=False)
     roview = sub.add_parser("readonly-view",
                             help="print the commands for a read-only view of the raw data")
@@ -316,7 +335,12 @@ def build_parser() -> argparse.ArgumentParser:
     retire = notes.add_parser("retire", help="move notes.md to _superseded/ so it is rewritten")
     retire.add_argument("--entry", action="append", required=True)
     retire.set_defaults(func=cmd_notes_retire)
-    sub.add_parser("scan").set_defaults(func=cmd_scan)
+    scan = sub.add_parser("scan")
+    scan.add_argument("--baseline", action="store_true",
+                      help="record files seen for the first time as 'baseline' (not analysed)")
+    scan.set_defaults(func=cmd_scan)
+    sub.add_parser("inventory", help="what labpipe recognises in the data folder(s)"
+                   ).set_defaults(func=cmd_inventory)
     sub.add_parser("pending").set_defaults(func=cmd_pending)
     status = sub.add_parser("status")
     status.add_argument("entry", nargs="?")
@@ -328,6 +352,7 @@ def build_parser() -> argparse.ArgumentParser:
     requeue = sub.add_parser("requeue")
     group = requeue.add_mutually_exclusive_group(required=True)
     group.add_argument("--stale", action="store_true")
+    group.add_argument("--baseline", action="store_true")
     group.add_argument("--entry")
     requeue.set_defaults(func=cmd_requeue)
     sub.add_parser("review").set_defaults(func=cmd_review)

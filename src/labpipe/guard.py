@@ -99,6 +99,8 @@ def decide(event: dict[str, Any], config: dict | None, mode: str) -> str | None:
             words = stripped.split()[1:]
             if words[:2] == ["notes", "retire"]:
                 return "unattended runs may not retire notes (a user decision)"
+            if "--baseline" in words:
+                return "unattended runs may not mark files as baseline (a user decision)"
             if not words or not (words[0] in UNATTENDED_COMMANDS or (
                     len(words) > 1 and words[1] in UNATTENDED_METHOD_ACTIONS)):
                 return ("unattended runs may only run pipeline commands: "

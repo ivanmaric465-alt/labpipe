@@ -8,14 +8,15 @@
 # root's id stable.
 raw_roots:
   - id: lab
-    path: /srv/labdata-ro                  # Linux example
+    path: /srv/labdata-ro                  # the read-only folder labpipe reads (Linux example)
     # path: //localhost/labdata-ro         # Windows example: a read-only share (forward slashes are fine)
+    # source: /data/lab/raw                # your data folder, where you add files (shown by doctor)
 
 # Never written to by labpipe. List the writable original behind every read-only
 # view (wherever the files really live: a folder you copy into, a network drive,
 # or a sync client's folder). Not needed when a raw root is itself read-only.
-protected_paths:
-  - /data/lab/raw                          # example: the original behind /srv/labdata-ro
+protected_paths: []
+  # - /data/lab/raw
   # - ~/Dropbox
   # - C:/Users/<you>/OneDrive
 

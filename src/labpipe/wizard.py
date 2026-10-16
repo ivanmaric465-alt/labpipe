@@ -1,15 +1,19 @@
 """`labpipe setup`: guided setup in the user's own terminal (the installers offer it).
 
-Four steps, each optional and safe to rerun; current settings are the defaults:
+Five steps, each optional and safe to rerun; current settings are the defaults:
 
-1. raw-data: where the instrument files are, and a folder labpipe can only read.
-   Commands that need admin rights or change permissions on the raw data are
-   printed for the user to run; this never runs them. It then checks the result
-   and writes `raw_roots` / `protected_paths` into config/local.yaml.
-2. sandbox: are the prerequisites of the Claude Code sandbox present (needed
+1. raw-data: the user's data folder (where they add files) and the read-only
+   folder labpipe reads it through. Commands that need admin rights or change
+   permissions on the raw data are printed for the user to run; this never runs
+   them. It then checks the result and writes `raw_roots` (with `source`, the
+   data folder) and `protected_paths` into config/local.yaml.
+2. files: what labpipe recognises there (`labpipe inventory`); asks whether that
+   is right, and what to do with data already in the folder (analyse it, or
+   record it as baseline and analyse only new files).
+3. sandbox: are the prerequisites of the Claude Code sandbox present (needed
    for unattended runs)?
-3. agents: harness and a model per role → `agents:`, then `labpipe agents sync`.
-4. automation: `labpipe automation setup` (watcher + nightly run).
+4. agents: harness and a model per role → `agents:`, then `labpipe agents sync`.
+5. automation: `labpipe automation setup` (watcher + nightly run).
 
 Needs a terminal, so agents cannot run it.
 """
@@ -28,7 +32,7 @@ from labpipe.doctor import _read_only
 from labpipe.roview import commands as readonly_view_commands
 from labpipe.safety import PROJECT_ROOT, SetupError, load_pipeline_config, set_local_block
 
-STEPS = ("raw-data", "sandbox", "agents", "automation")
+STEPS = ("raw-data", "files", "sandbox", "agents", "automation")
 
 
 def _ask(question: str, default: str = "") -> str:
@@ -41,7 +45,7 @@ def _yes(question: str, default: bool) -> bool:
 
 
 def _heading(number: int, title: str) -> None:
-    print(f"\n── {number}/4 {title} " + "─" * max(0, 60 - len(title)))
+    print(f"\n── {number}/{len(STEPS)} {title} " + "─" * max(0, 60 - len(title)))
 
 
 def _show_steps(plan: dict[str, Any]) -> None:
@@ -65,13 +69,15 @@ def _wait_for(path: Path) -> tuple[bool | None, str]:
     return _read_only(path)
 
 
-def _save_raw_root(config: dict, root_id: str, path: str, protect: list[str]) -> None:
+def _save_raw_root(config: dict, root_id: str, path: str, source: str,
+                   protect: list[str]) -> None:
     old = [root["id"] for root in config.get("raw_roots") or []]
     protected = list(dict.fromkeys([*(config.get("protected_paths") or []), *protect]))
-    set_local_block("raw_roots", [{"id": root_id, "path": path}])
+    set_local_block("raw_roots", [{"id": root_id, "path": path, "source": source}])
     set_local_block("protected_paths", protected)
-    print(f"\nSaved to config/local.yaml: raw root {root_id!r} = {path}"
-          + (f"; never written to: {', '.join(protected)}" if protected else ""))
+    print(f"\nSaved to config/local.yaml:\n  you add files to:        {source}\n"
+          f"  labpipe reads them from: {path} (read-only)"
+          + (f"\n  never written to:        {', '.join(protected)}" if protected else ""))
     if old and old[0] != root_id and (PROJECT_ROOT / config["manifest"]).exists():
         print(f"The raw root's name changed from {old[0]!r}. If it is the same data, keep "
               f"existing results attached with: labpipe roots rename {old[0]} {root_id}")
@@ -83,14 +89,19 @@ def raw_data(config: dict) -> None:
         print("Several raw roots are configured; edit config/local.yaml directly to change them.")
         return
     if roots:
+        from labpipe.inventory import data_folder
         read_only, how = _read_only(Path(roots[0]["path"]))
-        print(f"Currently: {roots[0]['path']} ({how})")
+        print(f"Currently:\n  you add files to:        {data_folder(config, roots[0]) or '(not recorded)'}"
+              f"\n  labpipe reads them from: {roots[0]['path']} ({how})")
         if not _yes("Change it?", read_only is not True):
             return
-    print("labpipe needs one thing: a folder it can only read. How your files get there "
-          "(copied by hand, exported from the instrument PC, a network drive, a sync client) "
-          "is up to you.")
-    source = _ask("Folder that holds your raw instrument files")
+    print("Two folders are involved:\n"
+          "  - your DATA FOLDER: where you put instrument files (by hand, from the instrument PC,\n"
+          "    a network drive or a sync client). It stays writable for you.\n"
+          "  - a READ-ONLY folder that shows the same files; labpipe only ever reads from there.\n"
+          "Recommended layout inside the data folder (a convention, not a requirement):\n"
+          "    XRD/  SEM/  EDS/  Echem/   with the sample ID at the start of each file name.")
+    source = _ask("Your data folder")
     if not source:
         return
     path = Path(os.path.expanduser(source)).resolve()
@@ -101,8 +112,8 @@ def raw_data(config: dict) -> None:
                    roots[0]["id"] if roots else "lab")
     read_only, how = _read_only(path)
     if read_only is True:
-        print(f"This folder is already read-only for labpipe ({how}).")
-        _save_raw_root(config, root_id, str(path), [])
+        print(f"This folder is already read-only for labpipe ({how}), so it is used as is.")
+        _save_raw_root(config, root_id, str(path), str(path), [])
         return
     windows = platform.system() == "Windows"
     print("\nThis folder is writable. Choose how labpipe gets a read-only folder:\n"
@@ -122,13 +133,13 @@ def raw_data(config: dict) -> None:
             for command in alt["commands"]:
                 print(f"      {command}")
             print(f"    {alt['explain']}")
-        view = _ask("\nPath of the read-only view once it exists", plan["view"])
+        view = _ask("\nThe read-only folder labpipe will read from", plan["view"])
         read_only, how = _wait_for(Path(view))
         if read_only is not True:
             print(f"Not read-only yet: {how}. Nothing saved; rerun `labpipe setup --only "
                   f"raw-data` when it is.")
             return
-        _save_raw_root(config, root_id, view, [str(path)])
+        _save_raw_root(config, root_id, view, str(path), [str(path)])
     elif choice == "2" and not windows:
         print("\n  Remove write permission (you run this; to add files later: "
               "`chmod -R u+w`, copy, then this again):")
@@ -137,7 +148,44 @@ def raw_data(config: dict) -> None:
         if read_only is not True:
             print(f"Not read-only yet: {how}. Nothing saved.")
             return
-        _save_raw_root(config, root_id, str(path), [str(path)])
+        _save_raw_root(config, root_id, str(path), str(path), [str(path)])
+
+
+def files(config: dict) -> None:
+    from labpipe import scanner
+    from labpipe.inventory import describe, inventory
+    if not config.get("raw_roots"):
+        print("No data folder set up yet (step raw-data).")
+        return
+    result = inventory(config)
+    print(describe(result))
+    available = [r for r in result["roots"] if r["available"]]
+    if not _yes("\nDoes this look right?", True):
+        print("Open this folder in your agent and say \"labpipe does not recognise my files "
+              "correctly\". It goes through `labpipe inventory` with you and can adapt the "
+              "sample-ID rule, or set up a new analysis method for files no method reads yet.")
+    elif any(r["not_recognised"] for r in available):
+        print("Files no method reads are left alone. To analyse some of them, ask your agent "
+              "to add a method for them (docs/ADDING_A_METHOD.md).")
+    fresh = [r for r in available if r["recognised"] and not r["already_in_manifest"]]
+    if not fresh:
+        return
+    print("\nThe folder already holds data. What should labpipe do with it?\n"
+          "  1  analyse all of it (the analysis is code and free; AI notes follow in batches)\n"
+          "  2  only files added from now on: existing files are recorded as 'baseline' and\n"
+          "     not analysed; queue them any time with `labpipe requeue --baseline`\n"
+          "  s  decide later")
+    choice = _ask("Choice", "2")
+    if choice not in ("1", "2"):
+        return
+    summary = scanner.scan(config, baseline=choice == "2")
+    print("Recorded: " + ", ".join(f"{n} {status}" for status, n in summary["counts"].items()))
+    if summary["counts"].get("settling"):
+        print("Files changed in the last minutes are skipped until they settle; they will "
+              "count as new.")
+    if choice == "1":
+        print("Next: `labpipe analyze --pending` analyses them (code only); your agent or "
+              "automatic processing then writes the notes.")
 
 
 def _quote(path: str) -> str:
@@ -214,7 +262,8 @@ def run(only: str | None = None) -> int:
         for number, step in enumerate(STEPS, 1):
             if only and step != only:
                 continue
-            titles = {"raw-data": "Raw data folder (read-only)",
+            titles = {"raw-data": "Data folder and its read-only view",
+                      "files": "What labpipe recognises",
                       "sandbox": "Sandbox for unattended agent runs",
                       "agents": "Agents and models",
                       "automation": "Automatic processing"}
@@ -222,6 +271,8 @@ def run(only: str | None = None) -> int:
             config = load_pipeline_config()  # earlier steps may have changed it
             if step == "raw-data":
                 raw_data(config)
+            elif step == "files":
+                files(config)
             elif step == "sandbox":
                 sandbox()
             elif step == "agents":

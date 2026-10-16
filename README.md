@@ -50,16 +50,39 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 
 The installer creates a venv outside the repo, puts `labpipe` on your PATH, then offers the guided setup.
 
+## Your data folder
+
+Two folders, the same files:
+
+| Folder | Example | Who writes |
+|---|---|---|
+| your **data folder** | `~/labdata` | you, the instrument PC or a sync client |
+| its **read-only view** | `/srv/labdata-ro` (Linux), `~/labdata-ro` (macOS), `//localhost/labdata-ro` (Windows) | nobody; labpipe only reads here |
+
+Put new files into the data folder; they appear in the view at once. Recommended layout (a convention, not a requirement):
+
+```
+labdata/
+  XRD/    S-9_1.2.26.xrdml
+  SEM/    S-9 a001.tif   S-9 a001.txt
+  EDS/    S-9.htm        s-90.jpg
+  Echem/  S-11 23-7-26 KOH/LSV HER.txt
+```
+
+- labpipe recognises files by type, wherever they are, and takes the sample ID from the start of the file name.
+- `labpipe inventory` shows what it recognises and what it does not.
+- A folder that already holds data: setup asks whether to analyse it all, or only files added from now on (the existing ones are recorded as `baseline`; `labpipe requeue --baseline` queues them later).
+
 ## Set up
 
 ```bash
-labpipe setup          # raw-data folder, sandbox check, models per agent, automation
+labpipe setup          # data folder, what it recognises, sandbox, models per agent, automation
 labpipe doctor         # what is still missing
 ```
 
-- Run a single step: `labpipe setup --only raw-data` (or `sandbox`, `agents`, `automation`).
-- For the raw-data folder, setup prints the commands for your system (e.g. a read-only bind mount). **You run them**; setup waits, checks the result and saves it.
-- Then open the folder in Claude Code and say *"set this up for me"*. The agent goes through file naming, references and a first analysis.
+- Run a single step: `labpipe setup --only raw-data` (or `files`, `sandbox`, `agents`, `automation`).
+- For the read-only view, setup prints the commands for your system (e.g. a bind mount). **You run them**; setup waits, checks the result and saves it.
+- Then open the folder in Claude Code and say *"set this up for me"*. The agent goes through file naming, unrecognised files, references and a first analysis.
 
 ## Use
 
@@ -96,7 +119,7 @@ labpipe automation status
 loginctl enable-linger           # Linux: keep it running when you are logged out
 ```
 
-A watcher checks for new files; once they have stopped changing, it analyses them. A nightly run catches anything missed. Log: `logs/automation.log`.
+A watcher checks for new files; once they have stopped changing, it analyses them, at most 10 per AI run (the rest follow in the next runs). A nightly run catches anything missed. `labpipe doctor` reports whether the last run succeeded. Log: `logs/automation.log`.
 
 Stop it:
 
