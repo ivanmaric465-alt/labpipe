@@ -1,0 +1,24 @@
+# Pipeline policy shared by everyone using this repository.
+# Machine-specific paths (where the raw data is, what must never be written)
+# live in config/local.yaml, which is not committed: create it with
+# `labpipe init` from config/local.example.yaml.
+schema: labpipe.pipeline/2
+
+# Files modified less than this many minutes ago are skipped
+# (a cloud sync client or the instrument PC may still be writing them).
+settle_minutes: 10
+
+# A failed file is retried only when its hash or the code version changes,
+# and at most this many times per file hash.
+max_attempts_per_hash: 3
+
+analysis_dir: analysis
+logs_dir: logs
+manifest: manifest.json
+
+sample_id:
+  rule: "file stem up to the first '_' (whole stem if there is none)"
+  # Accepted IDs look like S-9, AB-3, XYZ-12b. Anything else -> needs_review.
+  # Adapt the pattern to your own naming convention.
+  pattern: '^[A-Za-z][A-Za-z0-9]*-[0-9]+[A-Za-z]?$'
+  overrides_file: config/sample_ids.yaml

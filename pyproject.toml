@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=77"]  # SPDX license field
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "labpipe"
+version = "0.1.0"
+description = "Deterministic, provenance-tracked analysis pipeline for materials lab data (XRD first)."
+requires-python = ">=3.14"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = [
+    "numpy==2.5.4",
+    "scipy==1.18.1",
+    "matplotlib==3.11.2",
+    "PyYAML==6.0.3",
+]
+
+[project.optional-dependencies]
+# Only needed to (re)build references/xrd/patterns from the COD CIFs.
+refbuild = ["pymatgen==2026.9.24"]
+test = ["pytest"]
+
+[project.scripts]
+labpipe = "labpipe.cli:main"
+xrd-analyze = "labpipe.methods.xrd.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

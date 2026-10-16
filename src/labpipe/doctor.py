@@ -1,0 +1,258 @@
+"""`labpipe doctor`: where is this installation in its setup? (read-only, writes nothing)
+
+Each check returns ok / todo / warn with a one-line `next` step. The agent's
+first-session flow (CLAUDE.md) walks the user through the first non-ok item,
+reruns doctor, and repeats. Doctor never writes anything.
+"""
+
+from __future__ import annotations
+
+import os
+import platform
+import shutil
+import sys
+from collections import Counter
+from importlib import metadata
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+from labpipe import manifest as mf
+from labpipe.naming import derive_sample_id
+from labpipe.registry import classify, load_methods
+from labpipe.safety import PROJECT_ROOT, SetupError, load_pipeline_config
+
+SYNC_MARKERS = ("koofr", "onedrive", "dropbox", "google drive", "googledrive", "icloud",
+                "nextcloud", "owncloud", "syncthing", "mega")
+
+
+def _item(check: str, status: str, message: str, next_step: str | None = None,
+          **details: Any) -> dict[str, Any]:
+    return {"check": check, "status": status, "message": message, "next": next_step, **details}
+
+
+def _synced(path: Path) -> str | None:
+    """A path segment named like a sync client's folder (e.g. 'OneDrive - Lab', 'Dropbox')."""
+    for part in (p.lower() for p in Path(path).parts):
+        for marker in SYNC_MARKERS:
+            if part.startswith(marker) and (marker != "mega" or part in ("mega", "megasync")):
+                return marker
+    return None
+
+
+def _read_only(path: Path) -> tuple[bool | None, str]:
+    """Is `path` read-only for this process? Never writes to find out."""
+    if platform.system() == "Linux":
+        best, options = "", ""
+        try:
+            with open("/proc/self/mounts", encoding="utf-8") as stream:
+                for line in stream:
+                    fields = line.split()
+                    mount = fields[1].replace("\\040", " ")
+                    if (str(path) == mount or str(path).startswith(mount.rstrip("/") + "/")) \
+                            and len(mount) >= len(best):
+                        best, options = mount, fields[3]
+        except OSError:
+            pass
+        if "ro" in options.split(","):
+            return True, f"mounted read-only ({best})"
+    writable = os.access(path, os.W_OK)
+    if writable:
+        return False, "this account can write here"
+    return (True if platform.system() != "Windows" else None,
+            "not writable for this account" if platform.system() != "Windows"
+            else "write permission not detected, but Windows ACLs cannot be fully checked "
+                 "without writing; confirm the share/folder is read-only (docs/SAFETY.md)")
+
+
+def _environment() -> list[dict[str, Any]]:
+    items = []
+    version = ".".join(map(str, sys.version_info[:3]))
+    items.append(_item("python", "ok" if sys.version_info >= (3, 14) else "todo",
+                       f"Python {version} at {sys.executable}",
+                       None if sys.version_info >= (3, 14) else "install Python ≥ 3.14 (README)"))
+    on_path = shutil.which("labpipe")
+    items.append(_item("labpipe_on_path", "ok" if on_path else "todo",
+                       f"`labpipe` on PATH: {on_path}" if on_path else
+                       "`labpipe` is not on PATH, so agents cannot run it as `labpipe ...`",
+                       None if on_path else "activate the venv before starting the agent, or "
+                       "link the venv's labpipe into a folder on PATH (README → Install)"))
+    if _synced(Path(sys.prefix)):
+        items.append(_item("venv_location", "warn", f"virtual environment {sys.prefix} is inside a "
+                           "synced folder", "recreate it outside synced folders (README → Install)"))
+    lock = PROJECT_ROOT / "requirements.lock"
+    if lock.exists():
+        mismatched = []
+        for line in lock.read_text(encoding="utf-8").splitlines():
+            line = line.split("#", 1)[0].strip()
+            if "==" not in line:
+                continue
+            name, wanted = (part.strip() for part in line.split("==", 1))
+            try:
+                installed = metadata.version(name)
+            except metadata.PackageNotFoundError:
+                installed = None
+            if installed != wanted and name.lower() not in ("pymatgen",):
+                mismatched.append(f"{name} {installed or 'missing'} (lock: {wanted})")
+        items.append(_item("dependencies", "warn" if mismatched else "ok",
+                           "installed versions differ from requirements.lock: " + "; ".join(
+                               mismatched[:8]) if mismatched else "matches requirements.lock",
+                           "pip install -r requirements.lock" if mismatched else None))
+    if _synced(PROJECT_ROOT):
+        items.append(_item("project_location", "warn", f"repository {PROJECT_ROOT} is inside a "
+                           "synced folder; analysis/ and manifest.json should not be synced",
+                           "clone the repository to a local, unsynced folder"))
+    return items
+
+
+def _raw_roots(config: dict) -> tuple[list[dict[str, Any]], list[tuple[str, Path]]]:
+    items, usable = [], []
+    if not config["raw_roots"]:
+        items.append(_item("raw_roots", "todo", "no raw_roots in config/local.yaml",
+                           "ask the user where the raw data is; set raw_roots (docs/SAFETY.md)"))
+        return items, usable
+    protected = [Path(os.path.realpath(os.path.expanduser(p))) for p in config["protected_paths"]]
+    for root in config["raw_roots"]:
+        path = Path(os.path.expanduser(root["path"]))
+        label = f"raw_root:{root['id']}"
+        if not path.is_dir():
+            items.append(_item(label, "todo", f"{path} does not exist or is not mounted",
+                               "set up the read-only view: labpipe readonly-view --source <raw folder>, or fix the path"))
+            continue
+        usable.append((root["id"], path))
+        read_only, how = _read_only(path)
+        real = Path(os.path.realpath(path))
+        is_protected = any(real == p or p in real.parents for p in protected)
+        if read_only is True:
+            items.append(_item(label, "ok", f"{path}: {how}"))
+        elif read_only is None:
+            items.append(_item(label, "warn", f"{path}: {how}", "confirm with the user"))
+        else:
+            items.append(_item(label, "warn" if is_protected else "todo",
+                               f"{path}: {how} (labpipe refuses to write there"
+                               + (", it is in protected_paths)" if is_protected else
+                                  ", but it is NOT in protected_paths)"),
+                               "make it a read-only view: labpipe readonly-view --source <this folder>"
+                               + ("" if is_protected else " and add it to protected_paths")))
+        if not is_protected and read_only is not True:
+            items.append(_item(f"protected:{root['id']}", "todo",
+                               f"{path} is not listed in protected_paths",
+                               "add it (and the writable original it mirrors) to protected_paths"))
+    if os.environ.get("LABPIPE_RAW_ROOT"):
+        items.append(_item("raw_root_override", "warn", "LABPIPE_RAW_ROOT is set and replaces "
+                           "raw_roots for this run", "unset it for normal use"))
+    return items, usable
+
+
+def _files(config: dict, usable: list[tuple[str, Path]]) -> list[dict[str, Any]]:
+    methods = load_methods()
+    overrides_file = PROJECT_ROOT / config["sample_id"]["overrides_file"]
+    overrides = {}
+    if overrides_file.exists():
+        overrides = (yaml.safe_load(overrides_file.read_text(encoding="utf-8")) or {}).get(
+            "overrides") or {}
+    items = []
+    for root_id, root in usable:
+        kinds: Counter[str] = Counter()
+        unclaimed_ext: Counter[str] = Counter()
+        unclear: list[str] = []
+        for directory, _, names in os.walk(root):
+            for name in names:
+                relative = (Path(directory) / name).relative_to(root).as_posix()
+                method, kind = classify(relative, methods)
+                if method is None:
+                    unclaimed_ext[Path(name).suffix.lower() or "(none)"] += 1
+                    continue
+                kinds[f"{method}/{kind}"] += 1
+                if kind == "analyse":
+                    _, _, problem = derive_sample_id(relative, pattern=config["sample_id"]["pattern"],
+                                                     overrides=overrides)
+                    if problem:
+                        unclear.append(relative)
+        analysable = sum(n for key, n in kinds.items() if key.endswith("/analyse"))
+        items.append(_item(f"files:{root_id}", "ok" if analysable else "todo",
+                           f"{analysable} file(s) a method can analyse; by method: {dict(kinds)}",
+                           None if analysable else "check methods.yaml patterns against the "
+                           "user's file types", unclaimed_extensions=dict(unclaimed_ext.most_common(10))))
+        if analysable:
+            items.append(_item(f"sample_ids:{root_id}", "warn" if unclear else "ok",
+                               f"{len(unclear)} of {analysable} file name(s) give no sample ID "
+                               f"with pattern {config['sample_id']['pattern']}",
+                               "show the user these names; adapt sample_id.pattern in "
+                               "config/pipeline.yaml or add overrides in config/sample_ids.yaml"
+                               if unclear else None, examples=unclear[:8]))
+    return items
+
+
+def _method_setup() -> list[dict[str, Any]]:
+    items = []
+    roles = {p.stem for p in (PROJECT_ROOT / "agents").glob("*.md")}
+    for name in [spec.get("subagent") for spec in load_methods().values()]:
+        if name and name not in roles:
+            items.append(_item(f"agent:{name}", "todo", f"methods.yaml names agent {name}, but "
+                               f"agents/{name}.md does not exist", "see docs/ADDING_A_METHOD.md"))
+    catalogue = PROJECT_ROOT / "references" / "xrd" / "phases.yaml"
+    if catalogue.exists():
+        phases = (yaml.safe_load(catalogue.read_text(encoding="utf-8")) or {}).get("phases") or []
+        patterns = PROJECT_ROOT / "references" / "xrd" / "patterns"
+        unbuilt = [p["id"] for p in phases if not (patterns / f"{p['id']}.json").exists()]
+        items.append(_item("xrd_references", "todo" if unbuilt else "ok",
+                           f"{len(phases)} reference phase(s)" + (
+                               f"; not built: {', '.join(unbuilt)}" if unbuilt else ""),
+                           "labpipe xrd refs build (needs the refbuild extra)" if unbuilt else None))
+    xrd = PROJECT_ROOT / "config" / "xrd.yaml"
+    if xrd.exists():
+        standard = (yaml.safe_load(xrd.read_text(encoding="utf-8")) or {}).get(
+            "internal_standard") or {}
+        if standard.get("phase") and standard.get("lattice_a_angstrom") is None:
+            items.append(_item("xrd_internal_standard", "warn",
+                               f"internal standard {standard['phase']}: no certificate lattice "
+                               "parameter set; the COD value is used and flagged for review",
+                               "ask the user for the certificate value "
+                               "(internal_standard.lattice_a_angstrom in config/xrd.yaml)"))
+    return items
+
+
+def run() -> dict[str, Any]:
+    items = _environment()
+    local = PROJECT_ROOT / "config" / "local.yaml"
+    try:
+        config = load_pipeline_config()
+    except SetupError:
+        items.append(_item("local_config", "todo", "config/local.yaml missing",
+                           "labpipe init, then set raw_roots and protected_paths with the user"))
+        config = None
+    if config is not None:
+        items.append(_item("local_config", "ok", f"{local.relative_to(PROJECT_ROOT)} present"))
+        root_items, usable = _raw_roots(config)
+        items += root_items
+        items += _files(config, usable)
+    items += _method_setup()
+    if config is not None:
+        from labpipe.agents import status as agents_status
+        agents = agents_status(config)
+        if not agents["configured"]:
+            items.append(_item("agents", "todo", f"agents not set up: {agents['problem']}",
+                               "ask the user which harness and which model per role "
+                               "(supervisor, analyst); add `agents:` to config/local.yaml "
+                               "(see local.example.yaml); then labpipe agents sync"))
+        elif agents["outdated"]:
+            items.append(_item("agents", "todo", f"{agents['harness']} agent files missing or "
+                               f"outdated: {', '.join(agents['outdated'])}", "labpipe agents sync"))
+        else:
+            items.append(_item("agents", "ok", f"{agents['harness']} agents current; models: "
+                               + ", ".join(f"{k} {v}" for k, v in agents["models"].items())))
+    if config is not None and (PROJECT_ROOT / config["manifest"]).exists():
+        counts = Counter(e["status"] for e in mf.load(config)["entries"].values())
+        items.append(_item("manifest", "ok", f"manifest entries by status: {dict(counts)}"))
+    elif config is not None:
+        items.append(_item("manifest", "todo", "nothing scanned yet",
+                           "labpipe scan, then analyse one file with the user"))
+    order = {"todo": 0, "warn": 1, "ok": 2}
+    first = min((i for i in items if i["status"] != "ok"),
+                key=lambda i: order[i["status"]], default=None)
+    return {"project_root": str(PROJECT_ROOT), "platform": platform.platform(),
+            "ready": not any(i["status"] == "todo" for i in items),
+            "next": first and {"check": first["check"], "do": first["next"]},
+            "checks": items}

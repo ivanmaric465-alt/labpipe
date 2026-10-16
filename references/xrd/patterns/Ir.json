@@ -1,0 +1,173 @@
+{
+ "schema": "labpipe.xrd.reference/1",
+ "id": "Ir",
+ "role": "reference",
+ "structure_type": "fcc",
+ "formula": "Ir",
+ "space_group": "F m -3 m",
+ "cell": {
+  "a": 3.8394,
+  "b": 3.8394,
+  "c": 3.8394,
+  "alpha": 90.0,
+  "beta": 90.0,
+  "gamma": 90.0
+ },
+ "cell_as_recorded": {
+  "a": "3.8394",
+  "b": "3.8394",
+  "c": "3.8394"
+ },
+ "source": {
+  "database": "Crystallography Open Database",
+  "cod_id": 9008470,
+  "url": "https://www.crystallography.net/cod/9008470.cif",
+  "cif_file": "cif/9008470.cif",
+  "cif_sha256": "ecc80c2b26b98c67712b6418ab7175e6e4a86a6f277a58d7556459c8f0ff3566",
+  "authors": [
+   "Wyckoff, R. W. G."
+  ],
+  "journal": "Crystal Structures",
+  "year": "1963",
+  "volume": "1",
+  "first_page": "7"
+ },
+ "curation_note": "Wyckoff 1963, a = 3.8394 Å. Identical to the user's downloaded CIF.",
+ "computed_with": {
+  "pymatgen": "2026.9.24",
+  "calculator": "pymatgen.analysis.diffraction.xrd.XRDCalculator",
+  "wavelength_angstrom": 1.540598,
+  "two_theta_range_deg": [
+   0.0,
+   150.0
+  ],
+  "intensity_scaling": "strongest line in range = 100",
+  "excluded_effects": [
+   "Debye-Waller",
+   "preferred orientation",
+   "absorption"
+  ]
+ },
+ "reflections": [
+  {
+   "hkl": [
+    [
+     1,
+     1,
+     1
+    ]
+   ],
+   "multiplicity": [
+    8
+   ],
+   "d_angstrom": 2.216678623526649,
+   "two_theta_cu_ka1_deg": 40.66913516837916,
+   "intensity_rel": 100.0
+  },
+  {
+   "hkl": [
+    [
+     2,
+     0,
+     0
+    ]
+   ],
+   "multiplicity": [
+    6
+   ],
+   "d_angstrom": 1.9197,
+   "two_theta_cu_ka1_deg": 47.313953243724,
+   "intensity_rel": 48.92551297502948
+  },
+  {
+   "hkl": [
+    [
+     2,
+     2,
+     0
+    ]
+   ],
+   "multiplicity": [
+    12
+   ],
+   "d_angstrom": 1.3574328878438155,
+   "two_theta_cu_ka1_deg": 69.14762507741465,
+   "intensity_rel": 31.906812567824694
+  },
+  {
+   "hkl": [
+    [
+     3,
+     1,
+     1
+    ]
+   ],
+   "multiplicity": [
+    24
+   ],
+   "d_angstrom": 1.1576226563718657,
+   "two_theta_cu_ka1_deg": 83.42827824264319,
+   "intensity_rel": 39.095001634406266
+  },
+  {
+   "hkl": [
+    [
+     2,
+     2,
+     2
+    ]
+   ],
+   "multiplicity": [
+    8
+   ],
+   "d_angstrom": 1.1083393117633245,
+   "two_theta_cu_ka1_deg": 88.05489144890122,
+   "intensity_rel": 11.6910905837439
+  },
+  {
+   "hkl": [
+    [
+     4,
+     0,
+     0
+    ]
+   ],
+   "multiplicity": [
+    6
+   ],
+   "d_angstrom": 0.95985,
+   "two_theta_cu_ka1_deg": 106.74288150361359,
+   "intensity_rel": 7.326893341603047
+  },
+  {
+   "hkl": [
+    [
+     3,
+     3,
+     1
+    ]
+   ],
+   "multiplicity": [
+    24
+   ],
+   "d_angstrom": 0.8808187686226349,
+   "two_theta_cu_ka1_deg": 121.97787781180413,
+   "intensity_rel": 32.740869299531234
+  },
+  {
+   "hkl": [
+    [
+     4,
+     2,
+     0
+    ]
+   ],
+   "multiplicity": [
+    24
+   ],
+   "d_angstrom": 0.8585159392812692,
+   "two_theta_cu_ka1_deg": 127.59648955626284,
+   "intensity_rel": 35.628487708356914
+  }
+ ]
+}

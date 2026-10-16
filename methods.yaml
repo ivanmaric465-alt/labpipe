@@ -1,0 +1,23 @@
+# Method registry: file pattern -> method -> subagent -> CLI.
+# Adding a method = one entry here + one package under src/labpipe/methods/<name>/
+# + one subagent in .claude/agents/<name>-analyst.md.
+schema: labpipe.methods/1
+
+methods:
+  xrd:
+    description: X-ray powder diffraction (PANalytical Empyrean, Cu Kα)
+    patterns: ["**/*.xrdml", "**/*.xy"]       # matched against the path relative to the raw root
+    primary_extension: .xrdml
+    # A secondary file with the same stem (same folder) as a primary file is the
+    # same measurement exported twice: recorded as duplicate, not analysed.
+    duplicate_of_primary: [.xy]
+    ignore: ["**/*.rd", "**/*.rd.bak"]         # legacy binary Philips format: recorded, never analysed
+    subagent: xrd-analyst
+    cli: "labpipe xrd analyze --entry {entry_id}"
+    module: labpipe.methods.xrd.analyze        # must provide run(...) — see docs/ADDING_A_METHOD.md
+    cli_extension: labpipe.methods.xrd.refbuild  # optional: adds `labpipe xrd refs ...`
+    summary: labpipe.methods.xrd.summary       # optional: summarize(results) for the report and agents
+    config: config/xrd.yaml
+    outputs: [results.json, plot.png, plot.pdf, provenance.json, notes.md]
+
+  # Planned (not active): sem, eds, echem. Each will get its own entry.

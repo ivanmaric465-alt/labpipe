@@ -1,0 +1,32 @@
+# Machine-specific settings. Copy to config/local.yaml (`labpipe init` does it)
+# and edit, or let `labpipe setup` fill it in by asking you.
+# config/local.yaml is git-ignored: it never leaves this computer.
+
+# Where raw instrument files are read from. Point this at a READ-ONLY folder
+# (docs/SAFETY.md): a read-only view of the data, or a folder made read-only.
+# Relative paths inside a raw root are what the manifest records, so keep each
+# root's id stable.
+raw_roots:
+  - id: lab
+    path: /srv/labdata-ro                  # Linux example
+    # path: //localhost/labdata-ro         # Windows example: a read-only share (forward slashes are fine)
+
+# Never written to by labpipe. List the writable original behind every read-only
+# view (wherever the files really live: a folder you copy into, a network drive,
+# or a sync client's folder). Not needed when a raw root is itself read-only.
+protected_paths:
+  - /data/lab/raw                          # example: the original behind /srv/labdata-ro
+  # - ~/Dropbox
+  # - C:/Users/<you>/OneDrive
+
+# Agent harness and the model for each role (`labpipe agents sync` writes the
+# harness's agent files from agents/*.md). Models as provider/model, or inherit
+# (use the model the session runs with). For Claude Code, aliases also work:
+# haiku, sonnet, opus.
+agents:
+  harness: claude-code          # claude-code | opencode
+  models:
+    supervisor: inherit         # runs commands and keeps the books: a small model is enough
+    analyst: inherit            # looks at plots, writes notes for people: a stronger model
+
+# Automatic processing is added here by `labpipe automation setup` (automation: ...).

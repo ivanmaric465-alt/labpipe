@@ -1,0 +1,95 @@
+# XRD analysis settings: global defaults.
+#
+# Any key below can be overridden per sample (config/samples.yaml) or per
+# measurement (config/measurements/xrd/<measurement_id>.yaml); see CLAUDE.md
+# "Steering an analysis". Overrides may only use keys that exist here.
+schema: labpipe.xrd.config/2
+
+# ---- most often steered --------------------------------------------------------------
+exclude_ranges_deg: []         # [[lo, hi], ...] 2θ ranges left out entirely (e.g. holder peaks)
+peaks:
+  add_deg: []                  # force a crystalline peak near these 2θ values (never pruned)
+  remove_deg: []               # drop automatically found peaks near these 2θ values
+broad_components_deg: null     # null: detect automatically; []: none; [24.5, 43]: seed exactly these
+phases: null                   # null: all references; or a list of ids, e.g. [Pt, Pd, TiN]
+background:
+  order: 4                     # Chebyshev order, co-refined in the fit
+  anchor_ranges_deg: []        # [[lo, hi], ...] where there is nothing but background:
+                               # the background is held on the data there
+  clip_sigma: 2.0              # starting estimate only
+
+# ---- input ----------------------------------------------------------------------------
+input:
+  max_bytes: 52428800          # 50 MB
+  scan_index: 0                # which scan to analyse when a file holds several (flagged)
+  default_wavelength:          # used only for .xy files (no wavelength inside)
+    k_alpha1_angstrom: 1.540598
+    k_alpha2_angstrom: 1.544426
+    ratio_k_alpha2_k_alpha1: 0.5
+
+# ---- peak finding and fit ---------------------------------------------------------------
+candidates:
+  smoothing_window_deg: 0.08   # Savitzky-Golay window (polyorder 2)
+  min_significance: 5.0        # smoothed net height / sqrt(background)
+  min_separation_deg: 0.12
+  min_fwhm_deg: 0.03
+  edge_exclusion_deg: 0.3      # candidates closer than this to a scan end are flagged
+  broad_smoothing_window_deg: 1.5
+  broad_min_significance: 5.0
+
+fit:
+  kalpha2_doublet: true
+  max_fwhm_deg: 4.0            # crystalline peaks: FWHM up to this (≈ 2 nm Scherrer at 40°)
+  broad_components: true       # model humps (e.g. carbon support bands) as broad components
+  broad_min_fwhm_deg: 5.0      # gap between 4° and 5° keeps the two classes apart
+  broad_max_fwhm_deg: 10.0     # wider than this is background, not a band
+  broad_profile: gaussian      # gaussian (no long tails) | pseudo-voigt
+  position_freedom_deg: 0.15
+  broad_position_freedom_deg: 3.75  # ± from the seed, used exactly. Until 2026-10-16 a
+                                    # code floor (half the 7.5° starting width) overrode
+                                    # smaller values, so 3.75 keeps earlier results
+  min_area_significance: 3.0   # automatic peaks with area < 3σ are dropped and the fit repeated
+  max_nfev: 20000
+
+# ---- interpretation ---------------------------------------------------------------------
+internal_standard:
+  phase: Si                    # reference id; null to disable detection
+  lattice_a_angstrom: null     # certificate value of the standard actually used (pending)
+  search_range_deg: 0.4
+  search_step_deg: 0.002
+  tolerance_deg: 0.05
+  min_intensity_rel: 5
+  min_lines: 3
+  correction_model: auto       # auto | constant | displacement | none
+  # auto: displacement only if ≥4 lines, |D| > 3σ_D and |corr(z,D)| < 0.95; else constant
+
+indexing:
+  fcc_tolerance_deg: 0.15
+  fcc_tolerance_fwhm_fraction: 0.3   # per-peak tolerance = max(0.15°, 0.3·FWHM)
+  min_reflections: 3
+  min_reflections_tentative: 2       # (111)+(200) only: accepted as tentative, flagged
+  max_fwhm_ratio: 3.0                # reflections of one phase: FWHM within a factor of 3
+  max_phases: 3
+  max_seeds: 6
+
+matching:
+  tolerance_deg: 0.15
+  min_intensity_rel: 5
+  candidate_min_fraction: 0.6
+
+sizing:
+  scherrer_k: 0.9
+  calibration_file: null       # calibration/xrd/<file>.json from a line-profile standard
+
+checks:
+  rwp_review: 0.15
+  background_component_fraction_warning: 0.05   # share of the model in peak-free regions
+                                                # that is not background (background too low)
+  local_misfit_review: 0.30    # > 30 % of a peak's signal unexplained -> review
+  local_misfit_warning: 0.10
+  residual_sigma_review: 8.0   # unfitted signal averaged over 0.3°, in σ units
+
+plot:
+  width_in: 3.25               # ACS single column
+  height_in: 3.0
+  dpi: 300

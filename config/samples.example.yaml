@@ -1,0 +1,20 @@
+# Sample-level settings: presets (e.g. a support type) and per-sample overrides.
+# `labpipe init` copies this file to config/samples.yaml (git-ignored: it is your lab's).
+#
+# presets.<name>.<method>   settings shared by every sample that lists the preset
+# samples.<id>.presets      presets applied in order
+# samples.<id>.<method>     settings for this sample only (override the presets)
+# Keys must exist in config/<method>.yaml. Measurement-level files in
+# config/measurements/<method>/<measurement_id>.yaml override everything here.
+
+presets:
+  carbon_black:
+    note: >-
+      Example: carbon-black support (e.g. Vulcan XC-72). Broad (002) band near
+      24-25° and (10) band near 43° 2θ (Cu Kα); positions vary between papers.
+    xrd:
+      broad_components_deg: [24.5, 43.0]
+
+samples: {}
+  # S-1: {presets: [carbon_black]}
+  # S-2: {xrd: {phases: [Pt, Pd]}}

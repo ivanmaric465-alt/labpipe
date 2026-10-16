@@ -1,0 +1,187 @@
+# labpipe
+
+Reproducible analysis of lab data (XRD first), driven by AI agents.
+
+- Code computes every number; agents run commands and write notes.
+- Every figure is regenerable from its `provenance.json`.
+- Raw data is only ever read, from a read-only folder.
+
+Details: [docs/SAFETY.md](docs/SAFETY.md) (safety), [docs/ADDING_A_METHOD.md](docs/ADDING_A_METHOD.md) (new methods).
+
+## Requirements
+
+- Python ≥ 3.14 and git
+- Claude Code, for the agents and automatic processing
+- Linux only, for automatic processing: bubblewrap and socat
+
+```bash
+# Fedora
+sudo dnf install python3.14 git bubblewrap socat
+# Debian / Ubuntu
+sudo apt install python3.14 python3.14-venv git bubblewrap socat
+# macOS
+brew install python@3.14 git
+# Claude Code (Linux / macOS)
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+```powershell
+# Windows
+winget install Python.Python.3.14
+winget install Git.Git
+irm https://claude.ai/install.ps1 | iex
+```
+
+## Install
+
+Clone to a folder that is not synced (not OneDrive, Dropbox, …). No admin rights needed.
+
+```bash
+git clone https://github.com/ivanmaric465-alt/labpipe.git
+cd labpipe
+./install.sh
+```
+
+```powershell
+git clone https://github.com/ivanmaric465-alt/labpipe.git
+cd labpipe
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+The installer creates a venv outside the repo, puts `labpipe` on your PATH, then offers the guided setup.
+
+## Set up
+
+```bash
+labpipe setup          # raw-data folder, sandbox check, models per agent, automation
+labpipe doctor         # what is still missing
+```
+
+- Run a single step: `labpipe setup --only raw-data` (or `sandbox`, `agents`, `automation`).
+- For the raw-data folder, setup prints the commands for your system (e.g. a read-only bind mount). **You run them**; setup waits, checks the result and saves it.
+- Then open the folder in Claude Code and say *"set this up for me"*. The agent goes through file naming, references and a first analysis.
+
+## Use
+
+With an agent, in the repo folder:
+
+```
+process the new data
+the background is too low above 60° in S-9
+```
+
+From the command line:
+
+```bash
+labpipe scan                     # find new or changed raw files
+labpipe analyze --pending        # analyse them
+labpipe report                   # write analysis/report.html
+labpipe review                   # write logs/review_queue.md
+labpipe status                   # overview of all files
+```
+
+Results:
+- `analysis/report.html`: start here;
+- `analysis/<sample>/<method>/<measurement>/`: `results.json`, `plot.png`, `plot.pdf`, `provenance.json`, `notes.md`.
+
+```bash
+labpipe replay analysis/<sample>/<method>/<measurement>/provenance.json   # regenerate and compare hashes
+```
+
+## Automatic processing
+
+```bash
+labpipe automation setup         # asks the timings, shows the service files, installs after you confirm
+labpipe automation status
+loginctl enable-linger           # Linux: keep it running when you are logged out
+```
+
+A watcher checks for new files; once they have stopped changing, it analyses them. A nightly run catches anything missed. Log: `logs/automation.log`.
+
+Stop it:
+
+```bash
+systemctl --user disable --now labpipe-watch.service labpipe-nightly.timer
+```
+
+## Steer an analysis
+
+Tell the agent what looks wrong, or write a settings file yourself, e.g. `config/measurements/xrd/S-9_1.2.26.yaml`.
+These lab settings (`config/samples.yaml`, `config/sample_ids.yaml`, `config/measurements/`) are git-ignored: back them up or keep them in a private repo.
+
+```yaml
+note: "background too low above 60° (2026-10-16)"
+background:
+  order: 3
+  anchor_ranges_deg: [[10, 16], [52, 64]]
+peaks:
+  add_deg: [46.7]
+```
+
+```bash
+labpipe xrd analyze --entry <entry-id> --rerun
+```
+
+| Scope | File |
+|---|---|
+| one measurement | `config/measurements/<method>/<measurement_id>.yaml` |
+| one sample | `config/samples.yaml` → `samples.<id>.<method>` |
+| a group of samples | preset in `config/samples.yaml` |
+
+Defaults and all keys: `config/<method>.yaml`.
+
+## XRD references
+
+```bash
+labpipe xrd refs list
+labpipe xrd refs add my_phase.cif --id NiO --structure-type rocksalt
+labpipe xrd refs build
+```
+
+Do not commit licensed CIFs (ICSD, ICDD).
+
+## Update
+
+```bash
+git pull
+./install.sh                     # Windows: .\install.ps1
+labpipe agents sync
+labpipe doctor
+```
+
+Old analyses become `stale` but stay valid. Redo them only if you want to:
+
+```bash
+labpipe requeue --stale
+labpipe analyze --pending
+```
+
+## Uninstall (Linux)
+
+```bash
+systemctl --user disable --now labpipe-watch.service labpipe-nightly.timer
+rm ~/.config/systemd/user/labpipe-*
+rm -r ~/.local/share/labpipe/venv ~/.local/bin/labpipe
+```
+
+A read-only view: `sudo umount <view>`, then remove its line from `/etc/fstab`. Your raw data is never changed.
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `labpipe: command not found` | Open a new terminal, or `export PATH="$HOME/.local/bin:$PATH"` |
+| doctor: raw root is writable | `labpipe setup --only raw-data` |
+| automatic runs fail (sandbox) | `labpipe setup --only sandbox` |
+| doctor: agent files out of date | `labpipe agents sync` |
+
+## Tests
+
+```bash
+~/.local/share/labpipe/venv/bin/python -m pip install pytest
+~/.local/share/labpipe/venv/bin/python -m pytest
+```
+
+## License
+
+MIT, see [LICENSE](LICENSE).

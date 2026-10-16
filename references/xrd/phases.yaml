@@ -1,0 +1,110 @@
+# XRD reference phases. Each entry points at a CIF in cif/; the reflection list
+# computed from it is in patterns/<id>.json (`labpipe xrd refs build`).
+#
+# Fields: id (unique, used in settings `phases`), cif (path under references/xrd/),
+# structure_type (fcc | rocksalt | hcp | diamond | rutile | other; fcc and rocksalt
+# are also indexed by lattice parameter), role (reference | internal_standard),
+# optional cod_id, note (why this entry was chosen).
+#
+# Add your own: `labpipe xrd refs add path/to/file.cif --id NAME --structure-type TYPE`.
+# Licensing: COD files are open; ICSD/ICDD files are licensed and must not be
+# committed to a shared repository.
+#
+# Matching against references yields *candidates* only. An alloy will usually
+# match no pure element; its lattice parameter is compared numerically.
+#
+# Entries below: downloaded from https://www.crystallography.net/cod/<id>.cif on
+# 2026-10-16. Selection rule: ambient-condition experimental structures, cell
+# edges in Å, one consistent source where possible (Wyckoff 1963 for the elements).
+
+phases:
+  - id: Pt
+    cif: cif/9008480.cif
+    cod_id: 9008480
+    structure_type: fcc
+    role: reference
+    note: "Wyckoff 1963, a = 3.9231 Å."
+  - id: Pd
+    cif: cif/9008478.cif
+    cod_id: 9008478
+    structure_type: fcc
+    role: reference
+    note: "Wyckoff 1963, a = 3.8898 Å."
+  - id: Rh
+    cif: cif/9008482.cif
+    cod_id: 9008482
+    structure_type: fcc
+    role: reference
+    note: "Wyckoff 1963, a = 3.8031 Å. Identical to the user's downloaded CIF."
+  - id: Ir
+    cif: cif/9008470.cif
+    cod_id: 9008470
+    structure_type: fcc
+    role: reference
+    note: "Wyckoff 1963, a = 3.8394 Å. Identical to the user's downloaded CIF."
+  - id: Ru
+    cif: cif/9008513.cif
+    cod_id: 9008513
+    structure_type: hcp
+    role: reference
+    note: "Wyckoff 1963, a = 2.70389, c = 4.28168 Å."
+  - id: Os
+    cif: cif/9008510.cif
+    cod_id: 9008510
+    structure_type: hcp
+    role: reference
+    note: "Wyckoff 1963, a = 2.7352, c = 4.319 Å."
+  - id: Si
+    cif: cif/9011998.cif
+    cod_id: 9011998
+    structure_type: diamond
+    role: internal_standard
+    note: >-
+      Hom, Kiszenick & Post 1975, a = 5.430941 Å. Placeholder until the
+      certificate value of the user's Si standard is known; override with
+      xrd.yaml internal_standard.lattice_a_angstrom.
+  - id: TiN
+    cif: cif/1100033.cif
+    cod_id: 1100033
+    structure_type: rocksalt
+    role: reference
+    note: "Ehrlich & Juza 1948, a = 4.242 Å (matches the modern value ≈ 4.2417 Å better than Wyckoff's 4.235 Å)."
+  - id: TiO
+    cif: cif/9008749.cif
+    cod_id: 9008749
+    structure_type: rocksalt
+    role: reference
+    note: "Wyckoff 1963, cubic TiO, a = 4.1766 Å (a depends on stoichiometry)."
+  - id: RuO2
+    cif: cif/1000058.cif
+    cod_id: 1000058
+    structure_type: rutile
+    role: reference
+    note: "Bolzan et al. 1997, a = 4.4968, c = 3.1049 Å."
+  - id: IrO2
+    cif: cif/2101854.cif
+    cod_id: 2101854
+    structure_type: rutile
+    role: reference
+    note: "Bolzan et al. 1997, a = 4.5051, c = 3.1586 Å."
+
+excluded:
+  - cod_id: 1011103
+    reason: >-
+      Pt, Bredig & Allolio 1927, a = 3.944 Å, sputtered in H2. 0.5 % larger
+      than bulk Pt; would shift Pt(111) by ~0.2° 2θ.
+  - cod_id: [9012957, 9012962, 9012958, 9012960, 8104268, 8104267]
+    reason: >-
+      Owen & Yates 1933 / Owen & Roberts 1937. Cell edges are consistently
+      ~0.2 % below the Å values (ratio ≈ 1.002), i.e. they appear to be in kX
+      units, not Å.
+  - cod_id: [1534914, 1534917, 1534921, 1534943, 1534947]
+    reason: "Haglund et al. 1993, theoretical structures (incl. hypothetical fcc Ru, Os)."
+  - cod_id: [1011104, 1011111]
+    reason: "Hydrogen-loaded / sputtered 1920s samples (Pd a = 3.991 Å is effectively PdHx)."
+  - cod_id: [2104023, 2104026, 2104029]
+    reason: "Pt under high pressure (pressure marker in a Ge study)."
+  - cod_id: [1536851]
+    reason: "Listed as TiO with a = 4.293 Å in a platinum-group-minerals paper; not plain TiO."
+  - cod_id: [2100454, 4124455, 2002851]
+    reason: "Not plain elemental phases (Rh a = 3.59 from Ce2RhIn8 paper; Ir Cmcm; Pd P-3m1 oxide-stabilised form)."

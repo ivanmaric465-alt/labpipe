@@ -1,0 +1,5 @@
+# Consistent line endings on Linux, macOS and Windows
+* text=auto eol=lf
+*.png binary
+*.pdf binary
+*.cif text eol=lf

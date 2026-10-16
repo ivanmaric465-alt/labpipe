@@ -1,0 +1,41 @@
+name: tests
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      # (the runner context is only available inside steps)
+      - name: Choose the venv location
+        shell: bash
+        run: |
+          echo "LABPIPE_VENV=$RUNNER_TEMP/labpipe-venv" >> "$GITHUB_ENV"
+          echo "LABPIPE_NO_SETUP=1" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      # The installers are what users run, so CI installs with them.
+      - name: Install (install.sh)
+        if: runner.os != 'Windows'
+        run: ./install.sh
+      - name: Install (install.ps1)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./install.ps1
+      - name: Test
+        if: runner.os != 'Windows'
+        run: |
+          "$LABPIPE_VENV/bin/python" -m pip install --quiet pytest
+          "$LABPIPE_VENV/bin/python" -m pytest -q
+      - name: Test
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & "$env:LABPIPE_VENV\Scripts\python.exe" -m pip install --quiet pytest
+          & "$env:LABPIPE_VENV\Scripts\python.exe" -m pytest -q
