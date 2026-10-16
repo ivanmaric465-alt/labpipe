@@ -1,6 +1,9 @@
-# Method registry: file pattern -> method -> subagent -> CLI.
-# Adding a method = one entry here + one package under src/labpipe/methods/<name>/
-# + one subagent in .claude/agents/<name>-analyst.md.
+# Method registry: file pattern -> method -> analyst agent -> CLI.
+# Add a method with `labpipe methods new NAME --example FILE --description TEXT`
+# (docs/ADDING_A_METHOD.md); check it with `labpipe methods check NAME --example FILE`.
+# A file belongs to the first method whose `ignore` or `patterns` glob matches it
+# and, if the method names one, whose `recognise: module:function` content check
+# accepts it (for file types several methods share, e.g. .txt).
 schema: labpipe.methods/1
 
 methods:
@@ -19,5 +22,3 @@ methods:
     summary: labpipe.methods.xrd.summary       # optional: summarize(results) for the report and agents
     config: config/xrd.yaml
     outputs: [results.json, plot.png, plot.pdf, provenance.json, notes.md]
-
-  # Planned (not active): sem, eds, echem. Each will get its own entry.

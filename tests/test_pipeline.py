@@ -357,3 +357,62 @@ def test_automation_health_reports_failed_runs(tmp_path, monkeypatch):
               "events": [{"utc": "2026-10-10T00:00:00Z", "to": "pending"}]}}}))
     report = automation.health(config, now=time.time())
     assert report["details"]["waiting_long"] == ["x"]
+
+
+def _starts_with_cm(path):
+    with open(path, encoding="utf-8", errors="replace") as stream:
+        return stream.read(4) == "$CM_"
+
+
+def test_recognise_hook_disambiguates_shared_extensions(tmp_path):
+    from labpipe.registry import classify
+    methods = {"sem": {"patterns": ["**/*.tif"], "ignore": ["**/*.txt"],
+                       "recognise": "tests.test_pipeline:_starts_with_cm"},
+               "echem": {"patterns": ["**/*.txt"]}}
+    (tmp_path / "a001.txt").write_text("$CM_FORMAT JEOL/SEM\n")
+    (tmp_path / "LSV.txt").write_text("Potential applied (V);Time (s)\n")
+    assert classify("a001.txt", methods, root=tmp_path) == ("sem", "ignore")
+    assert classify("LSV.txt", methods, root=tmp_path) == ("echem", "analyse")
+    assert classify("LSV.txt", methods) == ("sem", "ignore")   # globs only, without a root
+
+
+def test_methods_check_passes_for_xrd(tmp_path):
+    from labpipe.methods_kit import check
+    positions = fcc_positions(3.89)
+    x, y = synthetic_pattern([(positions[0], 6000.0, 1.2, 0.6), (positions[1], 3000.0, 1.4, 0.6),
+                              (positions[2], 2200.0, 1.8, 0.6), (positions[3], 2000.0, 2.1, 0.6)])
+    example = tmp_path / "raw" / "S-1_test.xrdml"
+    example.parent.mkdir()
+    example.write_text(xrdml_text(x, y, "S-1"))
+    result = check("xrd", example, work_dir=tmp_path / "work")
+    assert result["ok"], [c for c in result["checks"] if not c["ok"]]
+    broken = check("xrd", tmp_path / "raw" / "absent.xrdml", work_dir=tmp_path / "work2")
+    assert not broken["ok"]
+
+
+def test_methods_new_scaffolds_and_never_overwrites(tmp_path):
+    project = tmp_path / "project"
+    for item in ("methods.yaml", "config", "agents", "src/labpipe/methods/template"):
+        source, target = REPO / item, project / item
+        target.parent.mkdir(parents=True, exist_ok=True)
+        (shutil.copytree if source.is_dir() else shutil.copy)(source, target)
+    (project / "tests").mkdir()
+    env = dict(os.environ, LABPIPE_ROOT=str(project))
+    example = tmp_path / "scan.dat"
+    example.write_text("1 2\n")
+    created = _labpipe(env, "methods", "new", "demo", "--example", str(example),
+                       "--description", "Demo technique")["created"]
+    for path in ("src/labpipe/methods/demo/analyze.py", "config/demo.yaml",
+                 "agents/demo-analyst.md", "tests/test_demo.py", "docs/methods/demo.md"):
+        assert path in created and (project / path).exists()
+    analyze = (project / "src/labpipe/methods/demo/analyze.py").read_text()
+    assert 'METHOD = "demo"' in analyze and "labpipe.demo.results/1" in analyze
+    role = (project / "agents/demo-analyst.md").read_text()
+    assert "name: demo-analyst" in role and "labpipe notes verify" in role and "{{" not in role
+    import yaml
+    entry = yaml.safe_load((project / "methods.yaml").read_text())["methods"]["demo"]
+    assert entry["patterns"] == ["**/*.dat"] and entry["subagent"] == "demo-analyst"
+    assert "already" in _labpipe(env, "methods", "new", "demo", "--example", str(example),
+                                 "--description", "again")["error"]
+    assert "name" in _labpipe(env, "methods", "new", "Bad-Name", "--example", str(example),
+                              "--description", "x")["error"]

@@ -60,6 +60,7 @@ All commands print JSON.
 | `labpipe xrd refs list \| add \| build` | XRD reference phases |
 | `labpipe inventory` | What labpipe recognises in the data folder(s): files per method, unrecognised types with examples, names without a sample ID |
 | `labpipe scan --baseline` / `labpipe requeue --baseline` | Record existing files as `baseline` (not analysed) / queue them later; only when the user asks |
+| `labpipe methods new NAME --example F --description D` / `labpipe methods check NAME --example F` | Scaffold a new method / verify its contract (only in a method-design task with the user) |
 | `labpipe init` | Create `config/local.yaml` on a new machine |
 | `labpipe setup [--only STEP]` | Guided setup; interactive, for the user's terminal only |
 | `labpipe readonly-view --source PATH` | Print this OS's commands for a read-only view of the raw data (runs nothing) |
@@ -171,16 +172,20 @@ labpipe xrd refs add path/to/file.cif --id NAME --structure-type fcc|rocksalt|hc
 - COD is open data. ICSD/ICDD CIFs are licensed and must not be committed.
 - `fcc` and `rocksalt` references also take part in the lattice-parameter comparison.
 
-## Adding a new analysis method
+## Adding a new analysis method (designed with the user)
 
-Follow `docs/ADDING_A_METHOD.md`:
-1. Copy `src/labpipe/methods/template/`.
-2. Add `config/<method>.yaml`.
-3. Add an entry to `methods.yaml`.
-4. Add a role file `agents/<method>-analyst.md` (copy `agents/xrd-analyst.md`), name it in `methods.yaml` → `subagent`, run `labpipe agents sync`. The supervisor may delegate to every analyst named in `methods.yaml`.
-5. Add tests.
+A new method is a code change: a separate task with the user, tests and a commit. Never during analysis work, never unattended. Details: `docs/ADDING_A_METHOD.md`.
 
-The template docstring defines the contract `run(...)` must satisfy.
+1. **Design conversation.** Ask, one topic at a time, and look at real example files with the user:
+   - technique, instrument, software; which files belong together (e.g. image + metadata `.txt`); what is in them, and what only the user knows (areas, loadings, certificates);
+   - which numbers they want, with units and uncertainty; which plot; what goes into the report;
+   - sensible defaults and why; what should be flagged for review;
+   - existing code to reuse (record source and commit; report its bugs to the user instead of silently fixing them);
+   - whether the analyst agent writes notes for every measurement, or only on request (cost).
+2. **Design note.** `labpipe methods new <name> --example <file> --description "..."` scaffolds everything (module, settings, `methods.yaml` entry, analyst role, test stub) and creates `docs/methods/<name>.md`. Fill in the design note from the conversation and **stop: the user approves it before any analysis code is written.**
+3. **Implement** the reading and numerics in `src/labpipe/methods/<name>/analyze.py`, every tunable number in `config/<name>.yaml`, a synthetic known-answer test in `tests/test_<name>.py`. If the file type is shared with another method (`.txt`, `.jpg`), add a content check (`recognise:` in `methods.yaml`). Adapt `agents/<name>-analyst.md` (what to look at in the plot, what the notes say).
+4. **Check** `labpipe methods check <name> --example <file>` until every item passes (outputs, results shape, provenance hashes, deterministic and regenerable, raw file untouched). Then `pytest`.
+5. **First real result with the user**: `labpipe agents sync`, `labpipe scan`, analyse one real file, show the plot and results, adjust defaults with them. Then commit.
 
 ## Conventions
 

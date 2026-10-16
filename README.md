@@ -59,17 +59,17 @@ Two folders, the same files:
 | your **data folder** | `~/labdata` | you, the instrument PC or a sync client |
 | its **read-only view** | `/srv/labdata-ro` (Linux), `~/labdata-ro` (macOS), `//localhost/labdata-ro` (Windows) | nobody; labpipe only reads here |
 
-Put new files into the data folder; they appear in the view at once. Recommended layout (a convention, not a requirement):
+Put new files into the data folder; they appear in the view at once. Any layout works, for example:
 
 ```
-labdata/
-  XRD/    S-9_1.2.26.xrdml
-  SEM/    S-9 a001.tif   S-9 a001.txt
-  EDS/    S-9.htm        s-90.jpg
-  Echem/  S-11 23-7-26 KOH/LSV HER.txt
+by technique             by sample                by date
+XRD/S-1_scan.xrdml       S-1/S-1_scan.xrdml       2026-03/S-1_scan.xrdml
+SEM/S-1 a001.tif         S-1/S-1 a001.tif         2026-03/S-1 a001.tif
+SEM/S-1 a001.txt         S-1/S-1 a001.txt         2026-03/S-1 a001.txt
 ```
 
-- labpipe recognises files by type, wherever they are, and takes the sample ID from the start of the file name.
+- labpipe recognises files by type (and, where types are shared, by content), wherever they are.
+- The sample ID is read from the start of the file name; the rule is yours to change (`config/pipeline.yaml` → `sample_id.pattern`, or ask the agent).
 - `labpipe inventory` shows what it recognises and what it does not.
 - A folder that already holds data: setup asks whether to analyse it all, or only files added from now on (the existing ones are recorded as `baseline`; `labpipe requeue --baseline` queues them later).
 

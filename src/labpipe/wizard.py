@@ -99,8 +99,9 @@ def raw_data(config: dict) -> None:
           "  - your DATA FOLDER: where you put instrument files (by hand, from the instrument PC,\n"
           "    a network drive or a sync client). It stays writable for you.\n"
           "  - a READ-ONLY folder that shows the same files; labpipe only ever reads from there.\n"
-          "Recommended layout inside the data folder (a convention, not a requirement):\n"
-          "    XRD/  SEM/  EDS/  Echem/   with the sample ID at the start of each file name.")
+          "Any layout inside the data folder works (by technique, by sample, by date...):\n"
+          "labpipe finds files by type and reads the sample ID from the start of each file\n"
+          "name (a rule you can change).")
     source = _ask("Your data folder")
     if not source:
         return

@@ -1,80 +1,65 @@
 # Adding an analysis method
 
-A method is one package, one settings file, one registry entry, and (for agent use) one subagent. Nothing else in the pipeline changes.
+A method is one package, one settings file, one `methods.yaml` entry and one analyst agent. Nothing else in the pipeline changes. With an agent, say *"I want to analyse <technique> files"*; it follows the same steps (`AGENTS.md` → Adding a new analysis method).
 
-Here `sem` is the example name.
+## 1. Design first
 
-## 1. Code: `src/labpipe/methods/sem/`
+Agree with the people who will use it, in `docs/methods/<name>.md` (created in step 2 from a template): input files, wanted numbers with units, plot, defaults, checks, what the analyst agent writes. No analysis code until this is agreed.
 
-1. Copy the template:
-   ```bash
-   cp -r src/labpipe/methods/template src/labpipe/methods/sem        # Linux/macOS
-   ```
-   On Windows (PowerShell):
-   ```powershell
-   Copy-Item -Recurse src\labpipe\methods\template src\labpipe\methods\sem
-   ```
-2. In `analyze.py`, set `METHOD = "sem"` and `RESULTS_SCHEMA = "labpipe.sem.results/1"`.
-3. Replace the reading and numerics sections with your analysis.
-4. Keep the rest of the contract described in the template's docstring:
-   - check the output location before writing anything;
-   - open raw files read-only;
-   - make every number someone might quote available in `results.json`, with units;
-   - write all outputs with `atomic_write_bytes`;
-   - build provenance with `labpipe.provenance.build_record`;
-   - add deterministic checks (`info`, `warning` or `review`);
-   - raise `AnalysisError` for unusable input.
-5. If you reuse existing code from another project, port it into the package. Record the source commit and every behaviour change, as `docs/PORTING.md` does for XRD.
+## 2. Scaffold
 
-The pipeline only talks to `run(...)`, so you can organise the inside freely. The XRD package splits it into `io_*`, `fitting`, `plot`, and so on.
-
-## 2. Settings: `config/sem.yaml`
-
-Start from `src/labpipe/methods/template/config.example.yaml`. Put every tunable number here, with a comment.
-
-Users steer the analysis by overriding these keys:
-- per sample: `config/samples.yaml` → `samples.<id>.sem`, or a preset;
-- per measurement: `config/measurements/sem/<measurement_id>.yaml`.
-
-Keys that don't exist in `config/sem.yaml` are rejected.
-
-## 3. Registry: `methods.yaml`
-
-```yaml
-  sem:
-    description: SEM images (Zeiss TIFF with metadata)
-    patterns: ["**/SEM/**/*.tif"]          # glob relative to a raw root; ** = any depth
-    ignore: []
-    subagent: sem-analyst
-    cli: "labpipe sem analyze --entry {entry_id}"
-    module: labpipe.methods.sem.analyze
-    config: config/sem.yaml
-    outputs: [results.json, plot.png, plot.pdf, provenance.json, notes.md]
+```bash
+labpipe methods new sem --example "/path/to/S-1 a001.tif" --description "SEM images (JEOL)"
 ```
 
-- The first method whose `ignore` or `patterns` matches a file claims it, so make the patterns specific.
-- After the next `labpipe scan`, the files appear in `manifest.json`, and `labpipe sem analyze --entry ID` works.
+Creates (never overwrites):
 
-## 4. Agent role: `agents/sem-analyst.md`
+| File | What to do |
+|---|---|
+| `src/labpipe/methods/sem/analyze.py` | replace the reading and numerics sections |
+| `config/sem.yaml` | every tunable number, with a comment |
+| `methods.yaml` → `sem` | patterns from the example's extension; narrow them if needed |
+| `agents/sem-analyst.md` | what to look at in the plot, what the notes say |
+| `tests/test_sem.py` | a synthetic example with a known answer |
+| `docs/methods/sem.md` | the design note |
 
-Copy `agents/xrd-analyst.md` and adapt:
-- what the method measures;
-- which summary or results.json keys hold what;
-- which checks matter;
-- what `notes.md` should contain.
+## 3. Implement
 
-Keep the rules: the agent runs only `labpipe` commands, writes only `notes.md`, and never computes or invents numbers. Keep the `labpipe notes verify` step: it works for any method, because it compares the notes with that entry's `results.json`.
+The contract `run(...)` fulfils is in the docstring of `src/labpipe/methods/template/analyze.py`. In short:
+- check the output location before writing; open raw files read-only;
+- every number someone may quote goes into `results.json`, with units;
+- checks `{code, severity: info|warning|review, message}`; status `review` if any check is `review`;
+- outputs via `atomic_write_bytes`, provenance via `labpipe.provenance.build_record`;
+- raise `AnalysisError` for unusable input.
 
-Name the agent in `methods.yaml` → `subagent`, then run `labpipe agents sync`. That writes the agent file for the configured harness, and the supervisor may then delegate to the new agent (its allowlist comes from `methods.yaml`). `labpipe doctor` reports an agent named in `methods.yaml` that has no role file.
+If other methods use the same file type (`.txt`, `.jpg`), add a content check:
 
-Optional: give the method a summary module (`methods.yaml` → `summary`, like `labpipe.methods.xrd.summary`). The report and the agents then get compact, plain-language key results instead of the raw `results.json`.
+```yaml
+    recognise: labpipe.methods.sem.analyze:recognise   # recognise(path) -> bool, read-only
+```
 
-## 5. Tests: `tests/test_sem.py`
+Reused code from another project: port it into the package and record the source commit and every behaviour change (as `docs/PORTING.md` does for XRD).
 
-- Use synthetic data with a known answer. The XRD tests show the pattern.
-- If you have real files, add a regression test that skips when they aren't present. Raw data must not be committed.
+## 4. Check
 
-## 6. Document
+```bash
+labpipe methods check sem --example "/path/to/S-1 a001.tif"
+pytest
+```
 
-- Add the method to the table in `README.md`.
-- Add its conventions (units, axis labels) to `CLAUDE.md`.
+`methods check` runs the method twice on the example (outputs in `logs/method-check/`) and verifies:
+- registry entry, settings file, analyst role, `run()` signature;
+- the example is recognised as this method;
+- `results.json`, `plot.png`, `plot.pdf`, `provenance.json` exist; `results.json` has schema, status, units and well-formed checks;
+- provenance hashes match, and a second run from the recorded settings gives identical files;
+- the raw file and its folder are untouched.
+
+## 5. Use
+
+```bash
+labpipe agents sync
+labpipe scan
+labpipe sem analyze --entry <entry-id>
+```
+
+Add the method to the table in `README.md`.

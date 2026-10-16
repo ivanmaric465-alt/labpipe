@@ -79,7 +79,7 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                     path.suffix.lower())
 
             for full, relative in files:
-                method, kind = classify(relative, methods)
+                method, kind = classify(relative, methods, root=root_path)
                 if method is None:
                     counts["unclaimed"] += 1
                     continue

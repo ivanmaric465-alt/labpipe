@@ -59,7 +59,7 @@ def inventory(config: dict, examples: int = 3) -> dict[str, Any]:
             for name in sorted(names):
                 relative = (Path(directory) / name).relative_to(path).as_posix()
                 extension = Path(name).suffix.lower() or "(none)"
-                method, kind = classify(relative, methods)
+                method, kind = classify(relative, methods, root=path)
                 if method is None:
                     unknown[extension] += 1
                     if len(unknown_examples[extension]) < examples:

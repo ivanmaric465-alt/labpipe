@@ -5,6 +5,8 @@
   labpipe setup [--only STEP]               guided setup in your terminal (data folder, files, sandbox, agents, automation)
   labpipe readonly-view --source PATH       print this OS's commands for a read-only view (runs nothing)
   labpipe inventory                         what labpipe recognises in the data folder(s)
+  labpipe methods new NAME --example F --description D   scaffold a new analysis method
+  labpipe methods check NAME --example F    run a method on an example and verify its contract
   labpipe scan [--baseline]                 update manifest.json from the raw roots
   labpipe pending [--json]                  entries waiting for analysis (+ subagent)
   labpipe status [ENTRY] [--json]           manifest summary or one entry
@@ -95,6 +97,20 @@ def cmd_notes_todo(args, config) -> int:
     from labpipe.notes import todo
     _print(_batch(todo(config)))
     return 0
+
+
+def cmd_methods(args, config) -> int:
+    from labpipe import methods_kit
+    try:
+        if args.action == "new":
+            _print(methods_kit.new(args.name, Path(args.example), args.description))
+            return 0
+        result = methods_kit.check(args.name, Path(args.example), config)
+    except methods_kit.MethodKitError as exc:
+        _print({"error": str(exc)})
+        return 1
+    _print(result)
+    return 0 if result["ok"] else 1
 
 
 def cmd_inventory(args, config) -> int:
@@ -341,6 +357,18 @@ def build_parser() -> argparse.ArgumentParser:
     scan.set_defaults(func=cmd_scan)
     sub.add_parser("inventory", help="what labpipe recognises in the data folder(s)"
                    ).set_defaults(func=cmd_inventory)
+    methods_parser = sub.add_parser("methods", help="scaffold a new analysis method, check one"
+                                    ).add_subparsers(dest="action", required=True)
+    method_new = methods_parser.add_parser("new", help="create a method from the template")
+    method_new.add_argument("name")
+    method_new.add_argument("--example", required=True, help="an example input file")
+    method_new.add_argument("--description", required=True)
+    method_new.set_defaults(func=cmd_methods, needs_config=False)
+    method_check = methods_parser.add_parser("check", help="run a method on an example file "
+                                             "and verify its contract")
+    method_check.add_argument("name")
+    method_check.add_argument("--example", required=True)
+    method_check.set_defaults(func=cmd_methods)
     sub.add_parser("pending").set_defaults(func=cmd_pending)
     status = sub.add_parser("status")
     status.add_argument("entry", nargs="?")
