@@ -1,0 +1,6 @@
+# Copy to config/<method>.yaml. Every key here can be overridden per sample
+# (config/samples.yaml) or per measurement (config/measurements/<method>/<id>.yaml).
+schema: labpipe.sem.config/1
+min_points: 10
+x_unit: "a.u."
+y_unit: "a.u."
