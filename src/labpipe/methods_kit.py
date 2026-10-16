@@ -76,7 +76,7 @@ def new(name: str, example: Path, description: str) -> dict[str, Any]:
     if not design.exists():
         targets[design] = _fill((TEMPLATE / "design.md").read_text(encoding="utf-8"), name,
                                 description, extension)
-    existing = [str(p.relative_to(PROJECT_ROOT)) for p in targets if p.exists()]
+    existing = [p.relative_to(PROJECT_ROOT).as_posix() for p in targets if p.exists()]
     if existing:
         raise MethodKitError(f"would overwrite {existing}; nothing created")
     for path, text in targets.items():
@@ -94,7 +94,7 @@ def new(name: str, example: Path, description: str) -> dict[str, Any]:
     registry = PROJECT_ROOT / "methods.yaml"
     atomic_write_text(registry, registry.read_text(encoding="utf-8").rstrip() + "\n" + entry,
                       pipeline=False)
-    return {"created": [str(p.relative_to(PROJECT_ROOT)) for p in targets] + ["methods.yaml (entry)"],
+    return {"created": [p.relative_to(PROJECT_ROOT).as_posix() for p in targets] + ["methods.yaml (entry)"],
             "next": [f"agree the design with the user in docs/methods/{name}.md first",
                      f"implement reading and numerics in src/labpipe/methods/{name}/analyze.py",
                      f"put every tunable number in config/{name}.yaml",
@@ -129,7 +129,7 @@ def check(name: str, example: Path, config: dict | None = None,
            str(spec.get("config")))
     role = PROJECT_ROOT / "agents" / f"{spec.get('subagent')}.md"
     _check(results, "analyst role file", role.exists() and "labpipe notes verify" in
-           role.read_text(encoding="utf-8"), f"{role.relative_to(PROJECT_ROOT)} must exist and "
+           role.read_text(encoding="utf-8"), f"{role.relative_to(PROJECT_ROOT).as_posix()} must exist and "
            "keep the `labpipe notes verify` step")
     try:
         module = importlib.import_module(spec["module"])
