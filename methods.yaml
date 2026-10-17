@@ -24,23 +24,27 @@ methods:
     outputs: [results.json, plot.png, plot.pdf, provenance.json, notes.md]
 
   sem:
-    description: "SEM images (JEOL, TIFF with .txt metadata)"
-    patterns: ["**/*.tif"]      # narrow this if other methods use .tif
-    ignore: []
-    # recognise: labpipe.methods.sem.analyze:recognise   # optional content check
-    subagent: sem-analyst
+    description: "SEM images (JEOL TIFF with a .txt metadata file of the same name)"
+    patterns: ["**/*.tif", "**/*.tiff"]
+    ignore: ["**/*.txt"]                       # the JEOL .txt belongs to its image
+    recognise: labpipe.methods.sem.analyze:recognise   # only JEOL images and their .txt
+    subagent: null                             # analysed by code alone (docs/methods/sem.md)
+    notes: false
+    report: gallery                            # per-sample gallery instead of one card per image
+    gallery: labpipe.methods.sem.gallery
     cli: "labpipe sem analyze --entry {entry_id}"
     module: labpipe.methods.sem.analyze
     config: config/sem.yaml
-    outputs: [results.json, plot.png, plot.pdf, provenance.json, notes.md]
+    outputs: [results.json, plot.png, plot.pdf, thumb.jpg, provenance.json]
 
   eds:
-    description: "EDS quantification (Oxford INCA HTML reports)"
-    patterns: ["**/*.htm"]      # narrow this if other methods use .htm
-    ignore: []
-    # recognise: labpipe.methods.eds.analyze:recognise   # optional content check
+    description: "EDS quantification (Oxford INCA HTML reports with linked images)"
+    patterns: ["**/*.htm", "**/*.html"]
+    ignore: ["**/*.jpg", "**/*.jpeg", "**/*.ipj"]   # linked images and INCA projects belong to a report
+    recognise: labpipe.methods.eds.analyze:recognise   # only INCA reports and what they link
     subagent: eds-analyst
     cli: "labpipe eds analyze --entry {entry_id}"
     module: labpipe.methods.eds.analyze
+    summary: labpipe.methods.eds.summary
     config: config/eds.yaml
     outputs: [results.json, plot.png, plot.pdf, provenance.json, notes.md]

@@ -103,7 +103,8 @@ def cmd_methods(args, config) -> int:
     from labpipe import methods_kit
     try:
         if args.action == "new":
-            _print(methods_kit.new(args.name, Path(args.example), args.description))
+            _print(methods_kit.new(args.name, Path(args.example), args.description,
+                                   analyst=not args.no_analyst))
             return 0
         result = methods_kit.check(args.name, Path(args.example), config)
     except methods_kit.MethodKitError as exc:
@@ -285,7 +286,8 @@ def cmd_method_check(args, config) -> int:
 
 def cmd_analyze(args, config) -> int:
     data = mf.load(config)
-    pending = sorted((e for e in data["entries"].values() if e.get("status") == "pending"),
+    pending = sorted((e for e in data["entries"].values() if e.get("status") == "pending"
+                      and (not args.method or e["method"] == args.method)),
                      key=lambda e: e["relative_path"])
     if args.limit:
         pending = pending[:args.limit]
@@ -363,6 +365,8 @@ def build_parser() -> argparse.ArgumentParser:
     method_new.add_argument("name")
     method_new.add_argument("--example", required=True, help="an example input file")
     method_new.add_argument("--description", required=True)
+    method_new.add_argument("--no-analyst", action="store_true",
+                            help="analysed by code alone: no analyst agent, no notes")
     method_new.set_defaults(func=cmd_methods, needs_config=False)
     method_check = methods_parser.add_parser("check", help="run a method on an example file "
                                              "and verify its contract")
@@ -376,6 +380,7 @@ def build_parser() -> argparse.ArgumentParser:
     analyze = sub.add_parser("analyze")
     analyze.add_argument("--pending", action="store_true", required=True)
     analyze.add_argument("--limit", type=int, default=None)
+    analyze.add_argument("--method", default=None, help="only entries of this method")
     analyze.set_defaults(func=cmd_analyze)
     requeue = sub.add_parser("requeue")
     group = requeue.add_mutually_exclusive_group(required=True)

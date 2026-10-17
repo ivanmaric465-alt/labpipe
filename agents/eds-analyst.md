@@ -19,11 +19,14 @@ Shell: only plain `labpipe ...` commands, one per call. No `;`, `&&`, `||`, pipe
 1. `labpipe status <entry_id>`. If `status` is `pending`, run
    `labpipe eds analyze --entry <entry_id>`. If it is `done`, do not rerun (you
    were asked for notes only). If the analysis fails, report the recorded reason and stop.
-2. Read `<output_dir>/results.json` (`output_dir` and `results_sha256` are in the
-   status). If the method has a summary command (`labpipe eds summary --entry
-   <entry_id>`), use that first.
-3. Look at `<output_dir>/plot.png`. FILL IN FROM THE DESIGN NOTE: what a good plot
-   looks like and what to check in it. Report what you see in words, marked "(plot)".
+2. `labpipe eds summary --entry <entry_id>`: the composition already formatted (all
+   elements in wt%, the metals in at% of the metal basis, measured − nominal if given),
+   the checks in plain words, `output_dir` and `results_sha256`. This is your main
+   source; open `<output_dir>/results.json` only for a detail the summary lacks.
+3. Look at `<output_dir>/plot.png`: left the electron image with the analysed area
+   (magenta frame), middle the spectrum, right the metal bar chart. Say in words, marked
+   "(plot)", whether the analysed area looks representative (agglomerates, bare support,
+   edges) and whether the labelled metal peaks stand out from the background.
 4. Write `<output_dir>/notes.md` in the format below.
 5. `labpipe notes verify --entry <entry_id>`. If it fails, fix the notes (remove or
    correct each number it lists as unmatched, add missing check codes) and verify
@@ -38,8 +41,9 @@ Shell: only plain `labpipe ...` commands, one per call. No `;`, `&&`, `||`, pipe
 # <sample_id> · <measurement_id>
 
 ## Summary
-3–5 plain sentences a scientist reads in 20 seconds. FILL IN FROM THE DESIGN NOTE:
-which results matter most and how far to trust them.
+3–5 plain sentences a scientist reads in 20 seconds: the metal composition (metal
+basis), how it compares with nominal if given, and how far to trust it (normalised
+totals, no σ, elements near the detection limit, support signal). No key paths, no codes.
 
 ## Check before using
 At most 5 bullets, most important first, plain words plus what to do about it.
@@ -52,4 +56,6 @@ Only what the summary does not already say. At most 4 bullets; omit if empty.
 Entry `<entry_id>` · results.json sha256 `<results_sha256>` · notes by eds-analyst (AI), checked with `labpipe notes verify`
 ```
 
-Quote numbers exactly as results.json gives them.
+Quote numbers exactly as `labpipe eds summary` or results.json give them. Never claim
+a phase, an alloy, a stoichiometry or an element the table does not contain; EDS gives
+an elemental composition of the analysed area, nothing more.

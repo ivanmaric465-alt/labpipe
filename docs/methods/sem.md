@@ -1,6 +1,6 @@
 # sem: SEM images (JEOL, TIFF with .txt metadata)
 
-Status: DRAFT for the user's approval (2026-10-16). No analysis code until approved.
+Status: APPROVED 2026-10-17 (gallery picks across both series). Implemented.
 
 ## Input
 - Instrument and software: JEOL JSM-7000F; images saved as 8-bit greyscale TIFF, 1280×1024, the bottom 64 px are JEOL's info bar (signal, kV, magnification, WD, scale bar).
@@ -39,6 +39,8 @@ Status: DRAFT for the user's approval (2026-10-16). No analysis code until appro
 - Methods without an analyst: `notes todo` skips them; `labpipe automation run` analyses them with code before deciding whether an AI run is needed; `methods check` accepts `subagent: null`; `methods new --no-analyst`.
 - Report: a per-sample section; SEM appears there as the gallery instead of one card per image.
 
-## Open questions for the user
-- Gallery default 10k/50k/100k: closest image per magnification, across both series (a and b)? Or one gallery per series?
-- Should images with `BEI` signal (none so far) be kept apart from `SEI` in the gallery?
+## Decisions and findings
+- 2026-10-17, user: the gallery picks across both series.
+- Sample IDs: names like `S-10 a001` need the space as a separator; the sample-ID rule now splits at the first `_` or space (`config/pipeline.yaml` → `sample_id.separators`). XRD sample IDs are unchanged.
+- A sample without low-magnification images shows its lowest one for several targets (shown once).
+- Open: images with `BEI` signal (none so far) are not kept apart from `SEI`.

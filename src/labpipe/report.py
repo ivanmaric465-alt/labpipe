@@ -4,7 +4,10 @@ Built only from results.json, plot.png and notes.md (deterministic apart from
 the agent's plain-words summary, which `labpipe notes verify` has checked).
 Each method may provide a summary module (methods.yaml → `summary`) with
 `summarize(results) -> {"overview": {...}, "check_before_using": [...], ...}`;
-methods without one get a generic card.
+methods without one get a generic card. Methods with `report: gallery` (SEM) get
+one gallery per sample instead of a card per measurement; their `gallery` module
+chooses the images (`select(items, settings["gallery"])`). The page is grouped by
+sample.
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ from typing import Any
 import yaml
 
 from labpipe import manifest as mf
+from labpipe import settings as settings_mod
 from labpipe.notes import verify_entry
 from labpipe.provenance import code_version, utc_now
 from labpipe.registry import load_methods
@@ -56,6 +60,9 @@ margin:1rem 0 .3rem}.card ul{margin:.2rem 0;padding-left:1.1rem}.card li{margin:
 .check li::marker{color:var(--bad)}.know{color:var(--mut);font-size:.88rem}
 dl{display:grid;grid-template-columns:max-content 1fr;gap:.15rem .9rem;margin:0;font-size:.9rem}
 dt{color:var(--mut)}dd{margin:0;font-variant-numeric:tabular-nums}
+.sample{margin:2.4rem 0 0;font-size:1.3rem;padding-bottom:.3rem;border-bottom:1px solid var(--line)}
+.card.wide{grid-template-columns:1fr}.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.gal figure{margin:0}.gal figcaption{font-size:.8rem;color:var(--mut);margin-top:.25rem}
 .plain{font-size:.97rem}details{margin-top:1rem}summary{cursor:pointer;color:var(--mut);font-size:.85rem}.notes{font-size:.88rem}.notes h4{margin:.8rem 0 .2rem}.warnbox{border-left:3px solid var(--warn);padding:.2rem .7rem;margin:.6rem 0}
 """
 
@@ -140,12 +147,32 @@ def _settings_used(out: Path) -> list[str]:
     return lines
 
 
+EMBED_MAX_BYTES = 400_000   # larger plots (photos, e.g. EDS) are embedded as a smaller JPEG
+EMBED_WIDTH_PX = 1100
+
+
+def _embedded(png: Path) -> str:
+    """The plot as an <img> data URI; plot.png itself stays untouched (publication copy)."""
+    data, kind = png.read_bytes(), "png"
+    if len(data) > EMBED_MAX_BYTES:
+        import io
+        from PIL import Image
+        with Image.open(io.BytesIO(data)) as image:
+            image = image.convert("RGB")
+            if image.width > EMBED_WIDTH_PX:
+                image = image.resize((EMBED_WIDTH_PX, round(image.height * EMBED_WIDTH_PX
+                                                            / image.width)), Image.LANCZOS)
+            buffer = io.BytesIO()
+            image.save(buffer, format="JPEG", quality=85)
+        data, kind = buffer.getvalue(), "jpeg"
+    return f'<img alt="plot" src="data:image/{kind};base64,{base64.b64encode(data).decode()}">'
+
+
 def _card(entry: dict, results: dict, summary: dict, notes_text: str | None,
           notes_ok: bool | None) -> str:
     out = PROJECT_ROOT / entry["output_dir"]
     png = out / "plot.png"
-    image = (f'<img alt="plot" src="data:image/png;base64,'
-             f'{base64.b64encode(png.read_bytes()).decode()}">' if png.exists() else "")
+    image = _embedded(png) if png.exists() else ""
     rows = "".join(f"<dt>{html.escape(k)}</dt><dd>{html.escape(str(v))}</dd>"
                    for k, v in summary.get("overview", {}).items())
     for extra in ("internal_standard", "broad_bands"):
@@ -182,11 +209,49 @@ def _card(entry: dict, results: dict, summary: dict, notes_text: str | None,
             f'{check_html}{know_html}{steer_html}{full_notes}</div></section>')
 
 
-def _sample_key(entry: dict) -> tuple:
-    sample = entry.get("sample_id") or ""
+def _sample_order(sample: str) -> tuple:
     number = re.search(r"(\d+)", sample)
-    return (re.sub(r"\d+.*", "", sample), int(number.group(1)) if number else 0,
-            entry["measurement_id"])
+    return (re.sub(r"\d+.*", "", sample), int(number.group(1)) if number else 0, sample)
+
+
+def _sample_key(entry: dict) -> tuple:
+    return (*_sample_order(entry.get("sample_id") or ""), entry["measurement_id"])
+
+
+def _gallery(method: str, spec: dict, sample: str, items: list[dict]) -> tuple[str, dict]:
+    """One card with the chosen images of a sample, and its overview-table row."""
+    chosen_settings = settings_mod.resolve(method, sample, None)[0]
+    chosen = importlib.import_module(spec["gallery"]).select(items, chosen_settings["gallery"])
+    figures = []
+    for item in chosen:
+        out = PROJECT_ROOT / item["entry"]["output_dir"]
+        thumb = out / "thumb.jpg"
+        acquisition = item["results"].get("acquisition") or {}
+        caption = " · ".join(part for part in (
+            f"×{acquisition['magnification']:,}" if acquisition.get("magnification") else None,
+            f"{acquisition['accelerating_voltage_kV']:g} kV"
+            if acquisition.get("accelerating_voltage_kV") is not None else None,
+            f"WD {acquisition['working_distance_mm']:g} mm"
+            if acquisition.get("working_distance_mm") is not None else None,
+            item["entry"]["measurement_id"]) if part)
+        image = (f'<img alt="{html.escape(caption)}" src="data:image/jpeg;base64,'
+                 f'{base64.b64encode(thumb.read_bytes()).decode()}">' if thumb.exists() else "")
+        figures.append(f"<figure>{image}<figcaption>{html.escape(caption)}</figcaption></figure>")
+    targets = ", ".join(f"×{m:,}" for m in chosen_settings["gallery"].get("magnifications") or [])
+    magnifications = sorted((i["results"].get("acquisition") or {}).get("magnification") or 0
+                            for i in items)
+    card = (f'<section class="card wide" id="{html.escape(sample)}-{method}"><div>'
+            f"<h2>{html.escape(sample)} · {method.upper()}</h2>"
+            f"<div class=meta>{len(chosen)} of {len(items)} image(s) shown: closest to {targets}"
+            f" (both series compete); change in config/{method}.yaml → gallery, per sample in "
+            f"config/samples.yaml. All outputs: <code>analysis/{html.escape(sample)}/{method}/</code>"
+            f"</div><div class=gal>{''.join(figures)}</div></div></section>")
+    row = {"Sample": f'<a href="#{html.escape(sample)}-{method}">{html.escape(sample)}</a>',
+           "Images": str(len(items)),
+           "Magnifications": (f"×{magnifications[0]:,} – ×{magnifications[-1]:,}"
+                              if magnifications and magnifications[-1] else "?"),
+           "Shown": str(len(chosen))}
+    return card, row
 
 
 def build(config: dict) -> dict[str, Any]:
@@ -196,12 +261,19 @@ def build(config: dict) -> dict[str, Any]:
                       if e.get("status") in ("done", "stale") and e.get("output_dir")),
                      key=_sample_key)
     statuses = Counter(e["status"] for e in data["entries"].values())
-    sections, tables = [], {}
+    gallery_methods = {name for name, spec in methods.items() if spec.get("report") == "gallery"}
+    by_sample: dict[str, list[str]] = {}
+    tables: dict[str, list[dict]] = {}
+    gallery_items: dict[tuple[str, str], list[dict]] = {}
     for entry in entries:
         out = PROJECT_ROOT / entry["output_dir"]
         if not (out / "results.json").exists():
             continue
         results = json.loads((out / "results.json").read_text(encoding="utf-8"))
+        if entry["method"] in gallery_methods:
+            gallery_items.setdefault((entry.get("sample_id") or "?", entry["method"]), []).append(
+                {"entry": entry, "results": results})
+            continue
         module = _summary_module(methods.get(entry["method"], {}))
         summary = module.summarize(results) if module else {
             "overview": {"Status": results.get("status")},
@@ -209,7 +281,8 @@ def build(config: dict) -> dict[str, Any]:
                                    for c in results.get("checks", []) if c["severity"] == "review"]}
         notes_text = _notes_summary(out / "notes.md")
         notes_ok = verify_entry(config, entry["entry_id"])["ok"] if notes_text is not None else None
-        sections.append(_card(entry, results, summary, notes_text, notes_ok))
+        by_sample.setdefault(entry.get("sample_id") or "?", []).append(
+            _card(entry, results, summary, notes_text, notes_ok))
         n_checks = len(summary.get("check_before_using") or [])
         flag = (f'<span class="flag r">{n_checks} to check</span>' if n_checks
                 else '<span class="flag o">ok</span>')
@@ -220,13 +293,22 @@ def build(config: dict) -> dict[str, Any]:
         row["Review"] = flag + stale
         tables.setdefault(entry["method"], []).append(row)
 
+    for (sample, method), items in sorted(gallery_items.items(),
+                                          key=lambda kv: (_sample_order(kv[0][0]), kv[0][1])):
+        card, row = _gallery(method, methods[method], sample, items)
+        by_sample.setdefault(sample, []).append(card)
+        tables.setdefault(method, []).append(row)
+    sections = []
+    for sample in sorted(by_sample, key=_sample_order):
+        sections.append(f'<h2 class=sample id="sample-{html.escape(sample)}">'
+                        f"{html.escape(sample)}</h2>" + "".join(by_sample[sample]))
     table_html = ""
     for method, rows in tables.items():
         headers = list(rows[0])
         table_html += (f"<h3>{html.escape(method.upper())}</h3><div class=tw><table><thead><tr>"
                        + "".join(f"<th>{h}</th>" for h in headers) + "</tr></thead><tbody>"
                        + "".join("<tr>" + "".join(
-                           f'<td class={"num" if h != "Measurement" else ""}>'
+                           f'<td class={"num" if h not in ("Measurement", "Sample") else ""}>'
                            f"{r.get(h, '')}</td>" for h in headers) + "</tr>" for r in rows)
                        + "</tbody></table></div>")
     pending = statuses.get("pending", 0) + statuses.get("needs_review", 0) + statuses.get("failed", 0)

@@ -16,7 +16,7 @@ from typing import Any
 import yaml
 
 from labpipe import manifest as mf
-from labpipe.naming import derive_sample_id
+from labpipe.naming import DEFAULT_SEPARATORS, derive_sample_id
 from labpipe.registry import classify, load_methods
 from labpipe.safety import PROJECT_ROOT
 
@@ -70,6 +70,8 @@ def inventory(config: dict, examples: int = 3) -> dict[str, Any]:
                     if len(method_examples[method]) < examples:
                         method_examples[method].append(relative)
                     _, _, problem = derive_sample_id(relative, pattern=config["sample_id"]["pattern"],
+                                                     separators=config["sample_id"].get(
+                                                         "separators", DEFAULT_SEPARATORS),
                                                      overrides=overrides)
                     if problem:
                         unclear.append(relative)

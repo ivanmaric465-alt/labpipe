@@ -11,11 +11,15 @@ _MEASUREMENT_UNSAFE = re.compile(r"[^A-Za-z0-9.\-]+")
 _SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]*")
 
 
-def derive_sample_id(relative_path: str, *, pattern: str,
-                     overrides: dict[str, str]) -> tuple[str | None, str, str | None]:
+DEFAULT_SEPARATORS = ("_", " ")
+
+
+def derive_sample_id(relative_path: str, *, pattern: str, overrides: dict[str, str],
+                     separators=DEFAULT_SEPARATORS) -> tuple[str | None, str, str | None]:
     """Return (sample_id, source, problem).
 
-    Rule: the file stem up to the first '_' (whole stem if there is none),
+    Rule: the file stem up to the first separator ('_' or space by default,
+    config/pipeline.yaml → sample_id.separators; whole stem if there is none),
     accepted only if it matches ``pattern``. A human override (config/
     sample_ids.yaml, keyed by relative path) always wins. When the rule is not
     satisfied, sample_id is None and ``problem`` says why (-> needs_review).
@@ -28,7 +32,8 @@ def derive_sample_id(relative_path: str, *, pattern: str,
                 "(letters, digits, . _ + - only)")
         return value, "override (config/sample_ids.yaml)", None
     stem = PurePosixPath(relative_path).stem
-    token = stem.split("_", 1)[0].strip()
+    cut = min((i for i in (stem.find(s) for s in separators or ()) if i >= 0), default=len(stem))
+    token = stem[:cut].strip()
     if not token:
         return None, "filename rule", f"no sample token in file name {stem!r}"
     if not re.fullmatch(pattern, token):

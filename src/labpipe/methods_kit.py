@@ -42,7 +42,7 @@ def _fill(text: str, name: str, description: str, extension: str) -> str:
             .replace("{{extension}}", extension))
 
 
-def new(name: str, example: Path, description: str) -> dict[str, Any]:
+def new(name: str, example: Path, description: str, analyst: bool = True) -> dict[str, Any]:
     if not NAME.match(name) or name in ("template", "methods"):
         raise MethodKitError(f"method name must be lower-case letters/digits/_ "
                              f"(e.g. sem, echem), not {name!r}")
@@ -52,7 +52,7 @@ def new(name: str, example: Path, description: str) -> dict[str, Any]:
     if not extension:
         raise MethodKitError("the example file needs an extension (it becomes the pattern)")
     package = PROJECT_ROOT / "src" / "labpipe" / "methods" / name
-    analyst = f"{name}-analyst"
+    agent = f"{name}-analyst" if analyst else None
     targets = {
         package / "__init__.py": f'"""{description}"""\n',
         package / "analyze.py": (TEMPLATE / "analyze.py").read_text(encoding="utf-8")
@@ -66,12 +66,13 @@ def new(name: str, example: Path, description: str) -> dict[str, Any]:
         PROJECT_ROOT / "config" / f"{name}.yaml": (TEMPLATE / "config.example.yaml")
             .read_text(encoding="utf-8").replace("labpipe.template.config/1",
                                                  f"labpipe.{name}.config/1"),
-        PROJECT_ROOT / "agents" / f"{analyst}.md": _fill(
-            (TEMPLATE / "analyst.md").read_text(encoding="utf-8"), name, description, extension),
         PROJECT_ROOT / "tests" / f"test_{name}.py": _fill(
             (TEMPLATE / "test_method.py.txt").read_text(encoding="utf-8"), name, description,
             extension),
     }
+    if agent:
+        targets[PROJECT_ROOT / "agents" / f"{agent}.md"] = _fill(
+            (TEMPLATE / "analyst.md").read_text(encoding="utf-8"), name, description, extension)
     design = PROJECT_ROOT / "docs" / "methods" / f"{name}.md"
     if not design.exists():
         targets[design] = _fill((TEMPLATE / "design.md").read_text(encoding="utf-8"), name,
@@ -86,8 +87,10 @@ def new(name: str, example: Path, description: str) -> dict[str, Any]:
              f'    patterns: ["**/*{extension}"]      # narrow this if other methods use {extension}\n'
              f"    ignore: []\n"
              f"    # recognise: labpipe.methods.{name}.analyze:recognise   # optional content check\n"
-             f"    subagent: {analyst}\n"
-             f'    cli: "labpipe {name} analyze --entry {{entry_id}}"\n'
+             + (f"    subagent: {agent}\n" if agent else
+                "    subagent: null                     # analysed by code alone\n"
+                "    notes: false\n")
+             + f'    cli: "labpipe {name} analyze --entry {{entry_id}}"\n'
              f"    module: labpipe.methods.{name}.analyze\n"
              f"    config: config/{name}.yaml\n"
              f"    outputs: [results.json, plot.png, plot.pdf, provenance.json, notes.md]\n")
@@ -99,7 +102,8 @@ def new(name: str, example: Path, description: str) -> dict[str, Any]:
                      f"implement reading and numerics in src/labpipe/methods/{name}/analyze.py",
                      f"put every tunable number in config/{name}.yaml",
                      f"write the synthetic test in tests/test_{name}.py",
-                     f"adapt agents/{analyst}.md (what to look at, what the notes say)",
+                     *([f"adapt agents/{agent}.md (what to look at, what the notes say)"]
+                       if agent else []),
                      f"labpipe methods check {name} --example <file>  (until it passes)",
                      "labpipe agents sync; labpipe scan"]}
 
@@ -123,14 +127,18 @@ def check(name: str, example: Path, config: dict | None = None,
     spec = load_methods().get(name)
     if not _check(results, "registry entry", spec is not None, "methods.yaml → methods." + name):
         return {"method": name, "ok": False, "checks": results}
-    for key in ("patterns", "module", "config", "subagent"):
+    for key in ("patterns", "module", "config"):
         _check(results, f"registry: {key}", spec.get(key), str(spec.get(key)))
     _check(results, "settings file", (PROJECT_ROOT / str(spec.get("config"))).exists(),
            str(spec.get("config")))
-    role = PROJECT_ROOT / "agents" / f"{spec.get('subagent')}.md"
-    _check(results, "analyst role file", role.exists() and "labpipe notes verify" in
-           role.read_text(encoding="utf-8"), f"{role.relative_to(PROJECT_ROOT).as_posix()} must exist and "
-           "keep the `labpipe notes verify` step")
+    if spec.get("subagent"):
+        role = PROJECT_ROOT / "agents" / f"{spec['subagent']}.md"
+        _check(results, "analyst role file", role.exists() and "labpipe notes verify" in
+               role.read_text(encoding="utf-8"), f"{role.relative_to(PROJECT_ROOT).as_posix()} "
+               "must exist and keep the `labpipe notes verify` step")
+    else:
+        _check(results, "no analyst: notes switched off", spec.get("notes") is False,
+               "a method without `subagent` needs `notes: false` in methods.yaml")
     try:
         module = importlib.import_module(spec["module"])
     except Exception as exc:  # report, do not crash the check

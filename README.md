@@ -1,12 +1,18 @@
 # labpipe
 
-Reproducible analysis of lab data (XRD first), driven by AI agents.
+Reproducible analysis of lab data, driven by AI agents.
 
 - Code computes every number; agents run commands and write notes.
 - Every figure is regenerable from its `provenance.json`.
 - Raw data is only ever read, from a read-only folder.
 
-Details: [docs/SAFETY.md](docs/SAFETY.md) (safety), [docs/ADDING_A_METHOD.md](docs/ADDING_A_METHOD.md) (new methods).
+| Method | Input | Output |
+|---|---|---|
+| `xrd` | PANalytical `.xrdml` (`.xy`) | whole-pattern fit, lattice parameter, phase candidates, crystallite size |
+| `sem` | JEOL `.tif` + `.txt` | metadata, pixel size, field of view; per-sample gallery (code only, no AI) |
+| `eds` | Oxford INCA `.htm` + linked images | composition as recorded, metal-only composition, vs. nominal |
+
+Details: [docs/SAFETY.md](docs/SAFETY.md) (safety), [docs/ADDING_A_METHOD.md](docs/ADDING_A_METHOD.md) (new methods), [docs/methods/](docs/methods/) (method designs).
 
 ## Requirements
 

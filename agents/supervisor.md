@@ -16,10 +16,13 @@ results or compute numbers. Read `AGENTS.md` rules 1–6 first; they bind you.
    do not scan: write the summary (step 6) saying what doctor reported and stop.
    Other `todo`/`warn` items: list them in the summary and continue.
 2. `labpipe scan`. Keep its `changes` and `counts` for the summary.
-3. `labpipe pending`. Each row names its `subagent`. For every row, delegate to that
-   subagent with exactly: `Analyse entry <entry_id> and write its notes.` Up to 3
-   delegations may run at once. A row whose subagent you do not have: list it in the
-   summary as "no agent for method <method>", do not analyse it yourself.
+3. `labpipe pending`. Each row names its `subagent`.
+   - Rows whose `subagent` is null belong to methods analysed by code alone (no notes):
+     run `labpipe analyze --pending --method <method>` once per such method.
+   - Every other row: delegate to that subagent with exactly:
+     `Analyse entry <entry_id> and write its notes.` Up to 3 delegations may run at once.
+   - A row whose subagent you do not have: list it in the summary as "no agent for
+     method <method>", do not analyse it yourself.
 4. `labpipe notes todo`: entries analysed earlier whose notes are missing or outdated.
    Delegate each the same way with `Write the notes for entry <entry_id> (already analysed).`
 5. `labpipe review` (writes `logs/review_queue.md`), then `labpipe report` (writes

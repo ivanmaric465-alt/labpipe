@@ -1,6 +1,6 @@
 # eds: EDS quantification (Oxford INCA HTML reports)
 
-Status: DRAFT for the user's approval (2026-10-16). No analysis code until approved.
+Status: APPROVED 2026-10-17 with changes (below). Implemented.
 
 ## Input
 - Instrument and software: Oxford Instruments INCA (on the JEOL SEM), "Project" HTML export.
@@ -23,7 +23,7 @@ Status: DRAFT for the user's approval (2026-10-16). No analysis code until appro
 2. Parse with the standard library HTML parser; numbers with `.` or `,` as decimal mark (never silently dropped); keep the Totals row.
 3. Compute in code: metal basis, renormalised at%, comparison with nominal.
 4. Duplicates: a report byte-identical to another (`S-11 - Copy.htm` = `S-11.htm`) is recorded as `duplicate`, not analysed. This is a general scanner rule (same content within a method = duplicate), useful for every method.
-- Defaults (`config/eds.yaml`): `non_metals: [C, N, O, F, S, Si, Cl]`, `low_concentration_wt_percent: 1.0`, `nominal_tolerance_at_percent: 5.0` (points of metal-basis at%).
+- Defaults (`config/eds.yaml`): `non_metals: [C, N, O, F, S, Si, Cl]`, `low_concentration_wt_percent: 1.0`, `nominal_at_percent: null`.
 - Code reused: the INCA table idea from eln_refactor `utils/instrument_reports.py` (a3931a4). Its bugs are not carried over: "Wt% Sigma" columns counted as composition, decimal commas dropped silently, image links failing on case (reported earlier; not fixed there).
 
 ## Checks
@@ -33,7 +33,6 @@ Status: DRAFT for the user's approval (2026-10-16). No analysis code until appro
 | `no_uncertainty_reported` | warning | the export has no σ; small differences cannot be judged |
 | `low_concentration` | warning | an element below `low_concentration_wt_percent` (near the detection limit) |
 | `support_dominates` | info | non-metals are most of the signal (e.g. C 82 wt%): metal ratios rest on small peaks |
-| `nominal_deviation` | review | a metal differs from nominal by more than `nominal_tolerance_at_percent` |
 | `no_nominal` | info | no nominal composition given for this sample |
 | `images_missing` | warning | a linked JPG is not found |
 
@@ -42,7 +41,8 @@ Status: DRAFT for the user's approval (2026-10-16). No analysis code until appro
 - Looks at: the electron image (is the analysed area representative: agglomerates, empty support?), the spectrum (are the labelled metal peaks visible above background?).
 - Notes say: the metal composition, how it compares with nominal, how much to trust it (normalised, no σ, low concentrations). Never claims a phase, a stoichiometry or an element the table does not contain.
 
-## Open questions for the user
-- Which elements count as "not metal" for the metal basis: C, N, O, F, S, Si, Cl as proposed?
-- Tolerance for `nominal_deviation`: 5 at% points of the metal basis?
-- Several reports per sample (e.g. a second site, or a lower magnification): show each, or also an average per sample? (An average would hide site-to-site variation; I would show each.)
+## Decisions and findings
+- 2026-10-17, user: all elements stay in the report (full table as recorded); the metal basis is shown in addition. No flag for the deviation from nominal (numbers only). Each report is shown separately, no averages.
+- Metal basis from wt% / standard atomic weight (IUPAC), not from the recorded at%: INCA rounds at% to 0.01, so a minor metal at 0.03 at% carries ±17 % rounding error, while its wt% (e.g. 0.27) has more digits. The at%-based version is kept in results.json for comparison.
+- Added check `linked_images_other_name` (review): in real data one report links the images named for another report while images named for itself exist next to it. labpipe does not guess which are right.
+- Duplicates: byte-identical reports (`X - Copy.htm`) are recorded as duplicates by the general scanner rule.

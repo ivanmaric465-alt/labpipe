@@ -9,6 +9,8 @@
 * needs_review: back to pending once a human override resolves it;
 * files modified within settle_minutes are skipped (a sync client or the instrument PC may still be writing);
 * entries whose file disappeared: status missing (outputs are kept);
+* a file byte-identical to another file of the same method (e.g. "X - Copy.htm")
+  is recorded as duplicate of the one with the shortest path, not analysed;
 * baseline=True (setup, "only new files from now on"): files seen for the first
   time are recorded as baseline, not analysed; they become pending when their
   content changes or on `labpipe requeue --baseline | --entry ID`.
@@ -28,7 +30,7 @@ import yaml
 
 from labpipe import manifest as mf
 from labpipe import settings as settings_mod
-from labpipe.naming import derive_sample_id, entry_id, measurement_id
+from labpipe.naming import DEFAULT_SEPARATORS, derive_sample_id, entry_id, measurement_id
 from labpipe.provenance import code_version, sha256_file, utc_now
 from labpipe.registry import classify, load_methods
 from labpipe.safety import PROJECT_ROOT
@@ -40,6 +42,42 @@ def _overrides(config: dict) -> dict[str, str]:
         return {}
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return dict(data.get("overrides") or {})
+
+
+ACTIVE = {"pending", "done", "stale", "failed", "needs_review", "baseline"}
+
+
+def _is_content_duplicate(entry: dict[str, Any]) -> bool:
+    return entry.get("status") == "duplicate" and str(entry.get("status_reason", "")).startswith(
+        "identical content")
+
+
+def _content_duplicates(entries: dict[str, dict[str, Any]], changes: list, counts: Counter) -> None:
+    """Same method + same sha256: keep the shortest path, mark the others duplicate."""
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for entry in entries.values():
+        if entry.get("sha256") and (entry.get("status") in ACTIVE or _is_content_duplicate(entry)):
+            groups.setdefault((entry["method"], entry["sha256"]), []).append(entry)
+
+    def move(entry: dict[str, Any], status: str, reason: str) -> None:
+        old = entry.get("status")
+        mf.set_status(entry, status, reason)
+        if old != status:
+            counts[old] -= 1
+            counts[status] += 1
+            changes.append({"entry_id": entry["entry_id"], "relative_path": entry["relative_path"],
+                            "from": old, "to": status, "reason": reason})
+
+    for members in groups.values():
+        members.sort(key=lambda e: (len(e["relative_path"]), e["relative_path"]))
+        keeper, *twins = members
+        if _is_content_duplicate(keeper):
+            keeper.pop("duplicate_of", None)
+            move(keeper, "pending", "the identical file it duplicated is gone")
+        for twin in twins:
+            if not _is_content_duplicate(twin) or twin.get("duplicate_of") != keeper["entry_id"]:
+                twin["duplicate_of"] = keeper["entry_id"]
+                move(twin, "duplicate", f"identical content to {keeper['relative_path']}")
 
 
 def _walk(root: Path):
@@ -56,6 +94,7 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
     methods = load_methods()
     overrides = _overrides(config)
     pattern = config["sample_id"]["pattern"]
+    separators = config["sample_id"].get("separators", DEFAULT_SEPARATORS)
     settle_seconds = 60 * config["settle_minutes"]
     max_attempts = config["max_attempts_per_hash"]
     current_code = code_version()
@@ -106,6 +145,7 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
 
                 path = PurePosixPath(relative)
                 sample, source, problem = derive_sample_id(relative, pattern=pattern,
+                                                           separators=separators,
                                                            overrides=overrides)
                 entry.update({"sample_id": sample, "sample_id_source": source,
                               "measurement_id": measurement_id(relative)})
@@ -157,6 +197,7 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                                     "reason": entry.get("status_reason")})
                 counts[entry["status"]] += 1
 
+        _content_duplicates(entries, changes, counts)
         for eid, entry in entries.items():
             if eid not in seen and entry.get("status") != "missing" and any(
                     entry["raw_root"] == root["id"] for root in config["raw_roots"]):
@@ -170,6 +211,7 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                                 "from": old, "to": "missing", "reason": entry["status_reason"]})
                 counts["missing"] += 1
 
-    return {"code_version": current_code, "counts": dict(sorted(counts.items())),
+    return {"code_version": current_code,
+            "counts": dict(sorted((k, n) for k, n in counts.items() if n)),
             "changes": changes,
             "raw_roots": [{"id": r["id"], "path": r["path"]} for r in config["raw_roots"]]}

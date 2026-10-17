@@ -136,9 +136,13 @@ def verify_entry(config: dict, eid: str) -> dict[str, Any]:
 
 def todo(config: dict) -> list[dict[str, Any]]:
     """Analysed entries whose notes.md is missing or describes another results.json."""
+    from labpipe.registry import load_methods
+    without_notes = {name for name, spec in load_methods().items() if spec.get("notes") is False}
     rows = []
     for entry in mf.load(config)["entries"].values():
         if entry.get("status") not in ("done", "stale") or not entry.get("output_dir"):
+            continue
+        if entry["method"] in without_notes:  # methods analysed by code alone
             continue
         notes = PROJECT_ROOT / entry["output_dir"] / "notes.md"
         if not notes.exists():

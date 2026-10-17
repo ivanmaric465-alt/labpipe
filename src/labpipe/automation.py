@@ -108,6 +108,31 @@ def _work(config: dict) -> dict[str, list[str]]:
                                    if e.get("status") == "needs_review")}
 
 
+def _analyse_code_only(config: dict, reason: str) -> list[str]:
+    """Methods without an analyst agent (methods.yaml `subagent: null`): analysed by code
+    here, so no AI run is started for them."""
+    from labpipe import pipeline
+    from labpipe.report import build as build_report
+    methods = load_methods()
+    code_only = {name for name, spec in methods.items() if not spec.get("subagent")}
+    if not code_only:
+        return []
+    ids = sorted(e["entry_id"] for e in mf.load(config)["entries"].values()
+                 if e.get("status") == "pending" and e["method"] in code_only)
+    if not ids:
+        return []
+    results = [pipeline.analyze_entry(config, eid) for eid in ids]
+    done = [r["entry_id"] for r in results if r["status"] == "done"]
+    failed = [r["entry_id"] for r in results if r["status"] == "failed"]
+    build_report(config)
+    _log(config, {"event": "code_only_finished", "trigger": reason, "done": done,
+                  "failed": failed})
+    notify(config, f"labpipe: analysed {len(done)} measurement(s) by code alone "
+                   f"({_describe(config, done)})" + (f", {len(failed)} failed" if failed else "")
+                   + "; see analysis/report.html")
+    return done
+
+
 def _harness_command(config: dict, chosen: dict) -> list[str]:
     harness = (config.get("agents") or {}).get("harness")
     if harness != "claude-code":
@@ -143,11 +168,15 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
             notify(config, f"labpipe: cannot scan the raw data ({exc}); nothing was analysed")
             _log(config, {"event": "scan_failed", "reason": str(exc), "trigger": reason})
             return {"status": "scan_failed", "reason": str(exc)}
+        code_only = _analyse_code_only(config, reason)
         work = _work(config)
         if work["needs_review"] and any(c["to"] == "needs_review" for c in scan["changes"]):
             notify(config, f"labpipe: {len(work['needs_review'])} file(s) need a decision "
                            "from you (sample ID); see logs/review_queue.md")
         if not work["pending"] and not work["notes"]:
+            if code_only:
+                return {"status": "finished", "exit_code": 0, "done": code_only, "failed": [],
+                        "remaining": 0, "ai": False}
             _log(config, {"event": "nothing_to_do", "trigger": reason})
             return {"status": "nothing_to_do"}
         queued = work["pending"] + [i for i in work["notes"] if i not in work["pending"]]

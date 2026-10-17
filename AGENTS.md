@@ -162,6 +162,20 @@ XRD steering keys (defaults in `config/xrd.yaml`):
 | "no internal standard here" | `internal_standard.phase: null` |
 | "our Si standard has a = …" | `internal_standard.lattice_a_angstrom: …` (from the certificate the user gives you) |
 
+SEM keys (`config/sem.yaml`; no analyst, analysed by code):
+
+| User says | Setting |
+|---|---|
+| "show 5k and 200k images in the report" | `gallery.magnifications: [5000, 200000]` (per sample in `config/samples.yaml`) |
+| "always show / never show that image" | `gallery.include: [<measurement_id>]` / `gallery.exclude: [...]` |
+
+EDS keys (`config/eds.yaml`):
+
+| User says | Setting |
+|---|---|
+| "S-9 should be equimolar Ru, Rh, Pd, Ir, Pt" | `samples.S-9.eds.nominal_at_percent: {Ru: 20, Rh: 20, Pd: 20, Ir: 20, Pt: 20}` (copy the user's numbers; never compute them) |
+| "count Si as a metal" / "leave out Cu (grid)" | `non_metals: [...]` |
+
 ## Adding a reference phase (XRD)
 
 ```

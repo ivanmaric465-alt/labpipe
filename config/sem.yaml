@@ -1,6 +1,23 @@
-# Copy to config/<method>.yaml. Every key here can be overridden per sample
-# (config/samples.yaml) or per measurement (config/measurements/<method>/<id>.yaml).
+# SEM images (JEOL TIFF + .txt metadata). Every key can be overridden per sample
+# (config/samples.yaml → samples.<id>.sem) or per measurement
+# (config/measurements/sem/<measurement_id>.yaml).
 schema: labpipe.sem.config/1
-min_points: 10
-x_unit: "a.u."
-y_unit: "a.u."
+
+# Rows at the bottom of each image that are JEOL's info bar, not sample
+# (excluded from the field of view).
+info_bar_px: 64
+
+# Report gallery per sample: the image closest to each magnification (log scale,
+# both series compete); measurement IDs in include are always shown, in exclude never.
+gallery:
+  magnifications: [10000, 50000, 100000]
+  include: []
+  exclude: []
+
+plot:
+  width_in: 3.25      # ACS single column
+  dpi: 300
+
+thumbnail:            # thumb.jpg, embedded in analysis/report.html
+  width_px: 640
+  jpeg_quality: 80

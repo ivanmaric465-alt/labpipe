@@ -1,6 +1,20 @@
-# Copy to config/<method>.yaml. Every key here can be overridden per sample
-# (config/samples.yaml) or per measurement (config/measurements/<method>/<id>.yaml).
+# EDS quantification (Oxford INCA HTML reports). Every key can be overridden per
+# sample (config/samples.yaml → samples.<id>.eds) or per measurement
+# (config/measurements/eds/<measurement_id>.yaml).
 schema: labpipe.eds.config/1
-min_points: 10
-x_unit: "a.u."
-y_unit: "a.u."
+
+# Elements left out of the metal-only composition (all other elements are metals
+# there; the full table is always shown as recorded).
+non_metals: [C, N, O, F, S, Si, Cl]
+
+# Elements below this are reported as near the detection limit (warning).
+low_concentration_wt_percent: 1.0
+
+# Nominal composition, normally per sample in config/samples.yaml, e.g.
+#   samples: {S-9: {eds: {nominal_at_percent: {Ru: 20, Rh: 20, Pd: 20, Ir: 20, Pt: 20}}}}
+# Renormalised over its metals; compared with the measured metal basis (no flag).
+nominal_at_percent: null
+
+plot:
+  width_in: 7.0       # ACS double column: electron image | spectrum | metal bar chart
+  dpi: 300
