@@ -399,3 +399,23 @@ def test_existing_manifests_are_converted_not_made_stale(tmp_path):
     manifest["entries"][eid].pop("fingerprint_version")
     (project / "manifest.json").write_text(json.dumps(manifest))
     assert _labpipe(env, "scan")["changes"][0]["to"] == "stale"
+
+
+def test_keep_inside_widens_margins_only_when_text_is_cut():
+    import matplotlib.pyplot as plt
+    from labpipe.plotting.acs import keep_inside
+    fits = plt.figure(figsize=(3.25, 3.0))
+    fits.add_subplot().set_ylabel("y")
+    fits.subplots_adjust(left=0.3)
+    keep_inside(fits)
+    assert fits.subplotpars.left == 0.3                     # already fits: left as it is
+    cut = plt.figure(figsize=(3.25, 3.0))
+    axis = cut.add_subplot()
+    axis.set_ylabel("Intensity (counts, sqrt scale)", fontsize=14)
+    axis.set_yticks([0, 2000, 4000, 6000, 8000])
+    cut.subplots_adjust(left=0.05)
+    keep_inside(cut)
+    cut.canvas.draw()
+    assert cut.get_tightbbox(cut.canvas.get_renderer()).x0 >= 0
+    plt.close(fits)
+    plt.close(cut)

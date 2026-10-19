@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from labpipe.plotting.acs import apply_acs, palette, save_figure, style_of
+from labpipe.plotting.acs import apply_acs, keep_inside, palette, save_figure, style_of
 
 
 def _sqrt_scale(values):
@@ -113,6 +113,7 @@ def render(path_stem: Path, *, x: np.ndarray, y: np.ndarray, background: np.ndar
 
     figure.align_ylabels([ax_main] + ([ax_res] if ax_res is not None else []))
     figure.subplots_adjust(left=0.17, right=0.80, top=0.93, bottom=0.14)
+    keep_inside(figure)
     files = save_figure(figure, path_stem, style, dpi)
     plt.close(figure)
     return {"font": font, "files": files}

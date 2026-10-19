@@ -75,6 +75,21 @@ def formats(style: dict[str, Any]) -> list[str]:
     return ["png"] + [f for f in ("pdf", "svg") if f in style["formats"]]
 
 
+def keep_inside(figure, pad_in: float = 0.03) -> None:
+    """Widen the fixed margins of `figure` only where text would be cut off (e.g. larger
+    fonts); a figure that already fits is left exactly as it is."""
+    figure.canvas.draw()
+    box = figure.get_tightbbox(figure.canvas.get_renderer())   # inches
+    width, height = figure.get_size_inches()
+    params = figure.subplotpars
+    left = params.left + max(0.0, -box.x0 + pad_in) / width if box.x0 < 0 else params.left
+    right = params.right - max(0.0, box.x1 - width + pad_in) / width if box.x1 > width else params.right
+    bottom = params.bottom + max(0.0, -box.y0 + pad_in) / height if box.y0 < 0 else params.bottom
+    top = params.top - max(0.0, box.y1 - height + pad_in) / height if box.y1 > height else params.top
+    if (left, right, bottom, top) != (params.left, params.right, params.bottom, params.top):
+        figure.subplots_adjust(left=left, right=right, bottom=bottom, top=top)
+
+
 def save_figure(figure, stem: Path, style: dict[str, Any], dpi: int) -> list[str]:
     """Write stem.png (+ .pdf, .svg as chosen) without volatile metadata; the file names."""
     names = []
