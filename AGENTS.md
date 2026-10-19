@@ -6,7 +6,7 @@ labpipe turns raw instrument files into reproducible analyses:
 - `results.json`, a plot (`plot.png` + `plot.pdf`) and `provenance.json` per measurement;
 - a human-readable `notes.md` written by an agent.
 
-The numerics are deterministic Python. **Agents run commands, read results, write notes and edit settings files. They never compute numbers themselves.** Human-facing overview: `README.md`. Read `docs/SAFETY.md` before changing anything that touches paths or permissions.
+The numerics are deterministic Python. **Agents run commands, read results, write notes and edit settings files. They never compute numbers themselves.** Human-facing overview: `README.md`. The code's skeleton (modules, data flow, what is written where): `docs/ARCHITECTURE.md`; a code change that adds, removes or moves a module, command, file or flow updates it in the same commit. Read `docs/SAFETY.md` before changing anything that touches paths or permissions.
 
 Everything specific to one method (its settings, how to word its results, its conventions) is in `docs/methods/<method>.md`. Read it before steering or explaining that method's results. Everything else the user can change (data, samples, plots, report, agents, automation, context, container) has a page in `docs/settings/`, with a "You say → setting" table: find the page there before changing anything.
 
