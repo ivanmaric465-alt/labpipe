@@ -297,7 +297,7 @@ def cmd_analyze(args, config) -> int:
     results = [pipeline.analyze_entry(config, entry["entry_id"]) for entry in pending]
     _print({"processed": len(results), "report": _refresh_report(config) if results else None,
             "summary": dict(Counter(r["status"] for r in results)),
-            "results": [{k: r[k] for k in ("entry_id", "status", "reason", "output_dir", "review")}
+            "results": [{k: r.get(k) for k in ("entry_id", "status", "reason", "output_dir", "review")}
                         for r in results]})
     return 0
 

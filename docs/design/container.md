@@ -104,6 +104,15 @@ What can change, and how each change reaches a machine:
 - Linux with Podman and Docker on this machine and in CI (Ubuntu): build, start, read-only raw mount (a write must fail), firewall (a non-allowed host must fail), a full pass with a fake agent tool, files owned by the user, notifications page, pop-ups through the proxy (here).
 - Windows and macOS: Podman Desktop / Docker Desktop on a real machine (to be arranged); CI cannot run Linux containers on its Windows machines.
 
+## Findings while building (step 1, 2026-10-19)
+- Built and tested on Fedora with Podman 5.8.7 (rootless) and Docker 29.9: data mount read-only, files owned by the user, no capabilities left for the user's processes, outgoing traffic only through the proxy to allowed hosts (others: "403 Filtered"), the firewall cannot be changed from inside, the entrypoint refuses to start without it. Pipeline, replay (byte-identical) and the test suite run inside; host commands are forwarded.
+- `label=disable` is honoured by both engines; without it SELinux blocks the container from reading the repository (two denials during testing, nothing changed).
+- Docker needs one `--cap-add` per capability. `SETPCAP` added so the entrypoint can empty the bounding set before handing over.
+- The login volume is per container (`<name>-home`).
+- Inside a `git worktree` checkout git cannot follow the `.git` file to the host path: use a normal clone (production is one).
+- Image size: about 1.5 GB (Podman) / 2.2 GB (Docker); Codex ~430 MB and Claude Code ~290 MB of it.
+- The proxy is tinyproxy with a host filter generated at start (host and its subdomains, port 443 only).
+
 ## Decisions
 - 2026-10-19, user: notifications by browser page (port 8765) and Linux pop-ups; no ntfy, email or chat. Containers replace native automation. Personal settings may be imported per harness. Updates proposed by Dependabot.
 
