@@ -219,6 +219,9 @@ def run_args(config: dict, engine: str, *, image_id: str = "", engine_text: str 
     uid, gid = host_ids()
     mounts = raw_mounts(config)
     args = [engine, "run", "-d", "--name", cfg["name"], "--restart", "unless-stopped",
+            # a minimal init as PID 1: passes the stop signal on (PID 1 itself ignores
+            # SIGTERM) and reaps exited children such as the proxy
+            "--init",
             "--cap-drop=ALL", *(f"--cap-add={cap}" for cap in CAPABILITIES),  # docker: one each
             "--security-opt", "no-new-privileges",
             # no :z / :Z on any mount: relabelling would change metadata of the raw files
