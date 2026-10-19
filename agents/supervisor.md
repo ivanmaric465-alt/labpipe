@@ -45,6 +45,8 @@ exact refusal message and stop. A refusal means the setup needs a human.
 ## Never
 
 - Run anything other than `labpipe ...` commands (no shell operators, pipes or redirects).
+  Reading files is fine: your read tool, or without one (Codex) `cat`/`sed -n`/`rg` on files
+  inside the project.
 - Edit settings, code, references, results or the manifest; requeue stale entries; or
   retry a failed entry beyond what `labpipe scan` decides.
 - Answer a `needs_review` question yourself (e.g. guess a sample ID). List it for the human.

@@ -200,3 +200,61 @@ def test_setup_needs_a_terminal(monkeypatch):
     from labpipe import wizard
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)
     assert wizard.run() == 2
+
+
+def _bash(command: str) -> dict:
+    return {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(PROJECT_ROOT)}
+
+
+def test_guard_codex_apply_patch_paths(config):
+    raw = config["raw_roots"][0]["path"]
+    patch = ("*** Begin Patch\n*** Add File: " + raw + "/x.txt\n+x\n*** End Patch")
+    event = {"tool_name": "apply_patch", "tool_input": {"command": patch}, "cwd": str(PROJECT_ROOT)}
+    assert "read-only" in guard.decide(event, config, "interactive")
+    notes = ("*** Begin Patch\n*** Update File: analysis/S-1/xrd/m/notes.md\n@@\n-a\n+b\n"
+             "*** End Patch")
+    event["tool_input"]["command"] = notes
+    assert guard.decide(event, config, "unattended") is None
+    results = notes.replace("notes.md", "results.json")
+    event["tool_input"]["command"] = results
+    assert "produced by labpipe" in guard.decide(event, config, "interactive")
+    event["tool_input"]["command"] = "garbage"
+    assert guard.decide(event, config, "interactive")
+
+
+def test_guard_unattended_allows_reading_inside_the_project_only(config):
+    allowed = ["cat analysis/S-1/xrd/m/results.json", "sed -n '1,40p' agents/supervisor.md",
+               "rg -n wh_unreliable logs", "bash -lc 'cat AGENTS.md'", "ls analysis"]
+    for command in allowed:
+        assert guard.decide(_bash(command), config, "unattended") is None, command
+    blocked = ["cat /etc/passwd", "cat ~/.codex/auth.json", "cat ../../secret",
+               "sed -i 's/a/b/' AGENTS.md", "bash -lc 'rm -r analysis'", "cat a | head",
+               "python3 -c 'print(1)'", "cat " + config["raw_roots"][0]["path"] + "/x.xrdml"]
+    for command in blocked:
+        assert guard.decide(_bash(command), config, "unattended"), command
+
+
+def test_agents_render_codex_toml():
+    import tomllib
+    from labpipe import agents
+    role = {"name": "demo", "role": "analyst", "description": 'a "quoted" role', "source": "demo.md",
+            "capabilities": ["shell"], "body": 'Body with """ and \\ and ü\n', "text": "x"}
+    text, fingerprint = agents._render(role, "codex", {"analyst": "openai/gpt-6-astra"},
+                                       {"analyst": "high"})
+    data = tomllib.loads(text)
+    assert data["name"] == "demo" and data["model"] == "gpt-6-astra"
+    assert data["model_reasoning_effort"] == "high" and data["description"] == 'a "quoted" role'
+    assert data["developer_instructions"].strip() == role["body"].strip()
+    assert fingerprint in text
+    with pytest.raises(agents.AgentConfigError):
+        agents.settings({"agents": {"harness": "codex", "reasoning": {"analyst": "huge"}}})
+
+
+def test_codex_trust_reads_user_config(tmp_path, monkeypatch):
+    from labpipe import agents
+    (tmp_path / "config.toml").write_text(
+        f'model = "x"\n[projects."{tmp_path / "repo"}"]\ntrust_level = "trusted"\n')
+    (tmp_path / "repo").mkdir()
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    assert agents.codex_trust(tmp_path / "repo") == "trusted"
+    assert agents.codex_trust(tmp_path) is None

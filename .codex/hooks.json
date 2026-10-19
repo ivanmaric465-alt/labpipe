@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|exec_command|shell|local_shell|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/hooks/guard.py\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

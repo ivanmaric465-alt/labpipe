@@ -25,9 +25,12 @@ protected_paths: []
 # (use the model the session runs with). For Claude Code, aliases also work:
 # haiku, sonnet, opus.
 agents:
-  harness: claude-code          # claude-code | opencode
+  harness: claude-code          # claude-code | codex | opencode
   models:
     supervisor: inherit         # runs commands and keeps the books: a small model is enough
     analyst: inherit            # looks at plots, writes notes for people: a stronger model
+  # reasoning:                  # Codex only: effort per role (low, medium, high, xhigh, …)
+  #   supervisor: low
+  #   analyst: high
 
 # Automatic processing is added here by `labpipe automation setup` (automation: ...).

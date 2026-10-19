@@ -1,0 +1,12 @@
+# labpipe project settings for Codex (CLI and app). Codex applies this folder's
+# .codex/ (this file, hooks.json, rules/, agents/) only after you trust the project
+# (Codex asks the first time you open it). See docs/SAFETY.md → Codex.
+
+# Commands run in Codex's OS sandbox: they may write inside this repository only
+# (analysis/, logs/, manifest.json, settings); the raw data lives outside it and
+# cannot be written. No network for commands.
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+
+[sandbox_workspace_write]
+network_access = false

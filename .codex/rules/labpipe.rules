@@ -1,0 +1,31 @@
+# labpipe command rules for Codex (Starlark; project rules apply once the folder is
+# trusted). Mirrors the Claude Code permissions in .claude/settings.json: labpipe
+# commands run without asking, destructive commands are refused. The labpipe guard
+# hook (hooks.json) adds the raw-data and unattended-mode checks.
+
+prefix_rule(
+    pattern = ["labpipe"],
+    decision = "allow",
+    justification = "labpipe commands only read raw data and write analysis/, logs/, manifest.json",
+    match = [["labpipe", "doctor"], ["labpipe", "xrd", "analyze", "--entry", "x"]],
+)
+
+prefix_rule(pattern = ["sudo"], decision = "forbidden", justification = "admin commands are run by the user")
+prefix_rule(pattern = ["su"], decision = "forbidden", justification = "admin commands are run by the user")
+prefix_rule(pattern = ["rm"], decision = "forbidden", justification = "nothing is deleted; labpipe moves old outputs to _superseded/")
+prefix_rule(pattern = ["rmdir"], decision = "forbidden", justification = "nothing is deleted")
+prefix_rule(pattern = ["mv"], decision = "forbidden", justification = "files are moved only by labpipe")
+prefix_rule(pattern = ["shred"], decision = "forbidden", justification = "nothing is deleted")
+prefix_rule(pattern = ["dd"], decision = "forbidden", justification = "raw devices are never written")
+prefix_rule(pattern = ["chmod"], decision = "forbidden", justification = "permissions are the user's decision")
+prefix_rule(pattern = ["chown"], decision = "forbidden", justification = "permissions are the user's decision")
+prefix_rule(pattern = ["chattr"], decision = "forbidden", justification = "permissions are the user's decision")
+prefix_rule(pattern = ["mount"], decision = "forbidden", justification = "mounts are set up by the user")
+prefix_rule(pattern = ["umount"], decision = "forbidden", justification = "mounts are set up by the user")
+prefix_rule(pattern = ["git", "push"], decision = "forbidden", justification = "publishing is the user's decision")
+prefix_rule(pattern = ["git", "reset", "--hard"], decision = "forbidden", justification = "would discard work")
+prefix_rule(pattern = ["git", "clean"], decision = "forbidden", justification = "would delete files")
+prefix_rule(pattern = ["git", "checkout", "--"], decision = "forbidden", justification = "would discard work")
+prefix_rule(pattern = ["git", "restore"], decision = "forbidden", justification = "would discard work")
+prefix_rule(pattern = ["curl"], decision = "forbidden", justification = "no network from agent commands")
+prefix_rule(pattern = ["wget"], decision = "forbidden", justification = "no network from agent commands")

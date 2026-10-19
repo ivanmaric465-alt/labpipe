@@ -17,7 +17,7 @@ Details: [docs/SAFETY.md](docs/SAFETY.md) (safety), [docs/ADDING_A_METHOD.md](do
 ## Requirements
 
 - Python ≥ 3.14 and git
-- Claude Code, for the agents and automatic processing
+- Claude Code or Codex, for the agents and automatic processing
 - Linux only, for automatic processing: bubblewrap and socat
 
 ```bash
@@ -29,6 +29,8 @@ sudo apt install python3.14 python3.14-venv git bubblewrap socat
 brew install python@3.14 git
 # Claude Code (Linux / macOS)
 curl -fsSL https://claude.ai/install.sh | bash
+# or Codex
+npm install -g @openai/codex
 ```
 
 ```powershell
@@ -88,7 +90,7 @@ labpipe doctor         # what is still missing
 
 - Run a single step: `labpipe setup --only raw-data` (or `files`, `sandbox`, `agents`, `automation`).
 - For the read-only view, setup prints the commands for your system (e.g. a bind mount). **You run them**; setup waits, checks the result and saves it.
-- Then open the folder in Claude Code and say *"set this up for me"*. The agent goes through file naming, unrecognised files, references and a first analysis.
+- Then open the folder in Claude Code or Codex (trust the folder when Codex asks) and say *"set this up for me"*. The agent goes through file naming, unrecognised files, references and a first analysis.
 
 ## Use
 

@@ -49,7 +49,7 @@ from labpipe.registry import classify, load_methods
 from labpipe.safety import PROJECT_ROOT, assert_pipeline_writable, set_local_block
 
 DEFAULTS = {"check_every_seconds": 60, "settle_minutes": 3, "nightly_at": "02:00",
-            "max_measurements_per_run": 10, "max_budget_usd": 5, "claude": None,
+            "max_measurements_per_run": 10, "max_budget_usd": 5, "claude": None, "codex": None,
             "notify": {"desktop": True, "command": None}}
 WAITING_TOO_LONG_HOURS = 24
 
@@ -133,10 +133,42 @@ def _analyse_code_only(config: dict, reason: str) -> list[str]:
     return done
 
 
-def _harness_command(config: dict, chosen: dict) -> list[str]:
+def _codex_command(config: dict, chosen: dict, last_message: Path) -> list[str]:
+    """Codex: the main session acts as the supervisor (its role text is the prompt); the
+    analysts are .codex/agents/*.toml. Sandbox workspace-write (raw data outside the repo
+    cannot be written), no approvals. --dangerously-bypass-hook-trust makes sure the
+    project's labpipe guard hook (.codex/hooks.json) runs even if it was never trusted
+    interactively; it also runs any hooks you enabled in ~/.codex yourself."""
+    from labpipe.agents import codex_trust, load_roles
+    codex = chosen.get("codex") or shutil.which("codex")
+    if not codex:
+        raise RuntimeError("the `codex` command was not found; set automation.codex")
+    if codex_trust() != "trusted":
+        raise RuntimeError(f"Codex does not trust {PROJECT_ROOT} yet, so it would ignore the "
+                           "project's rules, guard hook and agents: open the folder once in "
+                           "Codex (`codex` there) and trust it")
+    agents = config.get("agents") or {}
+    supervisor = next(r for r in load_roles() if r["role"] == "supervisor")
+    model = (agents.get("models") or {}).get(supervisor["name"]) or (
+        agents.get("models") or {}).get("supervisor")
+    effort = (agents.get("reasoning") or {}).get("supervisor")
+    command = [codex, "exec", "--json", "--ephemeral", "-s", "workspace-write",
+               "-c", 'approval_policy="never"', "--dangerously-bypass-hook-trust",
+               "-o", str(last_message)]
+    if model and model != "inherit":
+        command += ["-m", model.split("/", 1)[1] if model.startswith("openai/") else model]
+    if effort:
+        command += ["-c", f'model_reasoning_effort="{effort}"']
+    return command + ["You are the labpipe `supervisor` agent. Run one pipeline pass now, "
+                      "following these instructions exactly:\n\n" + supervisor["body"]]
+
+
+def _harness_command(config: dict, chosen: dict, last_message: Path) -> list[str]:
     harness = (config.get("agents") or {}).get("harness")
+    if harness == "codex":
+        return _codex_command(config, chosen, last_message)
     if harness != "claude-code":
-        raise RuntimeError(f"unattended runs are supported with harness claude-code only "
+        raise RuntimeError(f"unattended runs are supported with harness claude-code or codex "
                            f"(configured: {harness!r})")
     claude = chosen.get("claude") or shutil.which("claude")
     if not claude:
@@ -194,7 +226,7 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
         env.pop("CLAUDECODE", None)
         env.pop("LABPIPE_RAW_ROOT", None)
         try:
-            command = _harness_command(config, chosen)
+            command = _harness_command(config, chosen, transcript.with_suffix(".last.md"))
             with open(transcript, "w", encoding="utf-8") as out:
                 completed = subprocess.run(command, cwd=PROJECT_ROOT, env=env, stdout=out,
                                            stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
@@ -203,14 +235,17 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
             notify(config, f"labpipe: the AI run could not start or finish ({exc})")
             _log(config, {"event": "run_failed", "reason": str(exc), "trigger": reason})
             return {"status": "run_failed", "reason": str(exc)}
-        result = {}
+        result, tokens = {}, {}
         for line in transcript.read_text(encoding="utf-8").splitlines():
             try:
                 event = json.loads(line)
             except json.JSONDecodeError:
                 continue  # stderr lines interleaved with the JSON stream
             if isinstance(event, dict) and event.get("type") == "result":
-                result = event
+                result = event            # Claude Code: includes total_cost_usd
+            elif isinstance(event, dict) and event.get("type") == "turn.completed":
+                for key, value in (event.get("usage") or {}).items():   # Codex: tokens only
+                    tokens[key] = tokens.get(key, 0) + int(value or 0)
         entries = mf.load(config)["entries"]
         done = [i for i in todo_ids if entries.get(i, {}).get("status") in ("done", "stale")]
         failed = [i for i in todo_ids if entries.get(i, {}).get("status") == "failed"]
@@ -227,7 +262,7 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
         summary = {"event": "run_finished", "trigger": reason, "exit_code": completed.returncode,
                    "transcript": str(transcript.relative_to(PROJECT_ROOT)),
                    "cost_usd": result.get("total_cost_usd"), "done": done, "failed": failed,
-                   "remaining": remaining}
+                   "remaining": remaining, **({"tokens": tokens} if tokens else {})}
         _log(config, summary)
         return {"status": "finished", **summary}
 
@@ -292,7 +327,8 @@ def _ask(question: str, default: str) -> str:
 
 def _systemd_units(chosen: dict) -> dict[str, str]:
     labpipe = Path(sys.executable).with_name("labpipe")
-    path = os.pathsep.join(dict.fromkeys([str(labpipe.parent), str(Path(chosen["claude"]).parent),
+    tool = chosen.get("codex") or chosen.get("claude") or "claude"
+    path = os.pathsep.join(dict.fromkeys([str(labpipe.parent), str(Path(tool).parent),
                                           "/usr/local/bin", "/usr/bin", "/bin"]))
     common = (f"WorkingDirectory={PROJECT_ROOT}\nEnvironment=PATH={path}\n"
               "Environment=LABPIPE_AGENT_MODE=unattended\n")
@@ -327,14 +363,16 @@ def setup(config: dict, *, assume_yes: bool = False) -> int:
         "max_measurements_per_run": int(_ask("At most how many measurements per AI run "
                                              "(the rest follow in the next run)?",
                                              str(current["max_measurements_per_run"]))),
-        "max_budget_usd": float(_ask("Maximum AI cost per run (USD)?",
-                                     str(current["max_budget_usd"]))),
-        "claude": _ask("Path to the claude command", current["claude"] or shutil.which("claude")
-                       or "claude"),
+        "max_budget_usd": float(_ask("Maximum AI cost per run (USD; Claude Code only, Codex "
+                                     "has no cost limit)?", str(current["max_budget_usd"]))),
+        "claude": current["claude"], "codex": current["codex"],
         "notify": {"desktop": _ask("Desktop notifications? (y/n)",
                                    "y" if current["notify"]["desktop"] else "n").lower().startswith("y"),
                    "command": current["notify"].get("command")},
     }
+    harness = (config.get("agents") or {}).get("harness") or "claude-code"
+    tool = "codex" if harness == "codex" else "claude"
+    chosen[tool] = _ask(f"Path to the {tool} command", current[tool] or shutil.which(tool) or tool)
     set_local_block("automation", chosen)
     print("\nSaved to config/local.yaml → automation.")
     if platform.system() != "Linux":
@@ -414,9 +452,12 @@ def health(config: dict, now: float | None = None) -> dict[str, Any]:
         fixes.append(f"read the transcript {last.get('transcript')}")
     else:
         state = (f"last run {last['utc']}: {len(last.get('done') or [])} done, "
-                 f"{len(last.get('failed') or [])} failed, cost "
-                 + (f"{last['cost_usd']:.2f} USD" if isinstance(last.get("cost_usd"), (int, float))
-                    else "unknown"))
+                 f"{len(last.get('failed') or [])} failed, "
+                 + (f"cost {last['cost_usd']:.2f} USD"
+                    if isinstance(last.get("cost_usd"), (int, float))
+                    else f"{last['tokens'].get('input_tokens', 0):,} input / "
+                         f"{last['tokens'].get('output_tokens', 0):,} output tokens"
+                    if last.get("tokens") else "cost unknown"))
     waiting = []
     for entry in mf.load(config)["entries"].values():
         if entry.get("status") == "pending" and entry.get("events"):

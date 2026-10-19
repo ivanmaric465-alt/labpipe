@@ -75,7 +75,7 @@ All commands print JSON.
 
 ## Agents
 
-Roles are defined once, harness-neutral, in `agents/`. `labpipe agents sync` turns them into the files the chosen harness reads (Claude Code: `.claude/agents/`, OpenCode: `.opencode/agents/`; both generated and git-ignored), with the models from `config/local.yaml` → `agents`. Edit `agents/*.md`, never the generated files.
+Roles are defined once, harness-neutral, in `agents/`. `labpipe agents sync` turns them into the files the chosen harness reads (Claude Code: `.claude/agents/`, Codex: `.codex/agents/*.toml`, OpenCode: `.opencode/agents/`; all generated and git-ignored), with the models from `config/local.yaml` → `agents`. Edit `agents/*.md`, never the generated files.
 
 | Agent | Role | Writes |
 |---|---|---|
@@ -84,7 +84,7 @@ Roles are defined once, harness-neutral, in `agents/`. `labpipe agents sync` tur
 | `xrd-analyst` (`agents/xrd-analyst.md`) | analyse one XRD entry, check the plot, write and verify short `notes.md` | `analysis/**/notes.md` |
 
 - Interactive: delegate to `supervisor` for "process the new data", to the method's analyst for notes after a rerun.
-- Unattended runs and the extra safety layers (permissions, guard hook, sandbox) depend on the harness. Claude Code: see `CLAUDE.md`. Other harnesses: only the read-only view and labpipe's own write checks apply, so do not run them unattended.
+- Unattended runs and the extra safety layers (permissions, guard hook, sandbox) depend on the harness. Claude Code: see `CLAUDE.md`. Codex: `.codex/` (config, rules, hooks; `docs/SAFETY.md` → Codex). OpenCode: only the read-only view and labpipe's own write checks apply, so do not run it unattended.
 
 The venv lives outside the repo:
 - Linux/macOS: `~/.local/share/labpipe/venv/bin/labpipe`

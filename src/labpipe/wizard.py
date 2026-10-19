@@ -216,32 +216,57 @@ def sandbox() -> None:
               "and run unattended processing inside WSL2 (docs/SAFETY.md).")
 
 
+def _codex_models() -> list[str]:
+    """Models this Codex installation lists (`codex debug models`), for the prompt only."""
+    import json
+    import subprocess
+    codex = shutil.which("codex")
+    if not codex:
+        return []
+    try:
+        listing = json.loads(subprocess.run([codex, "debug", "models"], capture_output=True,
+                                            text=True, timeout=30).stdout)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return []
+    items = listing if isinstance(listing, list) else listing.get("models", [])
+    return [m["slug"] for m in items if isinstance(m, dict) and m.get("visibility") == "list"
+            and m.get("slug")]
+
+
 def agent_models(config: dict) -> None:
     current = config.get("agents") or {}
     print("Agents run labpipe commands and write notes; they never compute numbers. Two "
           "roles: the supervisor runs commands and keeps the books (a small, fast model is "
           "enough); the analyst looks at plots and writes notes for people (a stronger model "
           "writes better notes). `labpipe notes verify` rejects invented numbers either way.")
-    harness = _ask("Agent harness: claude-code, opencode, or none",
+    harness = _ask("Agent harness: claude-code, codex, opencode, or none",
                    current.get("harness") or "claude-code")
     if harness == "none":
         return
-    hint = ("haiku, sonnet, opus, inherit (= the session's model) or anthropic/<model>"
-            if harness == "claude-code" else "provider/model or inherit")
+    hint = {"claude-code": "haiku, sonnet, opus, inherit (= the session's model) or anthropic/<model>",
+            "codex": "a Codex model (" + ", ".join(_codex_models()[:6]) + ") or inherit",
+            }.get(harness, "provider/model or inherit")
     print(f"Models: {hint}.")
     defaults = {"supervisor": "haiku", "analyst": "sonnet"} if harness == "claude-code" else {}
     models = dict(current.get("models") or {})
-    for role in sorted({role["role"] for role in agents.load_roles()}, reverse=True):
+    roles = sorted({role["role"] for role in agents.load_roles()}, reverse=True)
+    for role in roles:
         models[role] = _ask(f"Model for the {role}", str(models.get(role) or
                                                           defaults.get(role, "inherit")))
+    reasoning = dict(current.get("reasoning") or {})
+    if harness == "codex":
+        for role, default in zip(roles, ("low", "high")):
+            reasoning[role] = _ask(f"Reasoning effort for the {role} (low, medium, high, xhigh)",
+                                   reasoning.get(role) or default)
+    block = {"harness": harness, "models": models, **({"reasoning": reasoning} if reasoning else {})}
     try:
-        agents.settings({"agents": {"harness": harness, "models": models}})
+        chosen = agents.settings({"agents": block})
         for role in agents.load_roles():
-            agents._render(role, harness, models)
+            agents._render(role, harness, models, chosen["reasoning"])
     except agents.AgentConfigError as exc:
         print(f"Not saved: {exc}")
         return
-    set_local_block("agents", {"harness": harness, "models": models})
+    set_local_block("agents", block)
     result = agents.sync(load_pipeline_config())
     print(f"Saved to config/local.yaml → agents; wrote "
           + ", ".join(f"{w['file']} ({w['model']})" for w in result["written"]))

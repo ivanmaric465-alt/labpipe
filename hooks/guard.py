@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse hook launcher: runs `labpipe guard` from the labpipe venv.
+"""PreToolUse hook launcher for Claude Code and Codex: runs `labpipe guard` from the labpipe venv.
 
 Standard library only, so it runs under any Python 3. Finds the venv via
 LABPIPE_PYTHON, then the default locations (README). If labpipe is not
@@ -32,9 +32,9 @@ def main() -> int:
     if python is None:
         return 0  # labpipe not installed yet: no raw roots configured to protect
     env = dict(os.environ)
-    project = os.environ.get("CLAUDE_PROJECT_DIR")
-    if project:
-        env.setdefault("LABPIPE_ROOT", project)
+    # The project is the repository this launcher lives in (hooks/guard.py), whatever
+    # the harness's working directory.
+    env.setdefault("LABPIPE_ROOT", str(Path(__file__).resolve().parents[1]))
     try:
         completed = subprocess.run([str(python), "-m", "labpipe.cli", "guard"], input=event,
                                    capture_output=True, env=env, timeout=60)

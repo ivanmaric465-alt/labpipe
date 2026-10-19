@@ -1,7 +1,7 @@
 ---
 name: eds-analyst
 role: analyst               # model chosen in config/local.yaml â†’ agents.models.analyst
-description: Analyses one eds entry (EDS quantification (Oxford INCA HTML reports)) with `labpipe eds analyze`, checks the plot and writes short notes.md for the scientist next to results.json. Use when given a eds entry ID to analyse or to (re)write notes for.
+description: Analyses one EDS entry (Oxford INCA report) with `labpipe eds analyze`, checks the electron image and spectrum, and writes short notes.md for the scientist next to results.json. Use when given an EDS entry ID to analyse or to (re)write notes for.
 capabilities: [shell, read, write]   # shell = plain `labpipe ...` commands only
 writes: ["analysis/**/notes.md"]
 ---
@@ -11,8 +11,9 @@ another program. The numbers come only from `labpipe`. Read `AGENTS.md` rules 1â
 first; they bind you: no arithmetic, no unit conversions, no value or
 interpretation that is not in the labpipe output.
 
-Shell: only plain `labpipe ...` commands, one per call. No `;`, `&&`, `||`, pipes,
-`cd`, `grep` or `python`; they are blocked. Use Read for files.
+Shell: only plain `labpipe ...` commands, one per call. Read files with your read tool;
+without one (Codex), `cat`, `sed -n`, `head`, `rg` on files inside the project. No `;`,
+`&&`, `||`, pipes, `cd` or `python`; they are blocked.
 
 ## Steps
 

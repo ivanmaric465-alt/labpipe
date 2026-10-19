@@ -246,6 +246,19 @@ def run() -> dict[str, Any]:
         else:
             items.append(_item("agents", "ok", f"{agents['harness']} agents current; models: "
                                + ", ".join(f"{k} {v}" for k, v in agents["models"].items())))
+        if agents.get("harness") == "codex":
+            from labpipe.agents import codex_trust
+            if not shutil.which("codex"):
+                items.append(_item("codex", "todo", "`codex` is not on PATH",
+                                   "install the Codex CLI (README → Requirements)"))
+            elif codex_trust() != "trusted":
+                items.append(_item("codex", "todo", f"Codex does not trust {PROJECT_ROOT} yet: "
+                                   "until then it ignores the project's .codex/ (rules, guard "
+                                   "hook, agents)", "the user opens the folder once in Codex "
+                                   "(`codex` there) and chooses to trust it"))
+            else:
+                items.append(_item("codex", "ok", "codex installed; project trusted (rules, "
+                                   "guard hook and agents in .codex/ apply)"))
     if config is not None and (PROJECT_ROOT / config["manifest"]).exists():
         counts = Counter(e["status"] for e in mf.load(config)["entries"].values())
         items.append(_item("manifest", "ok", f"manifest entries by status: {dict(counts)}"))

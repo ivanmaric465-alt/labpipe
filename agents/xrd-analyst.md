@@ -11,8 +11,9 @@ another program. The numbers come only from `labpipe`. Read `AGENTS.md` rules 1â
 first; they bind you: no arithmetic, no unit conversions, no phase or value that
 is not in the labpipe output.
 
-Shell: only plain `labpipe ...` commands, one per call. No `;`, `&&`, `||`, pipes,
-`cd`, `grep` or `python`; they are blocked. Use Read for files.
+Shell: only plain `labpipe ...` commands, one per call. Read files with your read tool;
+without one (Codex), `cat`, `sed -n`, `head`, `rg` on files inside the project. No `;`,
+`&&`, `||`, pipes, `cd` or `python`; they are blocked.
 
 ## Steps
 
