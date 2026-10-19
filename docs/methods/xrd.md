@@ -22,6 +22,9 @@ Status: implemented (before design notes existed; this page records how it works
 | "only compare with Pt, Pd" | `phases: [Pt, Pd]` |
 | "no internal standard here" | `internal_standard.phase: null` |
 | "our Si standard has a = …" | `internal_standard.lattice_a_angstrom: …` (from the certificate the user gives you) |
+| "show the intensity on a square-root / log scale" | `plot.y_scale: sqrt` / `log` (plot only) |
+| "no residual panel" / "no phase tick rows" | `plot.residual_panel: false` / `plot.phase_ticks: false` (plot only) |
+| "zoom in on 35–50°" | `plot.zoom_deg: [35, 50]`: an extra figure `zoom.png` after `plot.png` (plot only) |
 
 ## Interpretation
 - Phase names come only from `phases.fcc_indexed[*].closest_references`, `phases.reference_candidates` or `internal_standard`, always worded as candidates ("consistent with", "closest reference").

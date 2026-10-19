@@ -324,6 +324,38 @@ def _describe(config: dict, ids: list[str]) -> str:
     return ", ".join(names[:6]) + (f" and {len(names) - 6} more" if len(names) > 6 else "")
 
 
+def _replot_outdated(config: dict, reason: str) -> tuple[list[str], list[str]]:
+    """Redraw the figures whose plot settings changed (code only, no AI). An entry whose
+    replot failed is not retried until its plot settings or the code change (`labpipe
+    replot --entry ID` retries on request). Returns (redrawn, failed)."""
+    from labpipe import pipeline
+    from labpipe.provenance import code_version
+    from labpipe.report import build as build_report
+    current = code_version()
+    ids = []
+    for e in mf.load(config)["entries"].values():
+        if e.get("status") != "done" or not e.get("plot_outdated"):
+            continue
+        tried = e.get("replot_problem")
+        if tried and tried.get("code_version") == current \
+                and tried.get("for_plot_sha256") == e.get("plot_sha256_wanted"):
+            continue
+        ids.append(e["entry_id"])
+    if not ids:
+        return [], []
+    results = [pipeline.replot_entry(config, eid) for eid in sorted(ids)]
+    done = [r["entry_id"] for r in results if r["status"] == "done"]
+    failed = [r["entry_id"] for r in results if r["status"] == "failed"]
+    if done:
+        build_report(config)
+    _log(config, {"event": "replot_finished", "trigger": reason, "done": done, "failed": failed})
+    if failed:
+        notify(config, f"labpipe: {len(failed)} plot(s) could not be redrawn because the results "
+                       f"would change ({_listed(failed, 2)}); the earlier outputs are kept. "
+                       + _ask_agent(config, "check the review queue"), kind="failed")
+    return done, failed
+
+
 def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
     chosen = settings(config)
     lock = PROJECT_ROOT / config["logs_dir"] / ".autorun.mutex"
@@ -340,11 +372,13 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
             _log(config, {"event": "scan_failed", "reason": str(exc), "trigger": reason})
             return {"status": "scan_failed", "reason": str(exc)}
         code_only = _analyse_code_only(config, reason)
+        replotted, replot_failed = _replot_outdated(config, reason)
         before = _notify_news(config, before, scan.get("unrecognised_new"))
         work = _work(config)
         if not work["pending"] and not work["notes"]:
-            if code_only:
+            if code_only or replotted or replot_failed:
                 return {"status": "finished", "exit_code": 0, "done": code_only, "failed": [],
+                        "replotted": replotted, "replot_failed": replot_failed,
                         "remaining": 0, "ai": False,
                         "settling": scan["counts"].get("settling", 0)}
             _log(config, {"event": "nothing_to_do", "trigger": reason,
@@ -416,6 +450,7 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
         summary = {"event": "run_finished", "trigger": reason, "exit_code": completed.returncode,
                    "transcript": str(transcript.relative_to(PROJECT_ROOT)),
                    "cost_usd": result.get("total_cost_usd"), "done": done, "failed": failed,
+                   "replotted": replotted, "replot_failed": replot_failed,
                    "remaining": remaining, **({"tokens": tokens} if tokens else {})}
         _log(config, summary)
         return {"status": "finished", **summary}

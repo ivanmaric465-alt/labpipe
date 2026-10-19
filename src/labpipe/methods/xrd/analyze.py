@@ -35,6 +35,7 @@ from labpipe.methods.xrd.io_xrdml import PatternFile, read_xrdml
 from labpipe.methods.xrd.io_xy import read_xy
 from labpipe.methods.xrd.references import load_references, match_reference
 from labpipe.naming import sample_ids_agree
+from labpipe.plotting import acs
 from labpipe.safety import (PROJECT_ROOT, assert_not_protected, assert_pipeline_writable,
                             atomic_write_bytes)
 
@@ -68,6 +69,26 @@ def _clean(value: Any) -> Any:
 
 def _check(checks: list, code: str, severity: str, message: str, **values: Any) -> None:
     checks.append({"code": code, "severity": severity, "message": message, **values})
+
+
+def _plot_options(config: dict) -> dict[str, Any]:
+    """The method's `plot:` keys with their defaults (records of older runs lack the newer
+    ones); a bad value is an AnalysisError before any work is done."""
+    pconf = config["plot"]
+    options = {"y_scale": pconf.get("y_scale", "linear"),
+               "residual_panel": bool(pconf.get("residual_panel", True)),
+               "phase_ticks": bool(pconf.get("phase_ticks", True)),
+               "zoom_deg": pconf.get("zoom_deg")}
+    if options["y_scale"] not in ("linear", "sqrt", "log"):
+        raise AnalysisError(f"plot.y_scale must be linear, sqrt or log, not {options['y_scale']!r}")
+    zoom = options["zoom_deg"]
+    if zoom is not None:
+        if (not isinstance(zoom, (list, tuple)) or len(zoom) != 2
+                or not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in zoom)
+                or not zoom[0] < zoom[1]):
+            raise AnalysisError(f"plot.zoom_deg must be [x1, x2] with x1 < x2, not {zoom!r}")
+        options["zoom_deg"] = (float(zoom[0]), float(zoom[1]))
+    return options
 
 
 def _read(path: Path, config: dict) -> PatternFile:
@@ -492,6 +513,7 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
         settings, settings_sources = settings_mod.resolve(
             METHOD, context.get("sample_id"), context.get("measurement_id"))
     config = settings
+    plot_options = _plot_options(config)
     input_path = Path(input_path)
     input_sha = prov.sha256_file(input_path)
     pattern = _read(input_path, config)
@@ -645,15 +667,30 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
     staging = out_dir / ".plot-staging"
     staging.mkdir(exist_ok=True)
     pconf = config["plot"]
+    style = acs.style_of(config)
     title = " · ".join(str(part) for part in (context.get("sample_id"),
                                                context.get("measurement_id") or input_path.stem)
                        if part)
-    plot_info = plot.render(staging / "plot", x=x, y=y, background=base, model=model,
-                            broad=broad_curves, tick_rows=tick_rows,
-                            peak_positions=[p["two_theta_deg"] for p in peaks],
-                            width_in=pconf["width_in"], height_in=pconf["height_in"],
-                            dpi=pconf["dpi"], title=title)
-    for name in plot_info["files"]:
+    draw = dict(x=x, y=y, background=base, model=model, broad=broad_curves, tick_rows=tick_rows,
+                peak_positions=[p["two_theta_deg"] for p in peaks],
+                width_in=acs.width_in(pconf, style), height_in=pconf["height_in"],
+                dpi=pconf["dpi"], style=style, y_scale=plot_options["y_scale"],
+                residual_panel=plot_options["residual_panel"],
+                phase_ticks=plot_options["phase_ticks"])
+    plot_info = plot.render(staging / "plot", title=title, **draw)
+    plot_files = list(plot_info["files"])
+    zoom = plot_options["zoom_deg"]
+    if zoom is not None:
+        if int(((x >= zoom[0]) & (x <= zoom[1])).sum()) < 2:
+            raise AnalysisError(f"plot.zoom_deg {list(zoom)} has no measured points "
+                                f"(measured {low:.2f} to {high:.2f} °2θ)")
+        zoom_info = plot.render(staging / "zoom", title=f"{title} · zoom {zoom[0]:g}–{zoom[1]:g}°",
+                                x_range=zoom, **draw)
+        plot_files += zoom_info["files"]
+        results["figures"] = [
+            {"file": "plot.png", "caption": f"full measured range ({low:.1f}–{high:.1f}°)"},
+            {"file": "zoom.png", "caption": f"zoom {zoom[0]:g}–{zoom[1]:g}° 2θ"}]
+    for name in plot_files:
         write(out_dir / name, (staging / name).read_bytes())
         (staging / name).unlink()
     staging.rmdir()
@@ -661,7 +698,7 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
           (json.dumps(results, indent=1, ensure_ascii=False, allow_nan=False) + "\n").encode())
 
     outputs = {name: prov.sha256_file(out_dir / name)
-               for name in ["results.json", *plot_info["files"]]}
+               for name in ["results.json", *plot_files]}
     provenance = prov.build_record(
         method=METHOD, entry_point="labpipe.methods.xrd.analyze.run", input_path=input_path,
         input_sha256=input_sha, context=context, settings=config,
@@ -672,10 +709,11 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
             "calibration": ({"file": config["sizing"]["calibration_file"],
                              "sha256": calibration["_sha256"]} if calibration else None),
             "plot": {"style": "ACS (upstream-echem@41b9c69 JOURNAL_PRESETS)",
-                     "font": plot_info["font"]},
+                     "font": plot_info["font"],
+                     "formats": acs.formats(style), "files": plot_files},
         })
     write(out_dir / "provenance.json",
           (json.dumps(_clean(provenance), indent=1, ensure_ascii=False) + "\n").encode())
     return {"status": status, "out_dir": str(out_dir), "n_peaks": len(peaks),
             "checks": [c for c in checks if c["severity"] == "review"], "outputs": outputs,
-            "settings_sha256": settings_mod.fingerprint(config)}
+            **settings_mod.fingerprints(config)}

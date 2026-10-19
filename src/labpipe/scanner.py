@@ -2,8 +2,9 @@
 
 * unchanged file (same sha256): left alone;
 * changed file: previous state moved to the entry's history, status pending;
-* done with an older code version or different settings: marked stale
-  (not reprocessed automatically);
+* done with an older code version or different analysis settings: marked stale
+  (not reprocessed automatically); settings that only concern the plots (`plot:` blocks,
+  plot style) leave it done and mark it `plot_outdated` (`labpipe replot` redraws);
 * failed: back to pending only if the code version changed and the attempt
   budget for this file hash is not used up;
 * needs_review: back to pending once a human override resolves it;
@@ -217,10 +218,23 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                     mf.set_status(entry, "stale",
                                   f"analysed with {entry.get('code_version')}, "
                                   f"current code is {current_code}")
-                elif old_status == "done" and entry.get("settings_sha256") and \
-                        entry["settings_sha256"] != settings_mod.fingerprint(settings_mod.resolve(
-                            method, sample, entry["measurement_id"])[0]):
-                    mf.set_status(entry, "stale", "analysis settings changed since the last run")
+                elif old_status == "done" and entry.get("settings_sha256"):
+                    resolved = settings_mod.resolve(method, sample, entry["measurement_id"])[0]
+                    state = settings_mod.compare_entry(entry, resolved)
+                    if not state["analysis_current"]:
+                        mf.set_status(entry, "stale", "analysis settings changed since the "
+                                                      "last run")
+                    else:
+                        entry.update(state["adopt"])
+                        if not state["plot_current"]:
+                            entry["plot_outdated"] = True
+                            entry["plot_sha256_wanted"] = settings_mod.plot_fingerprint(resolved)
+                            entry["plot_outdated_reason"] = ("plot settings changed since the "
+                                                             "figures were drawn")
+                        else:
+                            entry["plot_outdated"] = False
+                            entry.pop("plot_outdated_reason", None)
+                            entry.pop("plot_sha256_wanted", None)
                 elif (old_status == "failed" and entry.get("code_version") != current_code
                       and entry["attempts"] < max_attempts):
                     mf.set_status(entry, "pending", "code changed since failure; retrying")
@@ -248,6 +262,8 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
 
     return {"code_version": current_code,
             "counts": dict(sorted((k, n) for k, n in counts.items() if n)),
+            "plot_out_of_date": sum(1 for e in entries.values()
+                                    if e.get("status") == "done" and e.get("plot_outdated")),
             "changes": changes,
             "unrecognised_new": new_unrecognised,
             "raw_roots": [{"id": r["id"], "path": r["path"]} for r in config["raw_roots"]]}

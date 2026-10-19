@@ -50,6 +50,7 @@ Status: APPROVED 2026-10-17 with changes (below). Implemented.
 | "S-9 should be equimolar Ru, Rh, Pd, Ir, Pt" | `samples.S-9.eds.nominal_at_percent: {Ru: 20, Rh: 20, Pd: 20, Ir: 20, Pt: 20}` (copy the user's numbers; never compute them) |
 | "count Si as a metal" / "leave out Cu (grid)" | `non_metals: [...]` |
 | "the images of S-14 are s-140.jpg and s-141.jpg" (the report links the wrong ones) | `config/measurements/eds/S-14.yaml`: `images: [s-140.jpg, s-141.jpg]` plus a `note:` |
+| "only the electron image and the composition" | `plot.panels: [image, composition]` (`image`, `spectrum`, `composition`; plot only) |
 
 ## Quantities
 For `labpipe dataset` (`summary.quantities`), copied from `results.json`:

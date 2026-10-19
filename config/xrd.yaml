@@ -90,6 +90,10 @@ checks:
   residual_sigma_review: 8.0   # unfitted signal averaged over 0.3°, in σ units
 
 plot:
-  width_in: 3.25               # ACS single column
+  width_in: 3.25               # inches (or single | double: the plot style's column widths)
   height_in: 3.0
   dpi: 300
+  y_scale: linear              # linear | sqrt | log
+  residual_panel: true
+  phase_ticks: true            # the phase tick rows under the pattern
+  zoom_deg: null               # [x1, x2]: an extra figure zoom.png; plot.png stays full range

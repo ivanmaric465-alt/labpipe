@@ -5,6 +5,7 @@ plot.pdf, provenance.json, notes.md}. Each run writes into a staging folder
 next to the final one and is renamed into place only when complete. Earlier
 outputs are moved to analysis/<sample_id>/<method>/_superseded/<measurement_id>/<stamp>/,
 failed attempts to .../_failed/<measurement_id>/<stamp>/. Nothing is deleted.
+`replot_entry` redraws the figures of a done entry (old ones to .../_superseded/<id>/<stamp>-plot/).
 """
 
 from __future__ import annotations
@@ -98,6 +99,11 @@ def analyze_entry(config: dict, eid: str, *, rerun: bool = False) -> dict[str, A
             stored["output_dir"] = str(final.relative_to(PROJECT_ROOT))
             stored["results_sha256"] = summary["outputs"]["results.json"]
             stored["settings_sha256"] = summary["settings_sha256"]
+            stored["plot_sha256"] = summary.get("plot_sha256")
+            stored["fingerprint_version"] = summary.get("fingerprint_version")
+            stored["plot_outdated"] = False
+            for key in ("plot_outdated_reason", "plot_sha256_wanted", "replot_problem"):
+                stored.pop(key, None)
             stored["review"] = summary["status"] == "review"
             stored["review_codes"] = sorted({c["code"] for c in summary["checks"]})
             mf.set_status(stored, "done", "analysis complete" + (
@@ -109,6 +115,150 @@ def analyze_entry(config: dict, eid: str, *, rerun: bool = False) -> dict[str, A
             "output_dir": str(final.relative_to(PROJECT_ROOT)) if status == "done" else None,
             "review": summary["status"] == "review" if summary else None,
             "review_checks": summary["checks"] if summary else None}
+
+
+def _input_for(config: dict, entry: dict[str, Any]) -> tuple[dict, Path]:
+    root = next(r for r in config["raw_roots"] if r["id"] == entry["raw_root"])
+    return root, Path(root["path"]) / entry["relative_path"]
+
+
+def _only_figures_differ(old: bytes, new: bytes) -> bool:
+    """True if two results.json differ in nothing but the list of `figures` (the old one is
+    exactly as the code writes it, so a hand-edited file never passes)."""
+    try:
+        before, after = json.loads(old), json.loads(new)
+    except ValueError:
+        return False
+    written = (json.dumps(before, indent=1, ensure_ascii=False, allow_nan=False)
+               + "\n").encode()
+    before.pop("figures", None)
+    after.pop("figures", None)
+    return written == old and before == after
+
+
+def replot_entry(config: dict, eid: str) -> dict[str, Any]:
+    """Redraw the figures of a done entry; its analysis is not changed.
+
+    The analysis code runs again into a staging folder (the plotting is part of it). Only if
+    that gives the same results.json (byte for byte; for the list of `figures` alone a
+    different list is accepted) are the figures replaced: the old ones and the old
+    provenance.json move to _superseded/<measurement_id>/<stamp>-plot/, notes.md stays.
+    Otherwise nothing is replaced: the new run is kept in _failed/ and the entry records a
+    `replot_problem` for a human (its status stays done: the earlier outputs are still good).
+    """
+    methods = load_methods()
+    with mf.locked(config) as data:
+        entry = data["entries"].get(eid)
+        if entry is None:
+            raise KeyError(f"unknown entry {eid}")
+        if entry["status"] != "done" or not entry.get("output_dir"):
+            return {"entry_id": eid, "status": "skipped",
+                    "reason": f"status is {entry['status']}, not done"}
+        entry = json.loads(json.dumps(entry))
+    final = output_dir_for(config, entry)
+    method_dir = final.parent
+    if not (final / "results.json").is_file():
+        return {"entry_id": eid, "status": "skipped", "reason": "no results.json to compare with"}
+    spec = methods[entry["method"]]
+    root, input_path = _input_for(config, entry)
+    stamp = _stamp()
+    mid = entry["measurement_id"]
+    staging = method_dir / f".staging-{mid}-{stamp}-plot"
+    assert_pipeline_writable(staging, config)
+
+    problem, summary = None, None
+    try:
+        if sha256_file(input_path) != entry["sha256"]:
+            raise RuntimeError("file changed since the last scan; run `labpipe scan` first")
+        module = importlib.import_module(spec["module"])
+        summary = module.run(input_path, staging, context={
+            "sample_id": entry["sample_id"], "measurement_id": mid,
+            "relative_path": entry["relative_path"], "raw_root": root["id"],
+            "entry_id": eid, "output_dir": str(final.relative_to(PROJECT_ROOT)),
+        }, pipeline=True)
+        old_results = (final / "results.json").read_bytes()
+        new_results = (staging / "results.json").read_bytes()
+        if new_results != old_results and not _only_figures_differ(old_results, new_results):
+            problem = ("reproducibility problem: the analysis no longer gives the same "
+                       "results.json (code, settings or environment changed?); nothing was "
+                       "replaced, the new run is kept for a human to compare")
+    except Exception as exc:
+        problem = f"{type(exc).__name__}: {exc}"
+
+    if problem:
+        kept = None
+        if staging.exists():
+            kept = method_dir / "_failed" / mid / f"{stamp}-replot"
+            _move(staging, kept, config)
+        with mf.locked(config) as data:
+            stored = data["entries"][eid]
+            stored["replot_problem"] = {
+                "utc": utc_now(), "reason": problem, "code_version": code_version(),
+                "for_plot_sha256": entry.get("plot_sha256_wanted"),
+                "kept_in": str(kept.relative_to(PROJECT_ROOT)) if kept else None}
+            stored.setdefault("events", []).append(
+                {"utc": utc_now(), "from": "done", "to": "done",
+                 "reason": f"replot failed: {problem}"[:300]})
+            stored["events"] = stored["events"][-30:]
+        return {"entry_id": eid, "status": "failed", "reason": problem,
+                "kept_in": str(kept.relative_to(PROJECT_ROOT)) if kept else None}
+
+    # Old figures (everything the old provenance lists but results.json) and the old
+    # provenance.json go aside; notes.md and anything else in the folder stay.
+    old_files = {"provenance.json"}
+    try:
+        old_files |= set(json.loads((final / "provenance.json").read_text(
+            encoding="utf-8"))["outputs"])
+    except (OSError, ValueError, KeyError):
+        pass
+    old_files |= {p.name for p in staging.iterdir()}
+    old_files.discard("notes.md")
+    results_same = new_results == old_results
+    if results_same:
+        old_files.discard("results.json")
+        (staging / "results.json").unlink()   # byte-identical copy of the kept file
+    aside = method_dir / "_superseded" / mid / f"{stamp}-plot"
+    for name in sorted(old_files):
+        if (final / name).exists():
+            _move(final / name, aside / name, config)
+    for path in sorted(staging.iterdir()):
+        _move(path, final / path.name, config)
+    staging.rmdir()
+
+    with mf.locked(config) as data:
+        stored = data["entries"][eid]
+        stored["plot_sha256"] = summary["plot_sha256"]
+        stored["plot_outdated"] = False
+        for key in ("plot_outdated_reason", "plot_sha256_wanted", "replot_problem"):
+            stored.pop(key, None)
+        stored["last_replot_utc"] = utc_now()
+        if not results_same:    # only the list of figures differs: notes name the new sha
+            stored["results_sha256"] = summary["outputs"]["results.json"]
+        write_index(config, data, stored["sample_id"], stored["method"])
+    return {"entry_id": eid, "status": "done", "reason": None,
+            "output_dir": str(final.relative_to(PROJECT_ROOT)),
+            "results_changed": not results_same,
+            "superseded": str(aside.relative_to(PROJECT_ROOT)) if aside.exists() else None}
+
+
+def replot(config: dict, *, entry: str | None = None, method: str | None = None,
+           everything: bool = False) -> dict[str, Any]:
+    """Redraw figures: one entry, one method, all done entries, or (default) the entries
+    whose plot settings changed since they were drawn."""
+    rows = [e for e in mf.load(config)["entries"].values() if e.get("status") == "done"]
+    if entry:
+        rows = [e for e in rows if e["entry_id"] == entry]
+        if not rows:
+            return {"error": f"no done entry {entry}", "results": []}
+    elif method:
+        rows = [e for e in rows if e["method"] == method]
+    elif not everything:
+        rows = [e for e in rows if e.get("plot_outdated")]
+    results = [replot_entry(config, e["entry_id"]) for e in sorted(rows, key=lambda e: e["entry_id"])]
+    return {"replotted": [r["entry_id"] for r in results if r["status"] == "done"],
+            "failed": [r["entry_id"] for r in results if r["status"] == "failed"],
+            "skipped": [r["entry_id"] for r in results if r["status"] == "skipped"],
+            "results": results}
 
 
 def write_index(config: dict, data: dict[str, Any], sample_id: str | None, method: str) -> None:
@@ -132,7 +282,8 @@ def write_index(config: dict, data: dict[str, Any], sample_id: str | None, metho
 def review_queue(config: dict) -> dict[str, Any]:
     data = mf.load(config)
     groups: dict[str, list[dict[str, Any]]] = {"needs_review": [], "failed": [],
-                                               "done_flagged": [], "stale": []}
+                                               "done_flagged": [], "stale": [],
+                                               "plot_outdated": [], "plot_problem": []}
     for entry in data["entries"].values():
         status = entry.get("status")
         if status == "needs_review":
@@ -143,6 +294,10 @@ def review_queue(config: dict) -> dict[str, Any]:
             groups["stale"].append(entry)
         elif status == "done" and entry.get("review"):
             groups["done_flagged"].append(entry)
+        if status == "done" and entry.get("replot_problem"):
+            groups["plot_problem"].append(entry)
+        elif status == "done" and entry.get("plot_outdated"):
+            groups["plot_outdated"].append(entry)
     lines = [f"# Review queue ({utc_now()})", ""]
     unrecognised = sorted(data.get("unrecognised", {}).values(),
                           key=lambda r: (r["raw_root"], r["relative_path"]))
@@ -158,6 +313,10 @@ def review_queue(config: dict) -> dict[str, Any]:
         "failed": "Failed analyses",
         "done_flagged": "Analysed, flagged for review (see notes.md / results.json checks)",
         "stale": "Analysed with an older code version (`labpipe requeue --stale` to redo)",
+        "plot_outdated": "Plot out of date: plot settings changed (`labpipe replot` redraws; "
+                         "automatic runs do it; the analysis is fine)",
+        "plot_problem": "Plot could not be redrawn: the results would change "
+                        "(a human should look; the earlier outputs are kept)",
     }
     for key, title in titles.items():
         lines.append(f"## {title} ({len(groups[key])})")
@@ -165,6 +324,10 @@ def review_queue(config: dict) -> dict[str, Any]:
             detail = entry.get("status_reason") or ""
             if key == "done_flagged":
                 detail = ", ".join(entry.get("review_codes") or [])
+            elif key == "plot_outdated":
+                detail = entry.get("plot_outdated_reason") or ""
+            elif key == "plot_problem":
+                detail = entry["replot_problem"]["reason"][:200]
             location = entry.get("output_dir") or ""
             lines.append(f"- `{entry['relative_path']}` ({entry['entry_id']}) {location} — {detail}")
         lines.append("")

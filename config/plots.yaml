@@ -1,0 +1,12 @@
+# Look of all plots (labpipe's defaults, ACS journal style; do not edit: put your lab's
+# changes in config/lab.yaml -> plots). Changing them redraws figures, never re-analyses.
+preset: acs              # the only preset for now
+font: Arial              # falls back to Liberation Sans, then DejaVu Sans
+font_size: 9             # pt (ticks, text)
+label_size: 10           # pt (axis labels)
+line_width: 1.0
+palette: okabe-ito       # or a list of colours, e.g. ["#0072B2", "#D55E00"]
+single_column_in: 3.25   # width_in: single
+double_column_in: 7.0    # width_in: double
+dpi: 300                 # default of the method plot: dpi (a method's own value wins)
+formats: [png, pdf]      # png is always written (the report uses it); svg also possible

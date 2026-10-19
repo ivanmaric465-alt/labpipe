@@ -20,6 +20,7 @@
   labpipe analyze --pending [--limit N]     analyse all pending entries (deterministic loop)
   labpipe requeue (--stale | --baseline | --entry ID)   put entries back to pending
   labpipe review                            write logs/review_queue.md
+  labpipe replot [--entry ID | --method M | --all | --outdated]   redraw figures (results are checked, not changed)
   labpipe replay PROVENANCE.json            regenerate outputs from provenance and compare hashes
   labpipe xrd refs list|add|build           manage XRD reference phases (CIFs)
   labpipe notes todo                        analysed entries whose notes.md is missing or outdated
@@ -262,6 +263,10 @@ def cmd_status(args, config) -> int:
     counts = Counter((e["method"], e["status"]) for e in data["entries"].values())
     _print({"updated_utc": data.get("updated_utc"),
             "counts": {f"{method}/{status}": n for (method, status), n in sorted(counts.items())},
+            "plot_out_of_date": sorted(e["entry_id"] for e in data["entries"].values()
+                                       if e.get("status") == "done" and e.get("plot_outdated")),
+            "replot_problems": sorted(e["entry_id"] for e in data["entries"].values()
+                                      if e.get("status") == "done" and e.get("replot_problem")),
             "not_recognised": len(data.get("unrecognised", {}))})
     return 0
 
@@ -323,6 +328,15 @@ def cmd_requeue(args, config) -> int:
 def cmd_review(args, config) -> int:
     _print(pipeline.review_queue(config))
     return 0
+
+
+def cmd_replot(args, config) -> int:
+    result = pipeline.replot(config, entry=args.entry, method=args.method,
+                             everything=args.all)
+    if result.get("replotted"):
+        result["report"] = _refresh_report(config)
+    _print(result)
+    return 1 if result.get("error") or result.get("failed") else 0
 
 
 def cmd_replay(args, config) -> int:
@@ -497,6 +511,15 @@ def build_parser() -> argparse.ArgumentParser:
     group.add_argument("--entry")
     requeue.set_defaults(func=cmd_requeue)
     sub.add_parser("review").set_defaults(func=cmd_review)
+    replot = sub.add_parser("replot", help="redraw figures after a plot setting changed; "
+                            "results.json must come out identical (default: --outdated)")
+    scope = replot.add_mutually_exclusive_group()
+    scope.add_argument("--entry")
+    scope.add_argument("--method")
+    scope.add_argument("--all", action="store_true", help="every done entry")
+    scope.add_argument("--outdated", action="store_true",
+                       help="entries whose plot is out of date (the default)")
+    replot.set_defaults(func=cmd_replot)
     sub.add_parser("report").set_defaults(func=cmd_report)
     auto = sub.add_parser("automation").add_subparsers(dest="action", required=True)
     auto_run = auto.add_parser("run", help="one pass: scan; start the AI only if there is work")

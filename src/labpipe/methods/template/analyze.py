@@ -118,4 +118,4 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
                        pipeline=pipeline)
     return {"status": status, "out_dir": str(out_dir),
             "checks": [c for c in checks if c["severity"] == "review"], "outputs": outputs,
-            "settings_sha256": settings_mod.fingerprint(settings)}
+            **settings_mod.fingerprints(settings)}
