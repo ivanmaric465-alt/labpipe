@@ -181,8 +181,8 @@ def test_numbers_of_unnamed_measurements_come_only_from_the_dataset(config, proj
 def test_compare_numbers_count_as_known(config, project):
     info = postdoc.start(config, QUESTION)
     path = project / info["path"]
-    (path / "compare-1.json").write_text(json.dumps({"difference": {"S-9": 0.01234}}))
-    (path / "analysis.md").write_text(_text("difference 0.0123 to the reference."))
+    (path / "compare-1.json").write_text(json.dumps({"difference": {"S-9": 0.01234}}), encoding="utf-8")
+    (path / "analysis.md").write_text(_text("difference 0.0123 to the reference."), encoding="utf-8")
     assert postdoc.verify(config, info["run"])["ok"]
 
 
@@ -252,7 +252,7 @@ def test_same_text_is_not_a_new_attempt(config, project):
 def test_editing_after_verification_makes_it_unverified(config, project):
     run = _run(config, project, _text("fine."))
     assert postdoc.verify(config, run)["ok"]
-    (project / "analysis" / "_postdoc" / run / "analysis.md").write_text(_text("changed."))
+    (project / "analysis" / "_postdoc" / run / "analysis.md").write_text(_text("changed."), encoding="utf-8")
     assert postdoc.list_runs(config)[0]["state"] == "unverified"
 
 
@@ -262,16 +262,16 @@ def test_freshness_detects_changes(config, project):
     context.init(config)
     run = _run(config, project)
     assert postdoc.freshness(config, run)["up_to_date"]
-    (project / "analysis/S-9/xrd/S-9_1.2.26/results.json").write_text('{"changed": 1}')
-    (project / "context" / "context.md").write_text("new aims")
+    (project / "analysis/S-9/xrd/S-9_1.2.26/results.json").write_text('{"changed": 1}', encoding="utf-8")
+    (project / "context" / "context.md").write_text("new aims", encoding="utf-8")
     (project / "config").mkdir()
-    (project / "config" / "samples.yaml").write_text("S-9: {}")
-    data = json.loads((project / "manifest.json").read_text())
+    (project / "config" / "samples.yaml").write_text("S-9: {}", encoding="utf-8")
+    data = json.loads((project / "manifest.json").read_text(encoding="utf-8"))
     data["entries"]["eds:lab:S-9.emsa"] = {**_entry("eds:lab:S-9.emsa", "S-9", "analysis/S-9/eds/m"),
                                            "method": "eds"}
     (project / "analysis/S-9/eds/m").mkdir(parents=True)
-    (project / "analysis/S-9/eds/m/results.json").write_text("{}")
-    (project / "manifest.json").write_text(json.dumps(data))
+    (project / "analysis/S-9/eds/m/results.json").write_text("{}", encoding="utf-8")
+    (project / "manifest.json").write_text(json.dumps(data), encoding="utf-8")
     fresh = postdoc.freshness(config, run)
     assert not fresh["up_to_date"]
     assert fresh["changed_results"] == ["xrd:lab:S-9_1.2.26.xrdml"]

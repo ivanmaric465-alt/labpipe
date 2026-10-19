@@ -32,7 +32,7 @@ def _config(tmp_path, monkeypatch, **files) -> Path:
                                      "plot: {width_in: 3.25, dpi: 300}\n")
     shutil.copy(REPO / "config" / "plots.yaml", config / "plots.yaml")
     for name, text in files.items():
-        (config / name.replace("__", "/")).write_text(text)
+        (config / name.replace("__", "/")).write_text(text, encoding="utf-8")
     monkeypatch.setattr(settings, "CONFIG", config)
     monkeypatch.setattr(settings, "PROJECT_ROOT", tmp_path)
     return config
@@ -77,7 +77,7 @@ def test_lab_layer_refuses_unknown_keys_and_bad_values(tmp_path, monkeypatch, la
 
 
 def test_plot_style_defaults_are_the_old_acs_constants(monkeypatch):
-    style = yaml.safe_load((REPO / "config" / "plots.yaml").read_text())
+    style = yaml.safe_load((REPO / "config" / "plots.yaml").read_text(encoding="utf-8"))
     assert style == acs.DEFAULT_STYLE
     assert (style["font"], style["font_size"], style["label_size"], style["line_width"],
             style["dpi"], style["single_column_in"], style["double_column_in"]) == (
@@ -93,7 +93,7 @@ def test_plot_style_defaults_are_the_old_acs_constants(monkeypatch):
         acs.ACS["tick_labelsize"], acs.ACS["legend_fontsize"], acs.ACS["default_lw"],
         acs.ACS["dpi"])
     # the shipped method files keep the same widths; the lab's global dpi reaches them
-    assert yaml.safe_load((REPO / "config" / "xrd.yaml").read_text())["plot"]["width_in"] == 3.25
+    assert yaml.safe_load((REPO / "config" / "xrd.yaml").read_text(encoding="utf-8"))["plot"]["width_in"] == 3.25
 
 
 def test_global_dpi_is_the_default_of_the_method_plot_block(tmp_path, monkeypatch):
@@ -127,7 +127,7 @@ def _xrd_input(folder: Path, seed: int = 7) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     x, y = synthetic_pattern(PEAKS, seed=seed)
     path = folder / "S-1.xrdml"
-    path.write_text(xrdml_text(x, y, "S-1"))
+    path.write_text(xrdml_text(x, y, "S-1"), encoding="utf-8")
     return path
 
 
@@ -154,12 +154,12 @@ def test_xrd_plot_keys_never_change_results_and_zoom_adds_a_figure(tmp_path):
         assert (out / "plot.png").read_bytes() != (default / "plot.png").read_bytes(), name
     zoomed = run("zoom", zoom_deg=[30, 50])
     assert (zoomed / "zoom.png").exists() and (zoomed / "zoom.pdf").exists()
-    data = json.loads((zoomed / "results.json").read_text())
+    data = json.loads((zoomed / "results.json").read_text(encoding="utf-8"))
     assert [f["file"] for f in data["figures"]] == ["plot.png", "zoom.png"]   # main plot first
     assert (zoomed / "plot.png").read_bytes() == (default / "plot.png").read_bytes()
     data.pop("figures")
     assert data == json.loads(results)
-    record = json.loads((zoomed / "provenance.json").read_text())
+    record = json.loads((zoomed / "provenance.json").read_text(encoding="utf-8"))
     assert {"zoom.png", "zoom.pdf"} <= set(record["outputs"])
     assert record["parameters"]["resolved"]["plot"]["zoom_deg"] == [30, 50]
     with pytest.raises(analyze.AnalysisError, match="zoom_deg"):
@@ -176,7 +176,7 @@ def test_plot_style_reaches_the_figure_and_provenance_and_formats_are_listed(tmp
     styled = analyze.run(image, tmp_path / "b", settings=resolved, context={}, pipeline=False)
     assert sorted(styled["outputs"]) == ["plot.png", "plot.svg", "results.json", "thumb.jpg"]
     assert styled["outputs"]["results.json"] == default["outputs"]["results.json"]
-    record = json.loads((tmp_path / "b" / "provenance.json").read_text())
+    record = json.loads((tmp_path / "b" / "provenance.json").read_text(encoding="utf-8"))
     assert record["parameters"]["resolved"]["plots"]["font_size"] == 12
     assert record["plot"]["formats"] == ["png", "svg"]
     assert not (tmp_path / "b" / "plot.pdf").exists()
@@ -201,7 +201,7 @@ def test_sem_scale_bar_false_cuts_the_info_bar_and_eds_panels_choose(tmp_path):
     resolved, _ = settings.resolve("eds", None, None)
     resolved["plot"]["panels"] = ["composition", "image"]
     eds.run(report, tmp_path / "eds", settings=resolved, context={}, pipeline=False)
-    figures = json.loads((tmp_path / "eds" / "results.json").read_text())["figures"]
+    figures = json.loads((tmp_path / "eds" / "results.json").read_text(encoding="utf-8"))["figures"]
     assert [f["file"] for f in figures] == ["panel_electron_image.jpg", "panel_composition.png"]
     assert not (tmp_path / "eds" / "panel_spectrum.jpg").exists()
     resolved["plot"]["panels"] = ["table"]
@@ -232,12 +232,12 @@ def _with_notes(project, env, eid) -> str:
     """A notes.md that names the results' hash (so no AI run is wanted for it)."""
     entry = _entry(env, eid)
     notes = f"notes on results {entry['results_sha256']}\n"
-    (project / entry["output_dir"] / "notes.md").write_text(notes)
+    (project / entry["output_dir"] / "notes.md").write_text(notes, encoding="utf-8")
     return notes
 
 
 def _set_lab(project, text):
-    (project / "config" / "lab.yaml").write_text(text)
+    (project / "config" / "lab.yaml").write_text(text, encoding="utf-8")
 
 
 def test_a_plot_change_marks_plot_out_of_date_not_stale(tmp_path):
@@ -251,7 +251,7 @@ def test_a_plot_change_marks_plot_out_of_date_not_stale(tmp_path):
     assert entry["status"] == "done" and entry["plot_outdated"] is True
     assert eid in _labpipe(env, "status")["plot_out_of_date"]
     _labpipe(env, "review")
-    assert "Plot out of date" in (project / "logs" / "review_queue.md").read_text()
+    assert "Plot out of date" in (project / "logs" / "review_queue.md").read_text(encoding="utf-8")
     # an analysis setting still makes it stale
     _set_lab(project, "xrd: {background: {order: 3}}\n")
     assert _labpipe(env, "scan")["changes"][0]["to"] == "stale"
@@ -269,7 +269,7 @@ def test_replot_redraws_keeps_results_and_notes_and_replays(tmp_path):
     result = _labpipe(env, "replot")                 # default: the entries out of date
     assert result["replotted"] == [eid] and result["failed"] == []
     assert (out / "results.json").read_bytes() == results
-    assert (out / "notes.md").read_text() == notes
+    assert (out / "notes.md").read_text(encoding="utf-8") == notes
     assert (out / "plot.png").read_bytes() != old_png
     aside = list((out.parent / "_superseded" / out.name).glob("*-plot"))
     assert len(aside) == 1
@@ -280,7 +280,7 @@ def test_replot_redraws_keeps_results_and_notes_and_replays(tmp_path):
     assert after["plot_sha256"] != before["plot_sha256"] and after["plot_outdated"] is False
     assert after["settings_sha256"] == before["settings_sha256"]
     assert _labpipe(env, "scan")["plot_out_of_date"] == 0
-    record = json.loads((out / "provenance.json").read_text())
+    record = json.loads((out / "provenance.json").read_text(encoding="utf-8"))
     assert record["parameters"]["resolved"]["plots"]["font_size"] == 8
     assert record["outputs"]["plot.png"] == sha256_file(
         out / "plot.png")
@@ -315,19 +315,19 @@ def test_replot_refuses_to_replace_when_results_would_change(tmp_path):
     assert ids[0] in _labpipe(env, "status")["replot_problems"]
     assert (fine / "plot.png").exists() and _entry(env, ids[1])["plot_outdated"] is False
     _labpipe(env, "review")
-    assert "could not be redrawn" in (project / "logs" / "review_queue.md").read_text()
+    assert "could not be redrawn" in (project / "logs" / "review_queue.md").read_text(encoding="utf-8")
 
 
 def test_replot_with_a_zoom_accepts_the_new_figures_list_only(tmp_path):
     project, env, (eid,) = _analysed(tmp_path)
     out = project / _entry(env, eid)["output_dir"]
-    old = json.loads((out / "results.json").read_text())
+    old = json.loads((out / "results.json").read_text(encoding="utf-8"))
     _with_notes(project, env, eid)
     assert _labpipe(env, "notes", "todo") == []
     _set_lab(project, "xrd: {plot: {zoom_deg: [35, 45]}}\n")
     _labpipe(env, "scan")
     assert _labpipe(env, "replot", "--method", "xrd")["replotted"] == [eid]
-    new = json.loads((out / "results.json").read_text())
+    new = json.loads((out / "results.json").read_text(encoding="utf-8"))
     assert [f["file"] for f in new.pop("figures")] == ["plot.png", "zoom.png"]
     assert new == old and (out / "zoom.png").exists()
     assert _entry(env, eid)["results_sha256"] == sha256_file(out / "results.json")
@@ -367,37 +367,37 @@ def test_automation_does_not_retry_a_failed_replot_until_something_changes(tmp_p
 def test_existing_manifests_are_converted_not_made_stale(tmp_path):
     project, env, (eid,) = _analysed(tmp_path)
     out = project / _entry(env, eid)["output_dir"]
-    resolved = json.loads((out / "provenance.json").read_text())["parameters"]["resolved"]
+    resolved = json.loads((out / "provenance.json").read_text(encoding="utf-8"))["parameters"]["resolved"]
     # what the manifest held before the split: one fingerprint over everything but `plots`,
     # with the plot block as it was then
     resolved.pop("plots")
     resolved["plot"] = {k: resolved["plot"][k] for k in ("width_in", "height_in", "dpi")}
-    manifest = json.loads((project / "manifest.json").read_text())
+    manifest = json.loads((project / "manifest.json").read_text(encoding="utf-8"))
     entry = manifest["entries"][eid]
     entry["settings_sha256"] = settings.fingerprint(resolved)
     for key in ("plot_sha256", "fingerprint_version", "plot_outdated"):
         entry.pop(key, None)
-    (project / "manifest.json").write_text(json.dumps(manifest))
+    (project / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     scan = _labpipe(env, "scan")
     assert scan["changes"] == [] and scan["counts"] == {"done": 1}
     entry = _entry(env, eid)
     assert entry["status"] == "done" and entry["fingerprint_version"] == 2
     assert entry["plot_outdated"] is False and entry["plot_sha256"]
     # a lab plot style that exists now is not hidden by the conversion
-    manifest = json.loads((project / "manifest.json").read_text())
+    manifest = json.loads((project / "manifest.json").read_text(encoding="utf-8"))
     entry = manifest["entries"][eid]
     entry["settings_sha256"] = settings.fingerprint(resolved)
     for key in ("plot_sha256", "fingerprint_version"):
         entry.pop(key)
-    (project / "manifest.json").write_text(json.dumps(manifest))
+    (project / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     _set_lab(project, "plots: {font_size: 8}\n")
     _labpipe(env, "scan")
     assert _entry(env, eid)["status"] == "done" and _entry(env, eid)["plot_outdated"] is True
     # an old fingerprint that does not match is stale, as before
-    manifest = json.loads((project / "manifest.json").read_text())
+    manifest = json.loads((project / "manifest.json").read_text(encoding="utf-8"))
     manifest["entries"][eid]["settings_sha256"] = "0" * 64
     manifest["entries"][eid].pop("fingerprint_version")
-    (project / "manifest.json").write_text(json.dumps(manifest))
+    (project / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     assert _labpipe(env, "scan")["changes"][0]["to"] == "stale"
 
 

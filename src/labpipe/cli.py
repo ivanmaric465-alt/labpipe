@@ -288,7 +288,7 @@ def cmd_method_check(args, config) -> int:
     if not entry or not entry.get("output_dir"):
         _print({"error": f"no analysed output for {args.entry}"})
         return 1
-    results = json.loads((PROJECT_ROOT / entry["output_dir"] / "results.json").read_text())
+    results = json.loads((PROJECT_ROOT / entry["output_dir"] / "results.json").read_text(encoding="utf-8"))
     _print({"entry_id": args.entry, "status": results.get("status"),
             "checks": results.get("checks", [])})
     return 0

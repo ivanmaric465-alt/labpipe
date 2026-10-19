@@ -20,7 +20,7 @@ CONFIG = {"logs_dir": "logs", "analysis_dir": "analysis", "manifest": "manifest.
 def project(tmp_path, monkeypatch):
     monkeypatch.setattr(automation, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(safety, "PROJECT_ROOT", tmp_path)
-    (tmp_path / "manifest.json").write_text("{\"secret\": 1}")
+    (tmp_path / "manifest.json").write_text("{\"secret\": 1}", encoding="utf-8")
     return tmp_path
 
 
@@ -50,12 +50,12 @@ def test_notify_records_kind_and_needs_you(project):
     automation.notify(CONFIG, "one", kind="failed")
     automation.notify(CONFIG, "two", kind="finished")
     automation.notify(CONFIG, "three")
-    rows = [json.loads(l) for l in (project / "logs" / "notifications.jsonl").read_text().splitlines()]
+    rows = [json.loads(l) for l in (project / "logs" / "notifications.jsonl").read_text(encoding="utf-8").splitlines()]
     assert [r["id"] for r in rows] == [1, 2, 3]
     assert [r["needs_you"] for r in rows] == [True, False, False]
     assert [r["kind"] for r in rows] == ["failed", "finished", "info"]
     assert rows[0]["message"] == "one" and rows[0]["utc"]
-    assert "notify" in (project / "logs" / "automation.log").read_text()
+    assert "notify" in (project / "logs" / "automation.log").read_text(encoding="utf-8")
 
 
 def test_ids_continue_after_restart(project):
@@ -63,7 +63,7 @@ def test_ids_continue_after_restart(project):
     path = project / "logs" / "notifications.jsonl"
     assert automation._last_notification_id(path) == 1
     automation.notify(CONFIG, "b", kind="test")
-    assert [json.loads(l)["id"] for l in path.read_text().splitlines()] == [1, 2]
+    assert [json.loads(l)["id"] for l in path.read_text(encoding="utf-8").splitlines()] == [1, 2]
     assert automation._last_notification_id(project / "logs" / "none.jsonl") == 0
 
 
@@ -98,7 +98,7 @@ def test_report_and_review(server, project):
     code, body, _ = get(server + "/report" + auth)
     assert code == 404 and b"not built" in body
     (project / "analysis").mkdir()
-    (project / "analysis" / "report.html").write_text("<html>REPORT</html>")
+    (project / "analysis" / "report.html").write_text("<html>REPORT</html>", encoding="utf-8")
     code, body, headers = get(server + "/report" + auth)
     assert code == 200 and body == b"<html>REPORT</html>" and "text/html" in headers["Content-Type"]
     assert get(server + "/review" + auth)[0] == 404
@@ -125,8 +125,8 @@ def test_extra_reports_are_linked_and_served(server, project):
     assert b"/report/xrd-only" not in get(server + "/" + auth)[1]
     assert get(server + "/report/xrd-only" + auth)[0] == 404
     (project / "analysis").mkdir()
-    (project / "analysis" / "report-xrd-only.html").write_text("<html>XRD</html>")
-    (project / "analysis" / "report-bad name.html").write_text("<html>BAD</html>")
+    (project / "analysis" / "report-xrd-only.html").write_text("<html>XRD</html>", encoding="utf-8")
+    (project / "analysis" / "report-bad name.html").write_text("<html>BAD</html>", encoding="utf-8")
     page = get(server + "/" + auth)[1]
     assert b'<a href="/report/xrd-only">Report: xrd-only</a>' in page and b"bad name" not in page
     code, body, headers = get(server + "/report/xrd-only" + auth)
