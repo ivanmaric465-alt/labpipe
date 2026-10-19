@@ -15,8 +15,9 @@ gallery:
   exclude: []
 
 plot:
-  width_in: 3.25      # ACS single column
+  width_in: 3.25      # inches (or single | double)
   dpi: 300
+  scale_bar: true     # false: cut JEOL's info bar (with its scale bar) off the figure
 
 thumbnail:            # thumb.jpg, embedded in analysis/report.html
   width_px: 640

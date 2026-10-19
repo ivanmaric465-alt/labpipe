@@ -27,10 +27,11 @@ from typing import Any
 
 from labpipe import provenance as prov
 from labpipe import settings as settings_mod
-from labpipe.plotting.acs import apply_acs
+from labpipe.plotting import acs
 from labpipe.safety import assert_not_protected, assert_pipeline_writable, atomic_write_bytes
 
 METHOD = "eds"
+PANELS = ["image", "spectrum", "composition"]   # plot.panels: electron image, EDS spectrum, bars
 RESULTS_SCHEMA = "labpipe.eds.results/1"
 REPORT_SUFFIXES = (".htm", ".html")
 MAX_REPORT_BYTES = 512 * 1024
@@ -374,45 +375,57 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
 
     # --- outputs ------------------------------------------------------------------------
     out_dir.mkdir(parents=True, exist_ok=True)
-    font = apply_acs()
+    style = acs.style_of(settings)
+    font = acs.apply_acs(style)
     import matplotlib.pyplot as plt
     from PIL import Image
-    pictures = [found for _, found in images if found is not None][:2]
-    panels = len(pictures) + 1
-    figure, axes = plt.subplots(1, panels, figsize=(float(settings["plot"]["width_in"]), 2.6),
-                                gridspec_kw={"width_ratios": [1.25] * len(pictures) + [1.0]})
+    plot_settings = settings["plot"]
+    chosen_panels = list(plot_settings.get("panels") or PANELS)
+    unknown = [p for p in chosen_panels if p not in PANELS]
+    if unknown or not chosen_panels:
+        raise AnalysisError(f"plot.panels: {PANELS} are the panels, not {chosen_panels}")
+    dpi = int(plot_settings["dpi"])
+    # The two pictures of the report, in order: the electron image, then the spectrum.
+    pictures = [(found, label, name) for (_, found), (label, name) in zip(
+        [i for i in images if i[1] is not None][:2],
+        (("electron image", "image"), ("spectrum", "spectrum"))) if name in chosen_panels]
+    with_bars = "composition" in chosen_panels
+    panels = len(pictures) + with_bars
+    if not panels:
+        raise AnalysisError("plot.panels: none of the chosen panels exists in this report")
+    figure, axes = plt.subplots(
+        1, panels, figsize=(acs.width_in(plot_settings, style), 2.6),
+        gridspec_kw={"width_ratios": [1.25] * len(pictures) + [1.0] * with_bars})
     axes = list(axes) if panels > 1 else [axes]
-    for axis, picture, label in zip(axes, pictures, ("electron image", "spectrum")):
+    for axis, (picture, label, _) in zip(axes, pictures):
         with Image.open(picture) as opened:
             axis.imshow(opened.convert("RGB"))
         axis.set_axis_off()
         axis.set_title(label, fontsize=8)
-    _composition_bars(axes[-1], metals, nominal)
+    if with_bars:
+        _composition_bars(axes[-1], metals, nominal)
     figure.tight_layout()
     staging = out_dir / ".plot-staging"
     staging.mkdir(exist_ok=True)
-    figure.savefig(staging / "plot.png", dpi=int(settings["plot"]["dpi"]),
-                   metadata={"Software": None})
-    figure.savefig(staging / "plot.pdf",
-                   metadata={"Creator": None, "Producer": None, "CreationDate": None})
+    plot_files = acs.save_figure(figure, staging / "plot", style, dpi)
     plt.close(figure)
     # The panels one by one, for the report (shown large, one at a time); the images are
     # byte copies of the INCA JPGs, the bar chart is drawn again on its own.
-    single, axis = plt.subplots(figsize=(3.25, 2.6))
-    _composition_bars(axis, metals, nominal)
-    single.tight_layout()
-    single.savefig(staging / "panel_composition.png", dpi=int(settings["plot"]["dpi"]),
-                   metadata={"Software": None})
-    plt.close(single)
-    figures = []
-    for picture, label, name in zip(pictures, ("electron image", "spectrum"),
-                                    ("panel_electron_image", "panel_spectrum")):
-        file = name + picture.suffix.lower()
+    figures, panel_files = [], []
+    for picture, label, name in pictures:
+        file = ("panel_electron_image" if name == "image" else "panel_spectrum") \
+            + picture.suffix.lower()
         (staging / file).write_bytes(picture.read_bytes())
         figures.append({"file": file, "caption": f"{label} ({picture.name})"})
-    figures.append({"file": "panel_composition.png", "caption": "metals (at%, sum 100)"})
+    if with_bars:
+        single, axis = plt.subplots(figsize=(3.25, 2.6))
+        _composition_bars(axis, metals, nominal)
+        single.tight_layout()
+        single.savefig(staging / "panel_composition.png", dpi=dpi, metadata={"Software": None})
+        plt.close(single)
+        figures.append({"file": "panel_composition.png", "caption": "metals (at%, sum 100)"})
     results["figures"] = figures
-    files = ["plot.png", "plot.pdf"] + [f["file"] for f in figures]
+    files = plot_files + [f["file"] for f in figures]
     for name in files:
         atomic_write_bytes(out_dir / name, (staging / name).read_bytes(), pipeline=pipeline)
         (staging / name).unlink()
@@ -427,10 +440,11 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
         settings_sources=settings_sources, outputs=outputs, out_dir=out_dir,
         extra={"companions": [{"file": i["file"], "sha256": i["sha256"]}
                               for i in results["input"]["images"] if i["file"]],
-               "plot": {"style": "ACS", "font": font}})
+               "plot": {"style": "ACS", "font": font, "formats": acs.formats(style),
+                        "files": files}})
     atomic_write_bytes(out_dir / "provenance.json",
                        (json.dumps(record, indent=1, ensure_ascii=False) + "\n").encode(),
                        pipeline=pipeline)
     return {"status": status, "out_dir": str(out_dir),
             "checks": [c for c in checks if c["severity"] == "review"], "outputs": outputs,
-            "settings_sha256": settings_mod.fingerprint(settings)}
+            **settings_mod.fingerprints(settings)}

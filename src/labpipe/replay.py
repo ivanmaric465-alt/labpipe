@@ -15,7 +15,11 @@ from typing import Any
 from labpipe.provenance import git_info, sha256_file, utc_now
 from labpipe.safety import PROJECT_ROOT
 
-COMPARED = ("results.json", "plot.png", "plot.pdf")
+
+def _compared(record: dict) -> list[str]:
+    """results.json and every figure the record lists (plot.*, zoom.*)."""
+    return ["results.json"] + [name for name in record["outputs"]
+                               if name.startswith(("plot.", "zoom."))]
 
 
 def _input_path(recorded: dict, config: dict) -> Path:
@@ -65,7 +69,7 @@ def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[
         "relative_path": record["input"].get("relative_path"),
         "raw_root": record["input"].get("raw_root")}, pipeline=True)
     comparison = {}
-    for name in COMPARED:
+    for name in _compared(record):
         recorded = record["outputs"].get(name)
         regenerated = sha256_file(work / "out" / name)
         comparison[name] = {"recorded": recorded, "regenerated": regenerated,

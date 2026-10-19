@@ -176,6 +176,7 @@ def test_settings_precedence_and_typos(tmp_path, monkeypatch):
     (config / "measurements" / "xrd").mkdir(parents=True)
     (config / "xrd.yaml").write_text("background: {order: 4, anchor_ranges_deg: []}\n"
                                      "phases: null\n")
+    shutil.copy(REPO / "config" / "plots.yaml", config / "plots.yaml")
     (config / "samples.yaml").write_text(
         "presets: {p1: {xrd: {background: {order: 3}, phases: [Pt]}}}\n"
         "samples: {S-1: {presets: [p1], xrd: {phases: [Pd]}}}\n")
@@ -184,9 +185,12 @@ def test_settings_precedence_and_typos(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "CONFIG", config)
     monkeypatch.setattr(settings, "PROJECT_ROOT", tmp_path)
     resolved, sources = settings.resolve("xrd", "S-1", "S-1_a")
+    plots = resolved.pop("plots")      # the plot style, resolved on its own (plots.yaml)
+    assert plots["preset"] == "acs"
     assert resolved == {"background": {"order": 3, "anchor_ranges_deg": [[30, 35]]},
                         "phases": ["Pd"]}
-    assert [s["layer"].split()[0] for s in sources] == ["global", "sample", "measurement"]
+    assert [s["layer"].split()[0] for s in sources] == ["global", "sample", "measurement",
+                                                        "plot"]
     (config / "measurements" / "xrd" / "S-1_a.yaml").write_text("backgruond: {order: 2}\n")
     with pytest.raises(settings.SettingsError, match="backgruond"):
         settings.resolve("xrd", "S-1", "S-1_a")

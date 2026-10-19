@@ -2,7 +2,8 @@
 
 For method M, sample S and measurement X the resolved settings are
 
-    config/M.yaml                                  global defaults
+    config/M.yaml                                  labpipe's defaults
+    ← config/lab.yaml  M: {...}                    the lab's defaults (git-ignored)
     ← config/samples.yaml  presets listed for S    (e.g. a support type)
     ← config/samples.yaml  S: M: {...}             sample-specific settings
     ← config/measurements/M/X.yaml                 measurement-specific settings
@@ -12,6 +13,13 @@ Override files may only use keys that exist in config/M.yaml, so a typo
 fails loudly instead of being silently ignored. Every file used is recorded
 with its sha256 in provenance.json, together with the fully resolved
 settings, so a steered result is reproducible without the files.
+
+The look of all plots (font, sizes, palette, formats) is resolved separately,
+config/plots.yaml ← config/lab.yaml plots:, and added to the resolved settings
+under the key `plots`. Plot settings (`plots` and the method's `plot:` block)
+are left out of the analysis fingerprint; they have their own (`plot_sha256`),
+so a plot change redraws figures (`labpipe replot`) and never makes an
+analysis stale.
 """
 
 from __future__ import annotations
@@ -57,8 +65,39 @@ def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+PLOT_FORMATS = ("png", "pdf", "svg")
+# Keys the `plot:` blocks had before plot keys left the analysis fingerprint (manifest
+# entries written then hold a fingerprint that includes them); other methods: all keys.
+LEGACY_PLOT_KEYS = {"xrd": {"width_in", "height_in", "dpi"}, "eds": {"width_in", "dpi"},
+                    "sem": {"width_in", "dpi"}}
+FINGERPRINT_VERSION = 2
+
+
 def measurement_file(method: str, measurement_id: str) -> Path:
     return CONFIG / "measurements" / method / f"{measurement_id}.yaml"
+
+
+def _plot_style(lab: dict[str, Any]) -> tuple[dict[str, Any], list]:
+    """config/plots.yaml ← lab.yaml plots:; unknown keys and bad values are refused."""
+    path = CONFIG / "plots.yaml"
+    style, digest = _load(path)
+    sources = [{"file": str(path.relative_to(PROJECT_ROOT)), "sha256": digest,
+                "layer": "plot style defaults"}]
+    layer = lab.get("plots") or {}
+    if not isinstance(layer, dict):
+        raise SettingsError("config/lab.yaml: plots: must be a section of settings")
+    _check_keys(layer, style, "config/lab.yaml plots")
+    style = _merge(style, layer)
+    if style["preset"] != "acs":
+        raise SettingsError(f"plots.preset: '{style['preset']}' is not a preset (only: acs)")
+    palette = style["palette"]
+    if not (palette == "okabe-ito" or (isinstance(palette, list) and palette
+                                       and all(isinstance(c, str) for c in palette))):
+        raise SettingsError("plots.palette: 'okabe-ito' or a list of colours")
+    formats = style["formats"]
+    if not isinstance(formats, list) or not set(formats) <= set(PLOT_FORMATS):
+        raise SettingsError(f"plots.formats: a list of {', '.join(PLOT_FORMATS)}")
+    return style, sources
 
 
 def resolve(method: str, sample_id: str | None,
@@ -68,6 +107,21 @@ def resolve(method: str, sample_id: str | None,
     config, digest = _load(base_path)
     sources = [{"file": str(base_path.relative_to(PROJECT_ROOT)), "sha256": digest,
                 "layer": "global defaults"}]
+
+    lab, lab_digest = load_lab()
+    style, style_sources = _plot_style(lab)
+    # A global plots.dpi of the lab is the default of every method's plot: block (the
+    # method's own layers below still win).
+    if "dpi" in (lab.get("plots") or {}) and "dpi" in (config.get("plot") or {}):
+        config["plot"]["dpi"] = style["dpi"]
+    lab_layer = lab.get(method) or {}
+    if not isinstance(lab_layer, dict):
+        raise SettingsError(f"config/lab.yaml: {method}: must be a section of settings")
+    _check_keys(lab_layer, config, f"config/lab.yaml {method}")
+    config = _merge(config, lab_layer)
+    if lab_layer or lab.get("plots"):
+        sources.append({"file": "config/lab.yaml", "sha256": lab_digest,
+                        "layer": "lab defaults (config/lab.yaml)"})
 
     samples_path = CONFIG / "samples.yaml"
     if sample_id and samples_path.exists():
@@ -102,6 +156,8 @@ def resolve(method: str, sample_id: str | None,
             config = _merge(config, layer)
             sources.append({"file": str(path.relative_to(PROJECT_ROOT)), "sha256": digest,
                             "layer": f"measurement {measurement_id}"})
+    config["plots"] = style
+    sources.extend(style_sources)
     return config, sources
 
 
@@ -121,3 +177,60 @@ def fingerprint(config: dict[str, Any]) -> str:
     """sha256 of the resolved settings (canonical JSON)."""
     text = json.dumps(config, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _without(config: dict[str, Any], *keys: str) -> dict[str, Any]:
+    return {k: v for k, v in config.items() if k not in keys}
+
+
+def analysis_fingerprint(config: dict[str, Any]) -> str:
+    """sha256 of the resolved settings without the plot settings: what the numbers depend on."""
+    return fingerprint(_without(config, "plot", "plots"))
+
+
+def plot_fingerprint(config: dict[str, Any]) -> str:
+    """sha256 of the plot settings: the method's `plot:` block and the plot style."""
+    return fingerprint({"plot": config.get("plot"), "plots": config.get("plots")})
+
+
+def fingerprints(config: dict[str, Any]) -> dict[str, Any]:
+    """The values a method's run() returns for the manifest."""
+    return {"settings_sha256": analysis_fingerprint(config),
+            "plot_sha256": plot_fingerprint(config),
+            "fingerprint_version": FINGERPRINT_VERSION}
+
+
+def _legacy_plot(method: str, plot: dict[str, Any]) -> dict[str, Any]:
+    keys = LEGACY_PLOT_KEYS.get(method)
+    return {k: v for k, v in plot.items() if keys is None or k in keys}
+
+
+def compare_entry(entry: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    """Is a done entry's analysis (and its plot) still what the settings ask for?
+
+    Returns {"analysis_current", "plot_current", "adopt"}; `adopt` holds fields to store
+    when the entry predates the split (fingerprint version 1: one fingerprint over all
+    settings including `plot:`). It counts as current when that old fingerprint equals
+    the one computed the old way (plot block reduced to its old keys, no `plots`); its
+    figures were drawn with the old keys and the default plot style (plots.yaml)."""
+    if entry.get("fingerprint_version") == FINGERPRINT_VERSION:
+        return {"analysis_current": entry.get("settings_sha256") == analysis_fingerprint(config),
+                "plot_current": entry.get("plot_sha256") == plot_fingerprint(config),
+                "adopt": {}}
+    method = entry["method"]
+    plot = config.get("plot") or {}
+    old = _without(config, "plots")
+    if "plot" in old:
+        old["plot"] = _legacy_plot(method, plot)
+    if entry.get("settings_sha256") != fingerprint(old):
+        return {"analysis_current": False, "plot_current": False, "adopt": {}}
+    base, _ = _load(CONFIG / f"{method}.yaml")
+    drawn_plot = {k: (v if k in _legacy_plot(method, plot) else (base.get("plot") or {}).get(k))
+                  for k, v in plot.items()}
+    defaults, _ = _load(CONFIG / "plots.yaml")
+    drawn = {"plot": drawn_plot if plot else config.get("plot"), "plots": defaults}
+    return {"analysis_current": True,
+            "plot_current": fingerprint(drawn) == plot_fingerprint(config),
+            "adopt": {"settings_sha256": analysis_fingerprint(config),
+                      "plot_sha256": fingerprint(drawn),
+                      "fingerprint_version": FINGERPRINT_VERSION}}

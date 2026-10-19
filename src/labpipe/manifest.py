@@ -14,6 +14,12 @@ Entry status values:
   baseline      already there when labpipe was set up and the user chose "only new
                 files"; not analysed until its content changes or it is requeued
 
+A done entry also carries `settings_sha256` (what the analysis depends on), `plot_sha256`
+(the plot settings its figures were drawn with), `fingerprint_version` (2; entries without it
+hold the old single fingerprint and are converted by the next scan, settings.compare_entry),
+`plot_outdated` (the plot settings changed: `labpipe replot`, status stays done) and, if a
+replot could not be done, `replot_problem`.
+
 Writes are atomic and serialised with an exclusive lock on logs/.manifest.mutex
 (labpipe.locking: fcntl on Linux/macOS, msvcrt on Windows).
 """

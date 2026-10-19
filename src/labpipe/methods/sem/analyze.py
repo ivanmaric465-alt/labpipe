@@ -23,7 +23,7 @@ from typing import Any
 
 from labpipe import provenance as prov
 from labpipe import settings as settings_mod
-from labpipe.plotting.acs import apply_acs
+from labpipe.plotting import acs
 from labpipe.safety import assert_not_protected, assert_pipeline_writable, atomic_write_bytes
 
 METHOD = "sem"
@@ -179,12 +179,19 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
 
     # --- outputs ------------------------------------------------------------------------
     out_dir.mkdir(parents=True, exist_ok=True)
-    font = apply_acs()
+    style = acs.style_of(settings)
+    font = acs.apply_acs(style)
     import matplotlib.pyplot as plt
     plot_settings = settings["plot"]
-    figure_width = float(plot_settings["width_in"])
-    figure, axis = plt.subplots(figsize=(figure_width, figure_width * height / width + 0.3))
-    axis.imshow(image, cmap="gray", vmin=0, vmax=255, interpolation="antialiased")
+    figure_width = acs.width_in(plot_settings, style)
+    # scale_bar: the scale bar is JEOL's own, burned into the info bar at the bottom of the
+    # image (labpipe draws none); false leaves the info bar out of the figure.
+    shown = image if plot_settings.get("scale_bar", True) else image.crop((0, 0, width,
+                                                                          height - info_bar))
+    shown_width, shown_height = shown.size
+    figure, axis = plt.subplots(figsize=(figure_width, figure_width * shown_height / shown_width
+                                         + 0.3))
+    axis.imshow(shown, cmap="gray", vmin=0, vmax=255, interpolation="antialiased")
     axis.set_axis_off()
     title = " · ".join(str(p) for p in (context.get("sample_id"), input_path.stem,
                                        f"×{acquisition['magnification']:,}"
@@ -193,11 +200,9 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
     figure.tight_layout(pad=0.2)
     staging = out_dir / ".plot-staging"
     staging.mkdir(exist_ok=True)
-    figure.savefig(staging / "plot.png", dpi=int(plot_settings["dpi"]), metadata={"Software": None})
-    figure.savefig(staging / "plot.pdf",
-                   metadata={"Creator": None, "Producer": None, "CreationDate": None})
+    plot_files = acs.save_figure(figure, staging / "plot", style, int(plot_settings["dpi"]))
     plt.close(figure)
-    for name in ("plot.png", "plot.pdf"):
+    for name in plot_files:
         atomic_write_bytes(out_dir / name, (staging / name).read_bytes(), pipeline=pipeline)
         (staging / name).unlink()
     staging.rmdir()
@@ -210,17 +215,18 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
                        (json.dumps(results, indent=1, ensure_ascii=False, allow_nan=False)
                         + "\n").encode(), pipeline=pipeline)
     outputs = {name: prov.sha256_file(out_dir / name)
-               for name in ("results.json", "plot.png", "plot.pdf", "thumb.jpg")}
+               for name in ["results.json", *plot_files, "thumb.jpg"]}
     record = prov.build_record(
         method=METHOD, entry_point="labpipe.methods.sem.analyze.run",
         input_path=input_path, input_sha256=input_sha, context=context, settings=settings,
         settings_sources=settings_sources, outputs=outputs, out_dir=out_dir,
         extra={"companions": ([{"file": sidecar.name, "sha256": results["input"]["metadata_sha256"]}]
                               if sidecar else []),
-               "plot": {"style": "ACS", "font": font}})
+               "plot": {"style": "ACS", "font": font, "formats": acs.formats(style),
+                        "files": plot_files}})
     atomic_write_bytes(out_dir / "provenance.json",
                        (json.dumps(record, indent=1, ensure_ascii=False) + "\n").encode(),
                        pipeline=pipeline)
     return {"status": status, "out_dir": str(out_dir),
             "checks": [c for c in checks if c["severity"] == "review"], "outputs": outputs,
-            "settings_sha256": settings_mod.fingerprint(settings)}
+            **settings_mod.fingerprints(settings)}

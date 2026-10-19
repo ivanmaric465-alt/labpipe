@@ -20,7 +20,7 @@ Status: APPROVED 2026-10-17 (gallery picks across both series). Implemented.
 3. Read the TIFF (Pillow, already installed with matplotlib): check its size against `$CM_IMAGE_RES`.
 4. Pixel size and field of view from the scale bar (code; the label is parsed as value + unit nm/µm/mm).
 5. Plot: the image, downscaled to the ACS double-column width (7 in, 300 dpi); the full-resolution original stays in the data folder.
-- Defaults (`config/sem.yaml`): `info_bar_px: 64`, `gallery.magnifications: [10000, 50000, 100000]`, `gallery.include: []`, `gallery.exclude: []`, `plot.width_in: 7`.
+- Defaults (`config/sem.yaml`): `info_bar_px: 64`, `gallery.magnifications: [10000, 50000, 100000]`, `gallery.include: []`, `gallery.exclude: []`, `plot.width_in: 3.25`, `plot.scale_bar: true` (the scale bar is JEOL's own, in the info bar of the image; `false` cuts the info bar off the figure; plot only).
 - Code reused: the `$CM_` parsing idea from eln_refactor `utils/scientific_reports/instrument.py` (a3931a4). Its bugs are not carried over: it never read the accelerating voltage, never derived a pixel size, and its report never showed the metadata (reported earlier; not fixed there).
 
 ## Checks

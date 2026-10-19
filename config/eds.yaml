@@ -21,5 +21,6 @@ nominal_at_percent: null
 images: null
 
 plot:
-  width_in: 7.0       # ACS double column: electron image | spectrum | metal bar chart
+  width_in: 7.0       # inches (or single | double): electron image | spectrum | metal bar chart
   dpi: 300
+  panels: [image, spectrum, composition]   # which panels to draw (and list in the report)
