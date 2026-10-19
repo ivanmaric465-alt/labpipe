@@ -9,7 +9,9 @@ one gallery per sample instead of a card per measurement; their `gallery` module
 chooses the images (`select(items, settings["gallery"])`). A method that lists
 `figures` in results.json ([{"file", "caption"}], files in its output folder) gets
 those, one at a time, instead of plot.png; galleries are shown the same way
-(arrows, keys or side scrolling). The page is grouped by sample.
+(arrows, keys or side scrolling). The page is grouped by sample. It opens with the
+postdoc's latest verified analysis (analysis/_postdoc/), or says that there is none, that
+it is out of date or that the newest one failed its checks.
 """
 
 from __future__ import annotations
@@ -73,6 +75,8 @@ font-size:.85rem;color:var(--mut)}.nav button{width:2.2rem;height:2.2rem;border-
 border:1px solid var(--line);background:var(--card);color:var(--fg);font-size:1.1rem;cursor:pointer}
 .nav button:disabled{opacity:.3;cursor:default}
 @media print{.track{display:block;overflow:visible}.nav{display:none}}
+.postdoc{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-top:22px;
+padding:18px 20px}.postdoc h2{margin:0 0 .2rem;font-size:1.25rem}.postdoc .notes{font-size:.95rem}
 .plain{font-size:.97rem}details{margin-top:1rem}summary{cursor:pointer;color:var(--mut);font-size:.85rem}.notes{font-size:.88rem}.notes h4{margin:.8rem 0 .2rem}.warnbox{border-left:3px solid var(--warn);padding:.2rem .7rem;margin:.6rem 0}
 """
 
@@ -297,6 +301,89 @@ def _gallery(method: str, spec: dict, sample: str, items: list[dict]) -> tuple[s
     return card, row
 
 
+def _date(run: dict) -> str:
+    return html.escape(str(run.get("utc") or run["run"])[:16].replace("T", " "))
+
+
+def _link_measurements(rendered: str, anchors: dict[str, str]) -> str:
+    """Sample and measurement IDs in the postdoc's text become links (text only, not tags)."""
+    if not anchors:
+        return rendered
+    escaped = {html.escape(name): target for name, target in anchors.items()}
+    pattern = re.compile(r"(?<![\w.\-])(" + "|".join(
+        re.escape(name) for name in sorted(escaped, key=len, reverse=True)) + r")(?![\w\-])")
+    parts = re.split(r"(<[^>]+>)", rendered)
+    return "".join(part if part.startswith("<") else pattern.sub(
+        lambda m: f'<a href="#{html.escape(escaped[m.group(1)])}">{m.group(1)}</a>', part)
+        for part in parts)
+
+
+def _postdoc_section(config: dict, anchors: dict[str, str]) -> str:
+    """The postdoc's analysis: the latest verified run, its freshness, a newer run that did
+    not pass, earlier runs; or how to ask when there is none."""
+    from labpipe import automation, postdoc
+    title = "<h2>The postdoc's analysis</h2>"
+    runs = postdoc.list_runs(config)
+    name = automation.HARNESS_NAMES.get((config.get("agents") or {}).get("harness"))
+    how = (f"open {name} in {html.escape(automation._where())} and say: "
+           f"<em>ask the postdoc: &lt;your question&gt;</em>" if name else
+           f"run <code>labpipe postdoc run \"&lt;your question&gt;\"</code> in "
+           f"{html.escape(automation._where())}")
+    if not runs:
+        return (f"<section class=postdoc id=postdoc>{title}<p class=know>The postdoc has not been "
+                f"asked anything yet. To ask, {how}.</p></section>")
+    latest = postdoc.latest(config)
+    verified, newer = latest["verified"], latest["newer"]
+    parts = [title]
+    if newer:
+        problems = (postdoc._read_json(PROJECT_ROOT / newer["path"] / "verify.json") or {}).get(
+            "problems") or []
+        what = ("did not pass its checks: " + html.escape("; ".join(problems))
+                if newer["state"] == "failed" else
+                "has not been checked yet" if newer["state"] == "unverified" and not problems else
+                "is being checked or corrected: " + html.escape("; ".join(problems)))
+        parts.append(f"<p class=warnbox>The postdoc's analysis of {_date(newer)} "
+                     f"(<em>{html.escape(newer.get('question') or '')}</em>) {what}."
+                     + (" The last one that passed is below." if verified else "") + "</p>")
+    if verified:
+        fresh = postdoc.freshness(config, verified["run"])
+        meta = " · ".join(html.escape(str(x)) for x in (
+            verified.get("model") and f"model {verified['model']}", verified.get("harness"),
+            f"run {verified['run']}") if x)
+        parts.append(f"<p class=meta>{_date(verified)} · {meta}</p>")
+        if not fresh["up_to_date"]:
+            changes = []
+            if fresh["changed_results"]:
+                changes.append(f"{len(fresh['changed_results'])} result(s) changed")
+            if fresh["new_measurements"]:
+                listed = ", ".join(f"{m['sample_id']} {m['method']}"
+                                   for m in fresh["new_measurements"][:4])
+                more = len(fresh["new_measurements"]) - 4
+                changes.append(f"{len(fresh['new_measurements'])} new measurement(s) ({listed}"
+                               + (f" and {more} more" if more > 0 else "") + ")")
+            if fresh["removed"]:
+                changes.append(f"{len(fresh['removed'])} measurement(s) gone")
+            if fresh["changed_notes"]:
+                changes.append(f"{len(fresh['changed_notes'])} note(s) rewritten")
+            for path in fresh["changed_context"] + fresh["changed_settings"]:
+                changes.append(f"{Path(path).name} changed")
+            parts.append("<p class=warnbox><strong>Out of date:</strong> "
+                         + html.escape(", ".join(changes)) + f". To update, {how}.</p>")
+        text = (PROJECT_ROOT / verified["path"] / "analysis.md").read_text(encoding="utf-8")
+        parts.append(f"<div class=notes>{_link_measurements(_markdown(text), anchors)}</div>")
+    elif not newer:
+        parts.append(f"<p class=know>No analysis of the postdoc has passed its checks yet. "
+                     f"To ask, {how}.</p>")
+    shown = {r["run"] for r in (verified, newer) if r}
+    earlier = [r for r in runs if r["run"] not in shown]
+    if earlier:
+        parts.append("<details><summary>Earlier questions</summary><ul>" + "".join(
+            f"<li>{_date(r)}: <em>{html.escape(r.get('question') or '')}</em> "
+            f"({html.escape(r['state'])}, <code>{html.escape(r['path'])}/analysis.md</code>)</li>"
+            for r in earlier) + "</ul></details>")
+    return "<section class=postdoc id=postdoc>" + "".join(parts) + "</section>"
+
+
 def build(config: dict) -> dict[str, Any]:
     methods = load_methods()
     data = mf.load(config)
@@ -364,7 +451,11 @@ def build(config: dict) -> dict[str, Any]:
                if pending else "")
             + (f" · {unrecognised} file(s) not recognised (logs/review_queue.md)"
                if unrecognised else "")
-            + "</p>" + table_html + "".join(sections) + f"</main><script>{SCRIPT}</script>")
+            + "</p>" + _postdoc_section(config, {  # a sample name links to the sample, not to a card of that name
+                **{e["measurement_id"]: e["measurement_id"] for e in entries
+                   if e["method"] not in gallery_methods},
+                **{sample: f"sample-{sample}" for sample in by_sample}})
+            + table_html + "".join(sections) + f"</main><script>{SCRIPT}</script>")
     target = PROJECT_ROOT / config["analysis_dir"] / "report.html"
     atomic_write_text(target, page, config)
     return {"report": str(target.relative_to(PROJECT_ROOT)), "measurements": len(entries)}

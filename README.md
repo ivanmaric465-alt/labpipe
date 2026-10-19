@@ -99,6 +99,8 @@ With an agent, in the repo folder:
 ```
 process the new data
 the background is too low above 60° in S-9
+let's write the project context
+ask the postdoc: how does the lattice parameter follow the Pt content?
 ```
 
 From the command line:
@@ -118,6 +120,27 @@ Results:
 ```bash
 labpipe replay analysis/<sample>/<method>/<measurement>/provenance.json   # regenerate and compare hashes
 ```
+
+## The postdoc
+
+An agent with a strong model that answers your questions about the whole project: all samples and methods, with your context. It runs only when you ask.
+
+```bash
+labpipe context init      # creates context/: context.md, instructions.md, documents/
+```
+
+1. Put your work plan, project files and papers into `context/documents/`, then run `labpipe context index`.
+2. Write `context/context.md` yourself, or ask your agent: *let's write the project context*. `instructions.md` says how the postdoc uses all this; edit it as you like.
+3. Ask: *ask the postdoc: <question>*. Without a conversation: `labpipe postdoc run "<question>"`.
+
+The answer is at the top of `analysis/report.html`, with:
+- the question;
+- what it is based on;
+- what to check before using it.
+
+The report says when there is none yet, when it is out of date, or when it did not pass its checks. Every number in it comes from the results, a comparison done by code, or a cited page of your documents (`labpipe postdoc verify`).
+
+`context/` is never committed. Anything in it is sent to your AI provider when the postdoc reads it.
 
 ## Automatic processing
 

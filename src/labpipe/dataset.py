@@ -2,7 +2,8 @@
 
 Each method declares what is meaningful to compare in `quantities(results)` of its summary
 module (methods.yaml → `summary`); a method without one has no quantities. Values are copied
-from results.json (and config/samples.yaml for sample properties), never computed here.
+from results.json (and config/samples.yaml for sample properties), never computed here. Image
+methods (`report: gallery`, e.g. SEM) are summed up per sample under `galleries`.
 
 `compare` does the arithmetic across samples, and nothing else: the difference from a
 reference sample, or an unweighted straight-line fit against another quantity. It never picks
@@ -102,17 +103,32 @@ def build(config: dict) -> dict[str, Any]:
     samples_cfg = (yaml.safe_load(samples_path.read_text(encoding="utf-8")) or {}
                    if samples_path.exists() else {})
     rows: dict[str, list[dict[str, Any]]] = {sample: [] for sample in samples_cfg.get("samples") or {}}
+    galleries: dict[str, dict[str, dict[str, Any]]] = {}
     for entry in data["entries"].values():
         if entry.get("method") not in methods or entry.get("status") in SKIPPED:
             continue
-        rows.setdefault(entry.get("sample_id") or "?", []).append(
-            _measurement(entry, methods[entry["method"]]))
+        sample = entry.get("sample_id") or "?"
+        rows.setdefault(sample, [])
+        if methods[entry["method"]].get("report") == "gallery":
+            # image methods (SEM): one summary per sample, not one row per image
+            item = _measurement(entry, methods[entry["method"]])
+            block = galleries.setdefault(sample, {}).setdefault(
+                entry["method"], {"images": 0, "statuses": {}, "plots": []})
+            block["images"] += 1
+            block["statuses"][item["status"]] = block["statuses"].get(item["status"], 0) + 1
+            if item["plot"]:
+                block["plots"].append(item["plot"])
+            continue
+        rows[sample].append(_measurement(entry, methods[entry["method"]]))
     out = {}
     for sample in sorted(rows, key=_sample_order):
         out[sample] = {
             "properties": sample_properties(sample, samples_cfg),
             "measurements": sorted(rows[sample], key=lambda m: (m["method"], m["measurement_id"],
                                                                 m["entry_id"]))}
+        if sample in galleries:
+            out[sample]["galleries"] = {method: {**block, "plots": sorted(block["plots"])}
+                                        for method, block in sorted(galleries[sample].items())}
     return {"schema": SCHEMA, "generated_utc": utc_now(), "samples": out}
 
 
@@ -199,7 +215,8 @@ def _line(points: list[dict[str, Any]]) -> dict[str, Any]:
         result["slope_sigma"] = math.sqrt(s2 / sxx)
         result["intercept_sigma"] = math.sqrt(s2 * (1 / n + x_mean ** 2 / sxx))
     else:
-        result["reason"] = "standard errors need at least 3 points"
+        result["reason"] = ("two points: the line passes through both, so R² is 1 by construction; "
+                            "standard errors need at least 3 points")
     return result
 
 

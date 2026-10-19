@@ -19,7 +19,7 @@ Run `labpipe doctor` first (it only reads). If `ready` is true, go to what the u
 
 ## Rules (non-negotiable)
 
-1. **Raw data is read-only.** Never write, move, rename or delete anything under a raw root or a `protected_paths` entry (`config/local.yaml`). Read raw files only through `labpipe` commands.
+1. **Raw data is read-only.** Never write, move, rename or delete anything under a raw root or a `protected_paths` entry (`config/local.yaml`). Read raw files only through `labpipe` commands. The same holds for the user's documents in `context/documents/`.
 2. **No numbers from the agent.**
    - Every number in `notes.md` or in a reply must be copied from a `results.json` (cite its key path), or come from a `labpipe` command's output.
    - No mental arithmetic, no unit conversions done by hand.
@@ -48,6 +48,9 @@ All commands print JSON.
 | `labpipe report` | Write `analysis/report.html`, the overview page for people |
 | `labpipe notes todo` / `verify --entry ID` / `retire --entry ID` | Notes missing or outdated / check a `notes.md` / move it aside to be rewritten (only when the user asks) |
 | `labpipe inventory` | What labpipe recognises in the data folder(s) |
+| `labpipe dataset` / `dataset compare --quantity Q (--reference S \| --against P) [--run RUN]` | All samples with the named quantities of their measurements / differences and trends across samples, done by code |
+| `labpipe context init \| index` | Create `context/` from the templates / extract the text of `context/documents/` |
+| `labpipe postdoc start "Q" \| verify RUN \| list \| run "Q"` | A run for the postdoc / check its `analysis.md` / past runs / the whole thing without a conversation |
 | `labpipe replay PROVENANCE.json` | Regenerate outputs and compare hashes |
 | `labpipe agents sync` | Generate the harness's agent files from `agents/` |
 | `labpipe automation run \| status` | One automatic pass / state of the watcher and nightly run |
@@ -65,15 +68,42 @@ Roles are defined once, harness-neutral, in `agents/`. `labpipe agents sync` tur
 | main session (you) | talks with the user: setup, steering, questions | settings files (with the user), notes |
 | `supervisor` | one pipeline pass: doctor → scan → delegate pending entries → notes → review → report | `logs/runs/*-summary.md` |
 | `<method>-analyst` | analyse one entry, check the plot, write and verify short `notes.md` | `analysis/**/notes.md` |
+| `postdoc` | only when the user asks: the whole project with its context, one question per run | `analysis/_postdoc/<run>/analysis.md` |
 
-- Interactive: delegate to `supervisor` for "process the new data", to the method's analyst for notes after a rerun.
+- Interactive: delegate to `supervisor` for "process the new data", to the method's analyst for notes after a rerun, to `postdoc` for "ask the postdoc …" (below).
 - Extra safety layers (permissions, guard hook, sandbox) depend on the harness: Claude Code `CLAUDE.md`; Codex `.codex/` (`docs/SAFETY.md` → Codex). OpenCode has only the read-only view and labpipe's own write checks: do not run it unattended.
+
+## Project context and the postdoc
+
+The postdoc answers the user's questions about the whole project, with its context. It runs only when the user asks; automatic runs never start it. Design: `docs/design/postdoc.md`.
+
+- **Context** (`context/`, the user's, never committed):
+  - `context.md`: the project in plain words;
+  - `instructions.md`: how the postdoc uses the context;
+  - `documents/`: work plan, papers; read-only.
+
+  If it does not exist, offer `labpipe context init`. After documents are added, run `labpipe context index`.
+- **"Let's write the project context"**:
+  1. Ask about the aims, hypotheses, the samples and what they should show.
+  2. Read the documents (`context/.text/`).
+  3. Draft `context.md` and show it.
+  4. Write it only with the user's approval. Same for `instructions.md`.
+- **"Ask the postdoc: <question>"**:
+  1. `labpipe postdoc start "<question>"`.
+  2. Delegate to `postdoc` with `Write the analysis for run <run>.`
+  3. Check `labpipe postdoc verify <run>` yourself, then run `labpipe report`.
+  4. Give the user the summary and say where the analysis is.
+
+  It costs more than notes: say so if the user asks for several at once. Without a conversation, the user runs `labpipe postdoc run "<question>"`.
+- Never edit `analysis.md` of a run yourself. To change an answer, the user asks again: a new run.
 
 ## Layout
 
 ```
 analysis/<sample_id>/<method>/<measurement_id>/   results.json, plot.png, plot.pdf, provenance.json, notes.md
 analysis/<sample_id>/<method>/_superseded|_failed/ older or failed outputs (never deleted)
+analysis/_postdoc/<run>/                           the postdoc's runs: request.md, inputs.json, dataset.json, compare-N.json, analysis.md, verify.json
+context/                                           the user's project context and documents (git-ignored)
 manifest.json                                      one entry per raw file: hash, status, output, versions; unrecognised files
 logs/                                              automation.log, runs/, review_queue.md
 config/                                            settings; local.yaml = this machine; ignore.yaml = files to leave alone

@@ -8,7 +8,16 @@ Read this when `labpipe doctor` says `ready: false`. Lead the user **one item at
 - **Sample IDs**: doctor shows file names that give no sample ID. Show them, ask the user how their files are named, then adapt `config/pipeline.yaml` → `sample_id.pattern` (or add overrides in `config/sample_ids.yaml`). Rerun doctor until the examples look right to the user.
 - **Method specifics**: for each method the user has data for, the setup questions in `docs/methods/<method>.md` → Setup (e.g. XRD reference phases and internal standards). Put the answers into settings, never code.
 - **First analysis**: `labpipe scan`, pick one file with the user, `labpipe <method> analyze --entry ID`, show `plot.png`, walk through `results.json` and its checks, write the notes (delegate to the method's analyst). Then explain steering (AGENTS.md) with their own plot.
-- **Agents and models**: ask which agent tool the user works with (Claude Code, Codex, OpenCode) and which model each role should use (`supervisor`, `analyst`). The supervisor only runs commands and keeps the books, so a small, fast model is enough; the analyst looks at plots and writes for people, so a stronger model writes better notes. `labpipe notes verify` rejects invented numbers whatever the model. Write the answer into `config/local.yaml` → `agents`, then run `labpipe agents sync`.
+- **Agents and models**:
+  - Ask which agent tool the user works with (Claude Code, Codex, OpenCode).
+  - Ask which model each role should use; `labpipe setup --only agents` asks the same in the terminal. Explain each role in a sentence:
+    - **supervisor**: runs the commands and keeps the books, on every new measurement. A small, fast model is enough.
+    - **analysts**: look at one measurement's plot and write its notes, on every new measurement. A standard model writes better notes.
+    - **postdoc**: answers questions about the whole project, with its context, only when asked. It needs the strongest model; one run can cost more than a batch of notes.
+  - The recommendations per tool are in `config/pipeline.yaml` → `agents.recommended`. `labpipe notes verify` and `labpipe postdoc verify` reject invented numbers whatever the model.
+  - Write the answer into `config/local.yaml` → `agents`, then run `labpipe agents sync`.
 - **Automatic processing** (optional, last): explain what it does: a watcher that checks for new files, waits until they stop changing, then runs the pipeline in batches of at most 10 measurements per AI run; a nightly safety-net run; notifications when work starts and ends and about anything new that needs the user (unrecognised files, decisions, failed and out-of-date analyses); the AI starts only when there is work. The user installs it with `labpipe automation setup` in their own terminal (it shows what it installs and asks first). Doctor's `automation` item reports whether the last run succeeded; if it warns, show the reason and the log.
+
+- **Project context** (optional, any time): for the postdoc (AGENTS.md → Project context and the postdoc). `labpipe context init`; the user puts the work plan and papers into `context/documents/`; `labpipe context index`; then write `context.md` together.
 
 Keep a short record of the setup decisions (paths chosen, naming rule, standards) in the `note:` fields of the settings files you change, so the next person knows why.

@@ -125,14 +125,15 @@ def test_build_shape_order_and_gaps(project):
     assert data["schema"] == "labpipe.dataset/1" and data["generated_utc"]
     assert list(data["samples"]) == ["?", "S-1", "S-2", "S-3", "S-10"]   # natural order
     s1 = data["samples"]["S-1"]
-    assert {m["entry_id"] for m in s1["measurements"]} == {"xrd-3", "sem-1"}   # duplicate skipped
+    assert {m["entry_id"] for m in s1["measurements"]} == {"xrd-3"}   # duplicate skipped
     assert s1["properties"]["sample.nominal.Pt"] == {
         "value": 20.0, "sigma": None, "unit": "at%",
         "source": "config/samples.yaml → samples.S-1.eds.nominal_at_percent.Pt"}
     assert s1["properties"]["sample.loading_wt"]["source"].endswith("samples.S-1.properties.loading_wt")
     assert "sample.support" not in s1["properties"]                    # not a number
-    sem = next(m for m in s1["measurements"] if m["method"] == "sem")
-    assert sem["quantities"] == {} and sem["plot"] == "analysis/S-1/sem/S-1_i/plot.png"
+    # image methods: one summary per sample, not one row per image
+    assert s1["galleries"] == {"sem": {"images": 1, "statuses": {"done": 1},
+                                       "plots": ["analysis/S-1/sem/S-1_i/plot.png"]}}
     xrd = next(m for m in data["samples"]["S-2"]["measurements"] if m["method"] == "xrd")
     assert xrd["notes"] == "analysis/S-2/xrd/S-2_a/notes.md" and xrd["review_codes"] == ["wh_unreliable"]
     assert "xrd.a.fcc-1" in xrd["quantities"] and xrd["results_sha256"] == "abc"

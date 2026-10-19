@@ -382,3 +382,50 @@ def test_run_headless_builds_the_postdoc_command_and_notifies(config, project, m
     assert command[command.index("--max-budget-usd") + 1] == "7"
     assert seen["env"]["LABPIPE_AGENT_MODE"] == "postdoc"
     assert [kind for kind, _ in seen["notes"]] == ["started", "finished"]
+
+
+# ---- report --------------------------------------------------------------------------
+
+def _section(config, monkeypatch, project):
+    from labpipe import automation, report
+    monkeypatch.setattr(report, "PROJECT_ROOT", project)
+    monkeypatch.setattr(automation, "PROJECT_ROOT", project)
+    return report._postdoc_section(config, {"S-9_1.2.26": "S-9_1.2.26", "S-9": "sample-S-9"})
+
+
+def test_report_says_when_the_postdoc_was_never_asked(config, project, monkeypatch):
+    section = _section(config, monkeypatch, project)
+    assert "The postdoc has not been asked anything yet" in section
+    assert "Open" not in section and "open Claude Code in" in section
+    assert "ask the postdoc: &lt;your question&gt;" in section
+
+
+def test_report_shows_the_verified_analysis_with_links(config, project, monkeypatch):
+    run = _run(config, project, _text("S-9 has a = 3.8822 Å (S-9_1.2.26)."))
+    assert postdoc.verify(config, run)["ok"]
+    section = _section(config, monkeypatch, project)
+    assert "compare with the reference?" in section and "Out of date" not in section and "warnbox" not in section
+    assert '<a href="#sample-S-9">S-9</a>' in section
+    assert '<a href="#S-9_1.2.26">S-9_1.2.26</a>' in section
+
+
+def test_report_says_when_the_analysis_is_out_of_date(config, project, monkeypatch):
+    run = _run(config, project, _text())
+    assert postdoc.verify(config, run)["ok"]
+    (project / "analysis/S-9/xrd/S-9_1.2.26/results.json").write_text('{"changed": 1}')
+    section = _section(config, monkeypatch, project)
+    assert "Out of date:</strong> 1 result(s) changed" in section
+
+
+def test_report_shows_a_newer_failed_run_and_the_last_good_one(config, project, monkeypatch):
+    good = _run(config, project, _text())
+    assert postdoc.verify(config, good)["ok"]
+    bad = _run(config, project, _text("a = 3.9500 Å"), question="Which samples again?")
+    analysis = project / "analysis" / "_postdoc" / bad / "analysis.md"
+    for n in range(3):
+        analysis.write_text(_text(f"a = 3.95{n}0 Å", question="Which samples again?"))
+        postdoc.verify(config, bad)
+    section = _section(config, monkeypatch, project)
+    assert "<em>Which samples again?</em>) did not pass its checks: 1 number(s)" in section
+    assert "The last one that passed is below." in section
+    assert "compare with the reference?" in section
