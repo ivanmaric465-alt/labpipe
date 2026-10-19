@@ -3,7 +3,8 @@
 The skeleton of labpipe: what each part does, how data flows, what is written where. This page
 is for people and agents changing the code. Using labpipe: `README.md`; agent rules:
 `AGENTS.md`; settings: `docs/settings/`. **Keep this page current**: a change that adds,
-removes or moves a module, command, file or flow updates it in the same commit.
+removes or moves a module, command, file or flow updates it in the same commit. Which other
+docs belong to which code: `docs/docmap.yaml` (`scripts/check_docs.py` checks it).
 
 ## Invariants (the code enforces them)
 
@@ -51,6 +52,8 @@ templates/              files copied into a project (context/)
 container/              image: Dockerfile, entrypoint (firewall, proxy, drop privileges), locks
 hooks/guard.py          launcher of `labpipe guard` for agent tools
 docs/                   methods/, settings/, design/ (approved design notes), SAFETY, SETUP, …
+  docmap.yaml           which docs belong to which code, and which docs repeat each other
+scripts/check_docs.py   fails when code changed without its docs (CI)
 tests/                  pytest; CI on Linux and Windows
 install.sh, install.ps1 installers
 ```
@@ -155,3 +158,6 @@ Details: `docs/ADDING_A_METHOD.md`, template: `methods/template/`.
 - Numerics are tested against hand-checked values, and outputs must be byte-identical where
   promised (default figures, replay).
 - Container tests are pure: they test the command lines, not a running engine.
+- `tests/test_docs.py` checks the docs against the code where it can be done mechanically:
+  every command documented, this module map complete, links resolve, settings keys and method
+  plot keys on their pages, every agent role in `AGENTS.md`.

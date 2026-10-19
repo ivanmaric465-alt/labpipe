@@ -6,7 +6,7 @@ labpipe turns raw instrument files into reproducible analyses:
 - `results.json`, a plot (`plot.png` + `plot.pdf`) and `provenance.json` per measurement;
 - a human-readable `notes.md` written by an agent.
 
-The numerics are deterministic Python. **Agents run commands, read results, write notes and edit settings files. They never compute numbers themselves.** Human-facing overview: `README.md`. The code's skeleton (modules, data flow, what is written where): `docs/ARCHITECTURE.md`; a code change that adds, removes or moves a module, command, file or flow updates it in the same commit. Read `docs/SAFETY.md` before changing anything that touches paths or permissions.
+The numerics are deterministic Python. **Agents run commands, read results, write notes and edit settings files. They never compute numbers themselves.** Human-facing overview: `README.md`. The code's skeleton (modules, data flow, what is written where): `docs/ARCHITECTURE.md`. Read `docs/SAFETY.md` before changing anything that touches paths or permissions.
 
 Everything specific to one method (its settings, how to word its results, its conventions) is in `docs/methods/<method>.md`. Read it before steering or explaining that method's results. Everything else the user can change (data, samples, plots, report, agents, automation, context, container) has a page in `docs/settings/`, with a "You say → setting" table: find the page there before changing anything.
 
@@ -56,6 +56,9 @@ All commands print JSON.
 | `labpipe agents sync` | Generate the harness's agent files from `agents/` |
 | `labpipe automation run \| status` | One automatic pass / state of the watcher and nightly run |
 | `labpipe methods new \| check` | New method (only in a method-design task with the user) |
+| `labpipe container setup \| start [--replace] \| stop \| status \| logs \| login \| popups` | Container mode (`docs/settings/container.md`); the user runs `setup`, `login` and `popups` (they ask questions or install a service) |
+| `labpipe shell` | An agent session inside the container (the user runs it) |
+| `labpipe roots rename OLD NEW` | Re-key manifest entries after a raw root's `id` changed in `local.yaml` |
 | `labpipe init`, `labpipe readonly-view --source PATH` | Create this machine's `config/local.yaml`; print the commands for a read-only view (runs nothing) |
 
 Method-specific commands (e.g. `labpipe xrd refs`) are in the method's doc.
@@ -153,6 +156,17 @@ The user describes a problem. You translate it into settings, rerun, and show th
 4. Rerun with `labpipe <method> analyze --entry ID --rerun` (plot-only changes: `labpipe replot --entry ID`), show the new plot, and quote the changed numbers from the new `results.json` next to the old ones from `_superseded/`.
 5. If several settings are plausible, show the alternatives and **let the user choose**. Don't keep iterating on your own.
 6. Settings files are part of the record (hashed in every `provenance.json`) and the lab's own (git-ignored): remind the user to back them up.
+
+## Changing the code
+
+A separate task with the user, never during analysis work, never unattended.
+- Tests for every change. They run as `PYTHONPATH=src python -m pytest -q`, and CI runs them on Linux and Windows.
+- **Docs move with the code.** `docs/docmap.yaml` says which docs belong to which code, and which docs repeat each other. In the same change:
+  - update the docs of every area you touched, and the docs linked to them;
+  - update `docs/ARCHITECTURE.md` when a module, command, file or flow is added, removed or moved.
+- Check before committing:
+  - `python scripts/check_docs.py` must pass (CI runs it too). If an area's docs truly need no change, add the commit message line `Docs-checked: <area>`.
+  - `tests/test_docs.py` checks what can be checked mechanically: commands, the module map, links, settings keys, method pages.
 
 ## Adding a new analysis method
 

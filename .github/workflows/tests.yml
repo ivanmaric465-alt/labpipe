@@ -11,6 +11,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0           # scripts/check_docs.py compares with main
       # (the runner context is only available inside steps)
       - name: Choose the venv location
         shell: bash
@@ -33,6 +35,13 @@ jobs:
         run: |
           "$LABPIPE_VENV/bin/python" -m pip install --quiet pytest
           "$LABPIPE_VENV/bin/python" -m pytest -q
+      # Code changed without its docs (docs/docmap.yaml)? On main: since the previous push.
+      - name: Docs move with the code
+        if: runner.os != 'Windows'
+        run: |
+          base=origin/main
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then base="${{ github.event.before }}"; fi
+          "$LABPIPE_VENV/bin/python" scripts/check_docs.py "$base"
       - name: Test
         if: runner.os == 'Windows'
         shell: pwsh

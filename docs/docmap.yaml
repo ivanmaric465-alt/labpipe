@@ -1,0 +1,76 @@
+# Which docs belong to which code, and to each other. When something in `code` changes, the
+# `docs` of that area are reviewed and updated in the same change (AGENTS.md → Rules for code
+# changes). `python scripts/check_docs.py` (also in CI) fails when an area's code changed but
+# none of its docs did; if the docs really need no change, say so in a commit message line
+# `Docs-checked: <area>` (several: comma-separated).
+# Paths are globs relative to the repository. tests/test_docs.py checks that every path here
+# exists and that every module in src/labpipe belongs to an area.
+schema: labpipe.docmap/1
+areas:
+  structure:        # a module or file added, removed or moved
+    on: added or removed
+    code: ["src/labpipe/*.py", "src/labpipe/plotting/*.py", "methods.yaml", "container/*", "install.sh",
+           "install.ps1", "scripts/*"]
+    docs: [docs/ARCHITECTURE.md]
+  cli:
+    code: [src/labpipe/cli.py]
+    docs: [AGENTS.md, README.md, docs/ARCHITECTURE.md]
+  state:            # manifest, scanning, statuses, file recognition, sample IDs
+    code: [src/labpipe/manifest.py, src/labpipe/scanner.py, src/labpipe/registry.py,
+           src/labpipe/naming.py, src/labpipe/inventory.py, src/labpipe/pipeline.py, config/pipeline.yaml]
+    docs: [AGENTS.md, docs/settings/data.md, docs/ARCHITECTURE.md]
+  settings:
+    code: [src/labpipe/settings.py, config/lab.example.yaml, config/samples.example.yaml,
+           config/local.example.yaml]
+    docs: [docs/settings/README.md, docs/settings/samples.md, AGENTS.md, README.md]
+  plots:
+    code: [src/labpipe/plotting/*.py, "src/labpipe/methods/*/plot.py", config/plots.yaml]
+    docs: [docs/settings/plots.md, "docs/methods/*.md"]
+  report:
+    code: [src/labpipe/report.py, config/report.yaml]
+    docs: [docs/settings/report.md, README.md]
+  provenance:       # what is recorded, replay, the rules in Invariants
+    code: [src/labpipe/provenance.py, src/labpipe/replay.py, src/labpipe/safety.py]
+    docs: [docs/ARCHITECTURE.md, docs/SAFETY.md]
+  method-xrd:
+    code: ["src/labpipe/methods/xrd/*", config/xrd.yaml, "references/xrd/*.yaml"]
+    docs: [docs/methods/xrd.md, agents/xrd-analyst.md]
+  method-eds:
+    code: ["src/labpipe/methods/eds/*", config/eds.yaml]
+    docs: [docs/methods/eds.md, agents/eds-analyst.md]
+  method-sem:
+    code: ["src/labpipe/methods/sem/*", config/sem.yaml]
+    docs: [docs/methods/sem.md]
+  method-template:  # the contract every method follows
+    code: ["src/labpipe/methods/template/*", src/labpipe/methods_kit.py]
+    docs: [docs/ADDING_A_METHOD.md, docs/ARCHITECTURE.md]
+  notes:
+    code: [src/labpipe/notes.py]
+    docs: [AGENTS.md, "agents/*-analyst.md"]
+  postdoc:
+    code: [src/labpipe/postdoc.py, src/labpipe/dataset.py, src/labpipe/context.py, "templates/context/*"]
+    docs: [agents/postdoc.md, docs/settings/context.md, AGENTS.md, README.md]
+  agents:
+    code: [src/labpipe/agents.py, "agents/*.md"]
+    docs: [docs/settings/agents.md, AGENTS.md, docs/SETUP.md]
+  safety:
+    code: [src/labpipe/guard.py, hooks/guard.py, ".claude/*.json", "src/labpipe/roview.py"]
+    docs: [docs/SAFETY.md, CLAUDE.md, AGENTS.md]
+  automation:
+    code: [src/labpipe/automation.py, src/labpipe/inbox.py]
+    docs: [docs/settings/automation.md, README.md, AGENTS.md]
+  container:
+    code: [src/labpipe/container.py, "container/*"]
+    docs: [docs/settings/container.md, docs/ARCHITECTURE.md, README.md]
+  setup:
+    code: [src/labpipe/doctor.py, src/labpipe/wizard.py, install.sh, install.ps1]
+    docs: [docs/SETUP.md, README.md, AGENTS.md]
+  locking:
+    code: [src/labpipe/locking.py, src/labpipe/__init__.py, src/labpipe/methods/__init__.py]
+    docs: [docs/ARCHITECTURE.md]
+# Docs that repeat each other: a change in one is checked against the others.
+linked:
+  - [AGENTS.md, docs/SETUP.md, README.md]          # commands, setup steps, what the user says
+  - [docs/settings/README.md, "docs/settings/*.md"] # the index lists every page
+  - [docs/settings/plots.md, "docs/methods/*.md"]   # method plot keys appear in both
+  - [docs/ARCHITECTURE.md, docs/docmap.yaml]        # modules and areas
