@@ -604,5 +604,5 @@ def build(config: dict) -> dict[str, Any]:
                        entries, records, banner)
         target = PROJECT_ROOT / config["analysis_dir"] / f"{stem}.html"
         atomic_write_text(target, page, config)
-        written.append(str(target.relative_to(PROJECT_ROOT)))
+        written.append(target.relative_to(PROJECT_ROOT).as_posix())
     return {"report": written[0], "measurements": len(entries), "reports": written}

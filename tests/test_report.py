@@ -187,7 +187,8 @@ def test_extra_reports_merge_with_the_main_settings(project, config):
 
 def test_extras_in_defaults_file_and_lab_merge(project, config):
     path = project / "config" / "report.yaml"
-    path.write_text(path.read_text(encoding="utf-8").replace("extra: {}", "extra: {one: {cards: compact}}"))
+    path.write_text(path.read_text(encoding="utf-8").replace("extra: {}", "extra: {one: {cards: compact}}"),
+                    encoding="utf-8")
     lab(project, "report: {extra: {two: {group_by: method}}}\n")
     assert list(report.report_settings()) == ["report", "report-one", "report-two"]
 
