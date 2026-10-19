@@ -555,7 +555,7 @@ def cmd_setup(args) -> int:
         _say({"cancelled": True, "hint": "set `container: {engine: podman|docker}` in "
                                         "config/local.yaml to choose another"})
         return 1
-    safety.set_local_block("container", {"engine": engine})
+    safety.set_local_block("container", {**(local_container_block() or {}), "engine": engine})
     config = load_config()
     tag = build(engine, config["container"])
     _say({"engine": engine, "image": tag, "next": [
