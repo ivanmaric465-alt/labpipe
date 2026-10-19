@@ -43,6 +43,18 @@ Status: APPROVED 2026-10-17 with changes (below). Implemented.
 - Looks at: the electron image (is the analysed area representative: agglomerates, empty support?), the spectrum (are the labelled metal peaks visible above background?).
 - Notes say: the metal composition, how it compares with nominal, how much to trust it (normalised, no σ, low concentrations). Never claims a phase, a stoichiometry or an element the table does not contain.
 
+## Settings (`config/eds.yaml`)
+
+| User says | Setting |
+|---|---|
+| "S-9 should be equimolar Ru, Rh, Pd, Ir, Pt" | `samples.S-9.eds.nominal_at_percent: {Ru: 20, Rh: 20, Pd: 20, Ir: 20, Pt: 20}` (copy the user's numbers; never compute them) |
+| "count Si as a metal" / "leave out Cu (grid)" | `non_metals: [...]` |
+| "the images of S-14 are s-140.jpg and s-141.jpg" (the report links the wrong ones) | `config/measurements/eds/S-14.yaml`: `images: [s-140.jpg, s-141.jpg]` plus a `note:` |
+
+## Interpretation
+- Elements only from the table; never a phase, a stoichiometry or an element the table does not contain.
+- Compositions are of the analysed area only; normalised totals and the missing σ limit how far small differences can be trusted (say so).
+
 ## Decisions and findings
 - 2026-10-17, user: all elements stay in the report (full table as recorded); the metal basis is shown in addition. No flag for the deviation from nominal (numbers only). Each report is shown separately, no averages.
 - Metal basis from wt% / standard atomic weight (IUPAC), not from the recorded at%: INCA rounds at% to 0.01, so a minor metal at 0.03 at% carries ±17 % rounding error, while its wt% (e.g. 0.27) has more digits. The at%-based version is kept in results.json for comparison.

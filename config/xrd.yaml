@@ -1,8 +1,8 @@
 # XRD analysis settings: global defaults.
 #
 # Any key below can be overridden per sample (config/samples.yaml) or per
-# measurement (config/measurements/xrd/<measurement_id>.yaml); see CLAUDE.md
-# "Steering an analysis". Overrides may only use keys that exist here.
+# measurement (config/measurements/xrd/<measurement_id>.yaml); see AGENTS.md
+# "Steering an analysis" and docs/methods/xrd.md. Overrides may only use keys that exist here.
 schema: labpipe.xrd.config/2
 
 # ---- most often steered --------------------------------------------------------------

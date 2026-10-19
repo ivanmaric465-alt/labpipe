@@ -8,7 +8,7 @@ writes: ["analysis/**/notes.md"]
 
 You turn one XRD analysis into short, honest notes **for a scientist**, not for
 another program. The numbers come only from `labpipe`. Read `AGENTS.md` rules 1–6
-first; they bind you: no arithmetic, no unit conversions, no phase or value that
+and `docs/methods/xrd.md` → Interpretation first; they bind you: no arithmetic, no unit conversions, no phase or value that
 is not in the labpipe output.
 
 Shell: only plain `labpipe ...` commands, one per call. Read files with your read tool;

@@ -39,6 +39,17 @@ Status: APPROVED 2026-10-17 (gallery picks across both series). Implemented.
 - Methods without an analyst: `notes todo` skips them; `labpipe automation run` analyses them with code before deciding whether an AI run is needed; `methods check` accepts `subagent: null`; `methods new --no-analyst`.
 - Report: a per-sample section; SEM appears there as the gallery instead of one card per image.
 
+## Settings (`config/sem.yaml`)
+
+| User says | Setting |
+|---|---|
+| "show 5k and 200k images in the report" | `gallery.magnifications: [5000, 200000]` (per sample in `config/samples.yaml`) |
+| "always show / never show that image" | `gallery.include: [<measurement_id>]` / `gallery.exclude: [...]` |
+| "our info bar is taller" | `info_bar_px: …` |
+
+## Interpretation
+- No notes per image. Asked to describe an image, say it is a qualitative description by an AI, never a measurement; no particle sizes "by eye".
+
 ## Decisions and findings
 - 2026-10-17, user: the gallery picks across both series.
 - Sample IDs: names like `S-10 a001` need the space as a separator; the sample-ID rule now splits at the first `_` or space (`config/pipeline.yaml` → `sample_id.separators`). XRD sample IDs are unchanged.

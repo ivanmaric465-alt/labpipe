@@ -22,6 +22,13 @@ Status: DRAFT, not yet agreed with the user. No code beyond the scaffold until i
 | code | severity | when |
 |---|---|---|
 
+## Settings (what the user can change)
+| User says | Setting |
+|---|---|
+
+## Interpretation
+- What may be named in notes, and how it is worded:
+
 ## Analyst agent
 - What it looks at in the plot:
 - What the notes say; what it must never claim:

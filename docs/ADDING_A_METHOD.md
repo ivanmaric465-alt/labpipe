@@ -1,10 +1,16 @@
 # Adding an analysis method
 
-A method is one package, one settings file, one `methods.yaml` entry and one analyst agent. Nothing else in the pipeline changes. With an agent, say *"I want to analyse <technique> files"*; it follows the same steps (`AGENTS.md` → Adding a new analysis method).
+A method is one package, one settings file, one `methods.yaml` entry and one analyst agent. Nothing else in the pipeline changes. With an agent, say *"I want to analyse <technique> files"*; it follows these steps. A new method is a code change: a separate task with tests and a commit, never during analysis work, never unattended.
 
 ## 1. Design first
 
-Agree with the people who will use it, in `docs/methods/<name>.md` (created in step 2 from a template): input files, wanted numbers with units, plot, defaults, checks, what the analyst agent writes. No analysis code until this is agreed.
+Agree with the people who will use it, in `docs/methods/<name>.md` (created in step 2 from a template). **No analysis code until they approve it.** The agent asks one topic at a time and looks at real example files with the user:
+- technique, instrument, software; which files belong together (e.g. image + metadata `.txt`); what is in them, and what only the user knows (areas, loadings, certificates);
+- which numbers they want, with units and uncertainty; which plot; what goes into the report;
+- sensible defaults and why; what users will want to change (the Settings table); what should be flagged for review;
+- what notes may name and how (the Interpretation section);
+- existing code to reuse (record source and commit; report its bugs to the user instead of silently fixing them);
+- whether the analyst agent writes notes for every measurement, or only on request (cost).
 
 ## 2. Scaffold
 
@@ -63,4 +69,4 @@ labpipe scan
 labpipe sem analyze --entry <entry-id>
 ```
 
-Add the method to the table in `README.md`.
+Analyse one real file with the user, show the plot and results, adjust the defaults with them. Then add the method to the table in `README.md` and commit.
