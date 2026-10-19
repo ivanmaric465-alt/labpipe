@@ -52,13 +52,13 @@ def _in_project(monkeypatch, folder: Path) -> Path:
 def test_the_project_is_found_from_a_subfolder(tmp_path):
     root = tmp_path / "p"
     (root / "analysis" / "S-1" / "xrd").mkdir(parents=True)
-    (root / "labpipe.yaml").write_text("schema: labpipe.project/1\n")
+    (root / "labpipe.yaml").write_text("schema: labpipe.project/1\n", encoding="utf-8")
     assert safety.find_project(root / "analysis" / "S-1" / "xrd") == root.resolve()
     assert safety.find_project(root) == root.resolve()
     assert safety.find_project(tmp_path) is None
     inner = root / "analysis" / "inner"
     inner.mkdir()
-    (inner / "labpipe.yaml").write_text("x: 1\n")
+    (inner / "labpipe.yaml").write_text("x: 1\n", encoding="utf-8")
     assert safety.find_project(inner / "..") == root.resolve()
     assert safety.find_project(inner) == inner.resolve()      # the nearest one
 
@@ -66,7 +66,7 @@ def test_the_project_is_found_from_a_subfolder(tmp_path):
 def test_roots_from_environment_folder_and_dev_mode(tmp_path, monkeypatch):
     root = tmp_path / "p"
     (root / "sub").mkdir(parents=True)
-    (root / "labpipe.yaml").write_text("x: 1\n")
+    (root / "labpipe.yaml").write_text("x: 1\n", encoding="utf-8")
     monkeypatch.chdir(root / "sub")
     code, found, none = safety._roots()
     assert found == root.resolve() and not none and code == REPO
@@ -86,7 +86,7 @@ def test_roots_from_environment_folder_and_dev_mode(tmp_path, monkeypatch):
 def test_an_installation_is_not_a_project(tmp_path, monkeypatch):
     code = tmp_path / "app"
     code.mkdir()
-    (code / ".labpipe-installed").write_text("")
+    (code / ".labpipe-installed").write_text("", encoding="utf-8")
     monkeypatch.setenv("LABPIPE_CODE", str(code))
     monkeypatch.chdir(tmp_path)
     assert safety._roots() == (code, code, True)
@@ -117,7 +117,7 @@ def _run(args, cwd, **env):
 
 def test_commands_outside_a_project_explain_how_to_make_one(tmp_path):
     code = _code_copy(tmp_path)
-    (code / ".labpipe-installed").write_text("")
+    (code / ".labpipe-installed").write_text("", encoding="utf-8")
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
     code_env = {"LABPIPE_CODE": str(code), "HOME": str(tmp_path / "home")}
@@ -141,13 +141,13 @@ def test_project_new_creates_the_structure(tmp_path):
                  ".claude/settings.json", ".claude/agents/supervisor.md",
                  ".codex/hooks.json", ".labpipe/hooks/guard.py"):
         assert (folder / path).exists(), path
-    meta = yaml.safe_load((folder / "labpipe.yaml").read_text())
+    meta = yaml.safe_load((folder / "labpipe.yaml").read_text(encoding="utf-8"))
     assert meta["schema"] == "labpipe.project/1" and meta["name"] == "pd-films"
     assert meta["created_utc"].endswith("Z") and meta["labpipe_version"]
-    local = yaml.safe_load((folder / "config" / "local.yaml").read_text())
+    local = yaml.safe_load((folder / "config" / "local.yaml").read_text(encoding="utf-8"))
     assert local["raw_roots"] == [{"id": "data", "path": (tmp_path / "data").as_posix()}]
     assert local["agents"]["harness"] == "claude-code"          # from the example
-    assert "labpipe project sync" in (folder / "lab" / "LAB.md").read_text()
+    assert "labpipe project sync" in (folder / "lab" / "LAB.md").read_text(encoding="utf-8")
     assert result["next"][0] == f"cd {folder}" and "labpipe doctor" in result["next"]
     assert not list((tmp_path / "data").iterdir())              # the data folder is not touched
 
@@ -159,7 +159,7 @@ def test_project_new_takes_the_agents_from_the_users_defaults(tmp_path, _home):
     first, second = tmp_path / "d1", tmp_path / "d2"
     first.mkdir(), second.mkdir()
     result = project.new(tmp_path / "work" / "p", [str(first), str(second), str(tmp_path / "d1")])
-    local = yaml.safe_load((Path(result["project"]) / "config" / "local.yaml").read_text())
+    local = yaml.safe_load((Path(result["project"]) / "config" / "local.yaml").read_text(encoding="utf-8"))
     assert local["agents"] == {"harness": "codex", "models": {"supervisor": "openai/x"}}
     assert [r["id"] for r in local["raw_roots"]] == ["d1", "d2", "d1-2"]
     assert (Path(result["project"]) / ".codex" / "agents" / "supervisor.toml").exists()
@@ -177,11 +177,11 @@ def test_project_new_refuses_a_synced_folder(tmp_path):
 def test_project_new_refuses_a_non_empty_folder_that_is_not_a_project(tmp_path):
     folder = tmp_path / "full"
     folder.mkdir()
-    (folder / "notes.txt").write_text("mine")
+    (folder / "notes.txt").write_text("mine", encoding="utf-8")
     with pytest.raises(project.ProjectError, match="not empty"):
         project.new(folder)
     assert sorted(p.name for p in folder.iterdir()) == ["notes.txt"]
-    (tmp_path / "file").write_text("x")
+    (tmp_path / "file").write_text("x", encoding="utf-8")
     with pytest.raises(project.ProjectError):
         project.new(tmp_path / "file")
     empty = tmp_path / "empty"
@@ -203,13 +203,13 @@ def test_project_new_refuses_nesting_and_missing_data(tmp_path):
 
 def test_project_new_on_a_project_never_overwrites_the_users_files(tmp_path):
     folder = Path(_new(tmp_path)["project"])
-    (folder / "lab" / "LAB.md").write_text("our rules\n")
-    (folder / "config" / "samples.yaml").write_text("samples: {S-1: {}}\n")
+    (folder / "lab" / "LAB.md").write_text("our rules\n", encoding="utf-8")
+    (folder / "config" / "samples.yaml").write_text("samples: {S-1: {}}\n", encoding="utf-8")
     again = project.new(folder)
     assert "lab/LAB.md" in again["kept"] and again["created"] == []
-    assert (folder / "lab" / "LAB.md").read_text() == "our rules\n"
-    assert (folder / "config" / "samples.yaml").read_text() == "samples: {S-1: {}}\n"
-    assert "our rules" in (folder / "AGENTS.md").read_text()      # and the sync picked it up
+    assert (folder / "lab" / "LAB.md").read_text(encoding="utf-8") == "our rules\n"
+    assert (folder / "config" / "samples.yaml").read_text(encoding="utf-8") == "samples: {S-1: {}}\n"
+    assert "our rules" in (folder / "AGENTS.md").read_text(encoding="utf-8")      # and the sync picked it up
 
 
 # ---- two roots in the settings ---------------------------------------------------------
@@ -219,7 +219,7 @@ def test_defaults_come_from_the_code_and_lab_files_from_the_project(tmp_path, mo
     monkeypatch.setattr(settings, "CONFIG", folder / "config")
     (folder / "config" / "lab.yaml").write_text("xrd: {background: {order: 5}}\n"
                                                 "plots: {font_size: 8}\n")
-    (folder / "config" / "samples.yaml").write_text("samples: {S-1: {xrd: {phases: [Pd]}}}\n")
+    (folder / "config" / "samples.yaml").write_text("samples: {S-1: {xrd: {phases: [Pd]}}}\n", encoding="utf-8")
     (folder / "config" / "measurements" / "xrd").mkdir(parents=True)
     (folder / "config" / "measurements" / "xrd" / "S-1_a.yaml").write_text(
         "note: x\nbackground: {order: 2}\n")
@@ -242,19 +242,19 @@ def test_defaults_come_from_the_code_and_lab_files_from_the_project(tmp_path, mo
 
 def test_generated_agents_md_has_the_lab_additions_and_readable_doc_paths(tmp_path):
     folder = Path(_new(tmp_path)["project"])
-    (folder / "lab" / "LAB.md").write_text("We call the support Vulcan.\n")
+    (folder / "lab" / "LAB.md").write_text("We call the support Vulcan.\n", encoding="utf-8")
     project.sync(folder)
-    text = (folder / "AGENTS.md").read_text()
+    text = (folder / "AGENTS.md").read_text(encoding="utf-8")
     assert text.startswith("<!-- Generated by labpipe ") and "Do not edit; your additions go in " \
         "lab/LAB.md (or lab/agents/)" in text.splitlines()[0]
     assert text.rstrip().endswith("We call the support Vulcan.")
     assert "\n## This lab's additions (lab/LAB.md)\n" in text
-    source = (REPO / "AGENTS.md").read_text()
+    source = (REPO / "AGENTS.md").read_text(encoding="utf-8")
     assert text.count("`.labpipe/docs/SAFETY.md`") == source.count("`docs/SAFETY.md`") > 0
     assert "`docs/" not in text and "`.labpipe/docs/methods/<method>.md`" in text
     assert "`.labpipe/config/<method>.yaml`" in text and "`.labpipe/methods.yaml`" in text
     assert "`config/samples.yaml`" in text and "`config/local.yaml`" in text    # the lab's own
-    claude = (folder / "CLAUDE.md").read_text()
+    claude = (folder / "CLAUDE.md").read_text(encoding="utf-8")
     assert claude.startswith("<!-- Generated by labpipe ") and "@AGENTS.md" in claude
     assert claude.rstrip().endswith("We call the support Vulcan.") and "`docs/" not in claude
     for doc in (REPO / "docs").rglob("*.md"):                    # the docs are copied as they are
@@ -264,32 +264,32 @@ def test_generated_agents_md_has_the_lab_additions_and_readable_doc_paths(tmp_pa
         REPO / "config" / "xrd.yaml").read_bytes()
     assert not (folder / ".labpipe" / "config" / "local.yaml").exists()
     assert (folder / ".labpipe" / "methods.yaml").exists()
-    skill = (folder / ".agents" / "skills" / "labpipe-pass" / "SKILL.md").read_text()
+    skill = (folder / ".agents" / "skills" / "labpipe-pass" / "SKILL.md").read_text(encoding="utf-8")
     assert skill.startswith("---") and "`.labpipe/agents/supervisor.md`" in skill
 
 
 def test_generated_harness_settings_are_adapted_to_the_project(tmp_path):
     folder = Path(_new(tmp_path)["project"])
-    settings_json = json.loads((folder / ".claude" / "settings.json").read_text())
+    settings_json = json.loads((folder / ".claude" / "settings.json").read_text(encoding="utf-8"))
     command = settings_json["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
     assert command == 'python3 "${CLAUDE_PROJECT_DIR}/.labpipe/hooks/guard.py"'
     assert "Edit(/.labpipe/**)" in settings_json["permissions"]["deny"]
     assert "Edit(/AGENTS.md)" in settings_json["permissions"]["deny"]
     assert "Edit(/lab/**)" in settings_json["permissions"]["ask"]
     assert settings_json["permissions"]["allow"] == json.loads(
-        (REPO / ".claude" / "settings.json").read_text())["permissions"]["allow"]
+        (REPO / ".claude" / "settings.json").read_text(encoding="utf-8"))["permissions"]["allow"]
     for name in ("unattended.json", "unattended-container.json"):
-        deny = json.loads((folder / ".claude" / name).read_text())["permissions"]["deny"]
+        deny = json.loads((folder / ".claude" / name).read_text(encoding="utf-8"))["permissions"]["deny"]
         assert "Edit(**/.labpipe/**)" in deny and "Edit(**/AGENTS.md)" in deny
-    hook = json.loads((folder / ".codex" / "hooks.json").read_text())
+    hook = json.loads((folder / ".codex" / "hooks.json").read_text(encoding="utf-8"))
     assert "labpipe.yaml" in hook["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
     assert ".labpipe/hooks/guard.py" in hook["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-    assert (folder / ".codex" / "rules" / "labpipe.rules").read_text().startswith(
+    assert (folder / ".codex" / "rules" / "labpipe.rules").read_text(encoding="utf-8").startswith(
         "# Generated by labpipe ")
-    assert (folder / ".codex" / "config.toml").read_text().startswith("# Generated by labpipe ")
+    assert (folder / ".codex" / "config.toml").read_text(encoding="utf-8").startswith("# Generated by labpipe ")
     # the repository's own files are what developers use: unchanged by all this
-    assert "/hooks/guard.py" in (REPO / ".claude" / "settings.json").read_text()
-    assert ".labpipe" not in (REPO / ".claude" / "settings.json").read_text()
+    assert "/hooks/guard.py" in (REPO / ".claude" / "settings.json").read_text(encoding="utf-8")
+    assert ".labpipe" not in (REPO / ".claude" / "settings.json").read_text(encoding="utf-8")
 
 
 def test_the_launcher_finds_its_project(tmp_path):
@@ -308,21 +308,21 @@ def test_sync_is_idempotent_and_follows_the_lab_file(tmp_path):
     folder = Path(_new(tmp_path)["project"])
     first = project.sync(folder)
     assert first["written"] == [] and first["unchanged"] > 20       # nothing changed since `new`
-    record = (folder / ".labpipe" / "generated.json").read_text()
-    (folder / "lab" / "LAB.md").write_text("new rule\n")
+    record = (folder / ".labpipe" / "generated.json").read_text(encoding="utf-8")
+    (folder / "lab" / "LAB.md").write_text("new rule\n", encoding="utf-8")
     second = project.sync(folder)
     assert second["written"] == ["AGENTS.md", "CLAUDE.md"]
-    assert (folder / ".labpipe" / "generated.json").read_text() != record
+    assert (folder / ".labpipe" / "generated.json").read_text(encoding="utf-8") != record
     assert project.sync(folder)["written"] == []
 
 
 def test_sync_removes_only_files_it_generated_before(tmp_path):
     folder = Path(_new(tmp_path)["project"])
-    (folder / ".labpipe" / "docs" / "OLD.md").write_text("x")           # not generated by labpipe
-    recorded = json.loads((folder / ".labpipe" / "generated.json").read_text())
+    (folder / ".labpipe" / "docs" / "OLD.md").write_text("x", encoding="utf-8")           # not generated by labpipe
+    recorded = json.loads((folder / ".labpipe" / "generated.json").read_text(encoding="utf-8"))
     recorded["files"][".labpipe/docs/GONE.md"] = "0" * 64              # generated once, gone since
-    (folder / ".labpipe" / "docs" / "GONE.md").write_text("old")
-    (folder / ".labpipe" / "generated.json").write_text(json.dumps(recorded))
+    (folder / ".labpipe" / "docs" / "GONE.md").write_text("old", encoding="utf-8")
+    (folder / ".labpipe" / "generated.json").write_text(json.dumps(recorded), encoding="utf-8")
     result = project.sync(folder)
     assert result["removed"] == [".labpipe/docs/GONE.md"]
     assert (folder / ".labpipe" / "docs" / "OLD.md").exists()
@@ -334,12 +334,12 @@ def test_doctor_says_when_generated_files_are_out_of_date(tmp_path, monkeypatch)
     [item] = doctor._project()
     assert item["status"] == "ok" and "generated files current" in item["message"]
     assert project.status()["mode"] == "project"
-    (folder / "lab" / "LAB.md").write_text("changed\n")
+    (folder / "lab" / "LAB.md").write_text("changed\n", encoding="utf-8")
     [item] = doctor._project()
     assert item["status"] == "todo" and item["next"] == "run `labpipe project sync`"
     project.sync(folder)
     assert doctor._project()[0]["status"] == "ok"
-    (folder / "AGENTS.md").write_text("edited by hand\n")
+    (folder / "AGENTS.md").write_text("edited by hand\n", encoding="utf-8")
     [item] = doctor._project()
     assert item["status"] == "todo" and "edited by hand" in item["message"]
     (folder / "AGENTS.md").unlink()
@@ -350,33 +350,33 @@ def test_doctor_says_when_generated_files_are_out_of_date(tmp_path, monkeypatch)
 
 def test_overlays_are_appended_and_extra_roles_added(tmp_path):
     folder = Path(_new(tmp_path)["project"])
-    (folder / "lab" / "agents" / "xrd-analyst.md").write_text("Call the support Vulcan.\n")
+    (folder / "lab" / "agents" / "xrd-analyst.md").write_text("Call the support Vulcan.\n", encoding="utf-8")
     (folder / "lab" / "agents" / "tem-reader.md").write_text(
         "---\nname: tem-reader\nrole: analyst\ndescription: Reads TEM notes.\n"
         "capabilities: [shell, read]\n---\nRead the TEM description.\n")
     result = project.sync(folder)
     assert result["problems"] == []
-    analyst = (folder / ".claude" / "agents" / "xrd-analyst.md").read_text()
-    source = (REPO / "agents" / "xrd-analyst.md").read_text().split("---", 2)[2].strip()
+    analyst = (folder / ".claude" / "agents" / "xrd-analyst.md").read_text(encoding="utf-8")
+    source = (REPO / "agents" / "xrd-analyst.md").read_text(encoding="utf-8").split("---", 2)[2].strip()
     body = analyst.split("-->", 1)[1]
     assert source.splitlines()[0] in body and "`docs/methods/xrd.md`" not in body
     assert "`.labpipe/docs/methods/xrd.md`" in body
     assert body.rstrip().endswith("## This lab's additions (lab/agents/xrd-analyst.md)\n\n"
                                   "Call the support Vulcan.")
     assert "from .labpipe/agents/xrd-analyst.md + lab/agents/xrd-analyst.md" in analyst
-    extra = (folder / ".claude" / "agents" / "tem-reader.md").read_text()
+    extra = (folder / ".claude" / "agents" / "tem-reader.md").read_text(encoding="utf-8")
     assert "name: tem-reader" in extra and "Read the TEM description." in extra
     assert (folder / ".claude" / "agents" / "tem-reader.md").as_posix().endswith("tem-reader.md")
     assert ".claude/agents/tem-reader.md" in json.loads(
-        (folder / ".labpipe" / "generated.json").read_text())["files"]
+        (folder / ".labpipe" / "generated.json").read_text(encoding="utf-8"))["files"]
     # the README next to them is not an overlay
     assert "README" not in " ".join(p.name for p in (folder / ".claude" / "agents").iterdir())
 
 
 def test_an_overlay_for_a_role_that_does_not_exist_is_reported(tmp_path, monkeypatch):
     folder = _in_project(monkeypatch, Path(_new(tmp_path)["project"]))
-    (folder / "lab" / "agents" / "xrd-analist.md").write_text("typo in the name\n")
-    (folder / "lab" / "agents" / "half.md").write_text("---\nname: half\n---\nbody\n")
+    (folder / "lab" / "agents" / "xrd-analist.md").write_text("typo in the name\n", encoding="utf-8")
+    (folder / "lab" / "agents" / "half.md").write_text("---\nname: half\n---\nbody\n", encoding="utf-8")
     result = project.sync(folder)
     assert len(result["problems"]) == 2
     assert any("xrd-analist" in p and "does not exist" in p and "xrd-analyst" in p
@@ -405,7 +405,7 @@ def test_dev_mode_sync_only_writes_the_agent_files(tmp_path):
         ".claude/agents/supervisor.md", ".claude/agents/xrd-analyst.md"}
     assert all(p.read_bytes() == before[p] for p in tracked)    # AGENTS.md, docs/, .claude/*.json …
     assert not (code / ".labpipe").exists()
-    analyst = (code / ".claude" / "agents" / "xrd-analyst.md").read_text()
+    analyst = (code / ".claude" / "agents" / "xrd-analyst.md").read_text(encoding="utf-8")
     assert "`docs/methods/xrd.md`" in analyst and ".labpipe/" not in analyst   # as in dev mode
     status, out = _run(["agents", "sync"], code, LABPIPE_CODE=str(code), LABPIPE_PROJECT=str(code))
     assert status == 0 and out["mode"] == "dev"
@@ -470,7 +470,7 @@ def test_scan_analyze_report_and_replay_in_a_project_made_by_project_new(tmp_pat
     folder = cwd / "films"
     with open(folder / "config" / "local.yaml", "a") as stream:
         stream.write("automation: {settle_minutes: 0, notify: {desktop: false}}\n")
-    (folder / "config" / "lab.yaml").write_text("plots: {font_size: 8}\n")
+    (folder / "config" / "lab.yaml").write_text("plots: {font_size: 8}\n", encoding="utf-8")
     sub = folder / "analysis"
     sub.mkdir()
     env = {"HOME": str(tmp_path / "home")}                       # no LABPIPE_* : found by folder
@@ -481,7 +481,7 @@ def test_scan_analyze_report_and_replay_in_a_project_made_by_project_new(tmp_pat
     status, done = _run(["xrd", "analyze", "--entry", row["entry_id"]], sub, **env)
     assert status == 0 and done["status"] == "done"
     out = folder / done["output_dir"]
-    record = json.loads((out / "provenance.json").read_text())
+    record = json.loads((out / "provenance.json").read_text(encoding="utf-8"))
     sources = {s["layer"].split()[0]: s for s in record["parameters"]["sources"]}
     assert sources["global"]["root"] == "code" and sources["global"]["file"] == "config/xrd.yaml"
     assert sources["lab"]["root"] == "project" and sources["lab"]["file"] == "config/lab.yaml"

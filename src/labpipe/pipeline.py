@@ -73,7 +73,7 @@ def analyze_entry(config: dict, eid: str, *, rerun: bool = False) -> dict[str, A
         summary = module.run(input_path, staging, context={
             "sample_id": entry["sample_id"], "measurement_id": entry["measurement_id"],
             "relative_path": entry["relative_path"], "raw_root": root["id"],
-            "entry_id": eid, "output_dir": str(final.relative_to(PROJECT_ROOT)),
+            "entry_id": eid, "output_dir": final.relative_to(PROJECT_ROOT).as_posix(),
         }, pipeline=True)
         status = "done"
     except Exception as exc:  # recorded, never retried endlessly
@@ -99,7 +99,7 @@ def analyze_entry(config: dict, eid: str, *, rerun: bool = False) -> dict[str, A
         stored.update(versions)
         stored["last_processed_utc"] = utc_now()
         if status == "done":
-            stored["output_dir"] = str(final.relative_to(PROJECT_ROOT))
+            stored["output_dir"] = final.relative_to(PROJECT_ROOT).as_posix()
             stored["results_sha256"] = summary["outputs"]["results.json"]
             stored["settings_sha256"] = summary["settings_sha256"]
             stored["plot_sha256"] = summary.get("plot_sha256")
@@ -115,7 +115,7 @@ def analyze_entry(config: dict, eid: str, *, rerun: bool = False) -> dict[str, A
             mf.set_status(stored, "failed", reason)
         write_index(config, data, stored["sample_id"], stored["method"])
     return {"entry_id": eid, "status": status, "reason": reason,
-            "output_dir": str(final.relative_to(PROJECT_ROOT)) if status == "done" else None,
+            "output_dir": final.relative_to(PROJECT_ROOT).as_posix() if status == "done" else None,
             "review": summary["status"] == "review" if summary else None,
             "review_checks": summary["checks"] if summary else None}
 
@@ -177,7 +177,7 @@ def replot_entry(config: dict, eid: str) -> dict[str, Any]:
         summary = module.run(input_path, staging, context={
             "sample_id": entry["sample_id"], "measurement_id": mid,
             "relative_path": entry["relative_path"], "raw_root": root["id"],
-            "entry_id": eid, "output_dir": str(final.relative_to(PROJECT_ROOT)),
+            "entry_id": eid, "output_dir": final.relative_to(PROJECT_ROOT).as_posix(),
         }, pipeline=True)
         old_results = (final / "results.json").read_bytes()
         new_results = (staging / "results.json").read_bytes()
@@ -198,13 +198,13 @@ def replot_entry(config: dict, eid: str) -> dict[str, Any]:
             stored["replot_problem"] = {
                 "utc": utc_now(), "reason": problem, "code_version": code_version(),
                 "for_plot_sha256": entry.get("plot_sha256_wanted"),
-                "kept_in": str(kept.relative_to(PROJECT_ROOT)) if kept else None}
+                "kept_in": kept.relative_to(PROJECT_ROOT).as_posix() if kept else None}
             stored.setdefault("events", []).append(
                 {"utc": utc_now(), "from": "done", "to": "done",
                  "reason": f"replot failed: {problem}"[:300]})
             stored["events"] = stored["events"][-30:]
         return {"entry_id": eid, "status": "failed", "reason": problem,
-                "kept_in": str(kept.relative_to(PROJECT_ROOT)) if kept else None}
+                "kept_in": kept.relative_to(PROJECT_ROOT).as_posix() if kept else None}
 
     # Old figures (everything the old provenance lists but results.json) and the old
     # provenance.json go aside; notes.md and anything else in the folder stay.
@@ -242,9 +242,9 @@ def replot_entry(config: dict, eid: str) -> dict[str, Any]:
             stored["results_sha256"] = summary["outputs"]["results.json"]
         write_index(config, data, stored["sample_id"], stored["method"])
     return {"entry_id": eid, "status": "done", "reason": None,
-            "output_dir": str(final.relative_to(PROJECT_ROOT)),
+            "output_dir": final.relative_to(PROJECT_ROOT).as_posix(),
             "results_changed": not results_same,
-            "superseded": str(aside.relative_to(PROJECT_ROOT)) if aside.exists() else None}
+            "superseded": aside.relative_to(PROJECT_ROOT).as_posix() if aside.exists() else None}
 
 
 def replot(config: dict, *, entry: str | None = None, method: str | None = None,

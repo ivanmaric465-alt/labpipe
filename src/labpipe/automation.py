@@ -448,7 +448,7 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
                or result.get("is_error") else "finished")
         _notify_news(config, before)
         summary = {"event": "run_finished", "trigger": reason, "exit_code": completed.returncode,
-                   "transcript": str(transcript.relative_to(PROJECT_ROOT)),
+                   "transcript": transcript.relative_to(PROJECT_ROOT).as_posix(),
                    "cost_usd": result.get("total_cost_usd"), "done": done, "failed": failed,
                    "replotted": replotted, "replot_failed": replot_failed,
                    "remaining": remaining, **({"tokens": tokens} if tokens else {})}

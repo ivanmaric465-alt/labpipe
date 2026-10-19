@@ -75,6 +75,6 @@ def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[
         regenerated = sha256_file(work / "out" / name)
         comparison[name] = {"recorded": recorded, "regenerated": regenerated,
                             "identical": recorded == regenerated}
-    return {"replay_dir": str(work.relative_to(PROJECT_ROOT)), "problems": problems,
+    return {"replay_dir": work.relative_to(PROJECT_ROOT).as_posix(), "problems": problems,
             "comparison": comparison,
             "all_outputs_identical": all(item["identical"] for item in comparison.values())}

@@ -46,7 +46,7 @@ def _fake_code(tmp_path) -> Path:
              "analysis/S-1/results.json": "{}\n", "manifest.json": "{}\n", "context/c.md": "#\n"}
     for name, text in files.items():
         (code / name).parent.mkdir(parents=True, exist_ok=True)
-        (code / name).write_text(text)
+        (code / name).write_text(text, encoding="utf-8")
     return code
 
 
@@ -72,12 +72,12 @@ def test_container_hash_covers_every_file_copied_into_the_image(tmp_path, monkey
     for name in ("container/Dockerfile", "src/labpipe/a.py", "docs/SAFETY.md", "methods.yaml",
                  "config/xrd.yaml", "AGENTS.md", "references/xrd/phases.yaml",
                  "hooks/guard.py", ".claude/settings.json", ".codex/config.toml"):
-        original = (code / name).read_text()
-        (code / name).write_text(original + "changed\n")
+        original = (code / name).read_text(encoding="utf-8")
+        (code / name).write_text(original + "changed\n", encoding="utf-8")
         assert ct.container_hash() != first, name
-        (code / name).write_text(original)
-    (code / "config" / "lab.yaml").write_text("changed: true\n")   # the lab's own: not in the image
-    (code / "manifest.json").write_text("changed")
+        (code / name).write_text(original, encoding="utf-8")
+    (code / "config" / "lab.yaml").write_text("changed: true\n", encoding="utf-8")   # the lab's own: not in the image
+    (code / "manifest.json").write_text("changed", encoding="utf-8")
     assert ct.container_hash() == first
 
 
@@ -137,7 +137,7 @@ def test_local_commands_not_forwarded(tmp_path):
 
 def test_forward_cwd_and_paths(tmp_path):
     (tmp_path / "sub").mkdir()
-    (tmp_path / "sub" / "m.yaml").write_text("x")
+    (tmp_path / "sub" / "m.yaml").write_text("x", encoding="utf-8")
     inside = _fwd(["scan"], tmp_path / "sub", tmp_path, tty=True)
     assert inside == ["podman", "exec", "-i", "-t", "--user", "1000:1001", "-w",
                       "/project/sub", "labpipe", "labpipe", "scan"]
@@ -166,7 +166,7 @@ def test_forward_refuses_outside_paths(tmp_path):
 
 def test_main_without_container_block_runs_locally(tmp_path, monkeypatch):
     (tmp_path / "config").mkdir()
-    (tmp_path / "config" / "local.yaml").write_text("raw_roots: []\n")
+    (tmp_path / "config" / "local.yaml").write_text("raw_roots: []\n", encoding="utf-8")
     monkeypatch.setattr(ct.safety, "PROJECT_ROOT", tmp_path)
     monkeypatch.delenv("LABPIPE_IN_CONTAINER", raising=False)
     assert ct.local_container_block() is None
@@ -177,7 +177,7 @@ def test_main_without_container_block_runs_locally(tmp_path, monkeypatch):
 
 def test_forward_runs_in_container_when_on(tmp_path, monkeypatch):
     (tmp_path / "config").mkdir()
-    (tmp_path / "config" / "local.yaml").write_text("container:\n  engine: podman\n")
+    (tmp_path / "config" / "local.yaml").write_text("container:\n  engine: podman\n", encoding="utf-8")
     monkeypatch.setattr(ct.safety, "PROJECT_ROOT", tmp_path)
     monkeypatch.delenv("LABPIPE_IN_CONTAINER", raising=False)
     monkeypatch.chdir(tmp_path)
@@ -234,13 +234,13 @@ def test_proxy_unit_text():
 def test_ensure_page_token_keeps_other_keys(tmp_path, monkeypatch):
     (tmp_path / "config").mkdir()
     local = tmp_path / "config" / "local.yaml"
-    local.write_text("raw_roots: []\ncontainer:\n  engine: podman\n  popups: true\n")
+    local.write_text("raw_roots: []\ncontainer:\n  engine: podman\n  popups: true\n", encoding="utf-8")
     shutil.copy(REPO / "config" / "pipeline.yaml", tmp_path / "config" / "pipeline.yaml")
     monkeypatch.setattr(ct.safety, "PROJECT_ROOT", tmp_path)
     assert ct.ensure_page_token() is True
     block = ct.local_container_block()
     assert block["engine"] == "podman" and block["popups"] is True and len(block["page_token"]) >= 16
-    assert "raw_roots" in local.read_text()
+    assert "raw_roots" in local.read_text(encoding="utf-8")
     token = block["page_token"]
     assert ct.ensure_page_token() is False
     assert ct.local_container_block()["page_token"] == token
@@ -273,8 +273,8 @@ def _project_root(tmp_path, monkeypatch, name="Pd films", local="raw_roots: []\n
     """A project folder that is not the code folder (the repository is the code)."""
     project = tmp_path / "proj"
     (project / "config").mkdir(parents=True)
-    (project / "labpipe.yaml").write_text(f"schema: labpipe.project/1\nname: {name}\n")
-    (project / "config" / "local.yaml").write_text(local)
+    (project / "labpipe.yaml").write_text(f"schema: labpipe.project/1\nname: {name}\n", encoding="utf-8")
+    (project / "config" / "local.yaml").write_text(local, encoding="utf-8")
     monkeypatch.setattr(ct.safety, "PROJECT_ROOT", project)
     monkeypatch.setattr(ct.safety, "CODE_ROOT", REPO)
     return project
@@ -313,7 +313,7 @@ def test_each_project_has_its_own_name_volume_and_host_folder(tmp_path, monkeypa
     joined = " ".join(args)
     assert "--name labpipe-pd-films" in joined and "-v labpipe-pd-films-home:/home/labpipe" in joined
     assert f"LABPIPE_HOST_ROOT={ct._host_path(project)}" in joined
-    (project / "config" / "local.yaml").write_text("container: {name: mine}\n")
+    (project / "config" / "local.yaml").write_text("container: {name: mine}\n", encoding="utf-8")
     assert ct.container_config({})["name"] == "mine"          # the project's own choice wins
     monkeypatch.setattr(ct.safety, "PROJECT_ROOT", REPO)       # the repository: as before
     assert ct.container_config({"container": {"name": "labpipe"}})["name"] == "labpipe"
@@ -327,7 +327,7 @@ def test_the_port_is_the_first_free_one_and_is_saved_in_the_projects_local_yaml(
     assert ct.ensure_port() is True
     block = ct.local_container_block()
     assert block["port"] == 8767 and block["engine"] == "podman" and block["popups"] is True
-    assert "raw_roots" in (project / "config" / "local.yaml").read_text()
+    assert "raw_roots" in (project / "config" / "local.yaml").read_text(encoding="utf-8")
     monkeypatch.setattr(ct, "free_port", lambda *a, **k: busy.append(1) or 9000)
     assert ct.ensure_port() is False and busy == []            # already chosen: kept
 

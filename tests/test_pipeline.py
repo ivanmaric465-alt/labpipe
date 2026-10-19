@@ -104,7 +104,7 @@ def _project(tmp_path: Path, automation: dict | None = None) -> tuple[Path, Path
     """A project folder (only the lab's files); the code and its defaults are the repository's."""
     project = tmp_path / "project"
     (project / "config").mkdir(parents=True)
-    (project / "labpipe.yaml").write_text("schema: labpipe.project/1\nname: test\n")
+    (project / "labpipe.yaml").write_text("schema: labpipe.project/1\nname: test\n", encoding="utf-8")
     raw = tmp_path / "raw"
     (raw / "XRD").mkdir(parents=True)
     # settle time 0, no pop-ups from tests
@@ -130,10 +130,10 @@ def test_end_to_end_scan_analyse_rescan(tmp_path):
     peaks = [(positions[0], 6000.0, 1.2, 0.6), (positions[1], 3000.0, 1.4, 0.6),
              (positions[2], 2200.0, 1.8, 0.6), (positions[3], 2000.0, 2.1, 0.6)]
     x, y = synthetic_pattern(peaks)
-    (raw / "XRD" / "SYN-1_test.xrdml").write_text(xrdml_text(x, y, "SYN-1"))
+    (raw / "XRD" / "SYN-1_test.xrdml").write_text(xrdml_text(x, y, "SYN-1"), encoding="utf-8")
     (raw / "XRD" / "SYN-1_test.xy").write_text("\n".join(f"{a} {b}" for a, b in zip(x, y)))
     (raw / "XRD" / "SYN-1_test.rd").write_bytes(b"\x00binary")
-    (raw / "XRD" / "weird name.xrdml").write_text(xrdml_text(x, y))
+    (raw / "XRD" / "weird name.xrdml").write_text(xrdml_text(x, y), encoding="utf-8")
     raw_before = {p.name: p.read_bytes() for p in (raw / "XRD").iterdir()}
 
     first = _labpipe(env, "scan")
@@ -148,7 +148,7 @@ def test_end_to_end_scan_analyse_rescan(tmp_path):
     out = project / result["output_dir"]
     assert sorted(p.name for p in out.iterdir()) == ["plot.pdf", "plot.png",
                                                     "provenance.json", "results.json"]
-    results = json.loads((out / "results.json").read_text())
+    results = json.loads((out / "results.json").read_text(encoding="utf-8"))
     phase = results["phases"]["fcc_indexed"][0]
     assert phase["a_angstrom"] == pytest.approx(3.8898, abs=0.002)
     assert (project / "analysis" / "SYN-1" / "xrd" / "index.json").exists()
@@ -159,7 +159,7 @@ def test_end_to_end_scan_analyse_rescan(tmp_path):
     # a changed file is reprocessed; old outputs are superseded, not deleted
     time.sleep(0.01)
     x2, y2 = synthetic_pattern(peaks, seed=11)
-    (raw / "XRD" / "SYN-1_test.xrdml").write_text(xrdml_text(x2, y2, "SYN-1"))
+    (raw / "XRD" / "SYN-1_test.xrdml").write_text(xrdml_text(x2, y2, "SYN-1"), encoding="utf-8")
     third = _labpipe(env, "scan")
     assert [c["to"] for c in third["changes"]] == ["pending"]
     _labpipe(env, "xrd", "analyze", "--entry", pending[0]["entry_id"])
@@ -189,7 +189,7 @@ def test_settings_precedence_and_typos(tmp_path, monkeypatch):
                         "phases": ["Pd"]}
     assert [s["layer"].split()[0] for s in sources] == ["global", "sample", "measurement",
                                                         "plot"]
-    (config / "measurements" / "xrd" / "S-1_a.yaml").write_text("backgruond: {order: 2}\n")
+    (config / "measurements" / "xrd" / "S-1_a.yaml").write_text("backgruond: {order: 2}\n", encoding="utf-8")
     with pytest.raises(settings.SettingsError, match="backgruond"):
         settings.resolve("xrd", "S-1", "S-1_a")
 
@@ -200,14 +200,14 @@ def test_template_method_fulfils_the_contract(tmp_path):
     from labpipe.methods.template import analyze as template
     data = tmp_path / "S-1_curve.txt"
     data.write_text("# x y\n" + "\n".join(f"{i} {i * (20 - i)}" for i in range(21)))
-    settings = yaml.safe_load((Path(template.__file__).parent / "config.example.yaml").read_text())
+    settings = yaml.safe_load((Path(template.__file__).parent / "config.example.yaml").read_text(encoding="utf-8"))
     summary = template.run(data, tmp_path / "out", settings=settings, pipeline=False,
                            context={"sample_id": "S-1", "measurement_id": "S-1_curve"})
     assert summary["status"] == "ok"
     assert set(summary["outputs"]) == {"results.json", "plot.png", "plot.pdf"}
-    results = json.loads((tmp_path / "out" / "results.json").read_text())
+    results = json.loads((tmp_path / "out" / "results.json").read_text(encoding="utf-8"))
     assert results["summary"]["x_at_y_max"] == 10.0
-    record = json.loads((tmp_path / "out" / "provenance.json").read_text())
+    record = json.loads((tmp_path / "out" / "provenance.json").read_text(encoding="utf-8"))
     assert record["input"]["sha256"] == results["input"]["sha256"]
     assert record["parameters"]["resolved"] == settings
 
@@ -237,7 +237,7 @@ def test_summary_and_report(tmp_path):
     peaks = [(positions[0], 6000.0, 1.2, 0.6), (positions[1], 3000.0, 1.4, 0.6),
              (positions[2], 2200.0, 1.8, 0.6), (positions[3], 2000.0, 2.1, 0.6)]
     x, y = synthetic_pattern(peaks)
-    (raw / "XRD" / "SYN-2_test.xrdml").write_text(xrdml_text(x, y, "SYN-2"))
+    (raw / "XRD" / "SYN-2_test.xrdml").write_text(xrdml_text(x, y, "SYN-2"), encoding="utf-8")
     _labpipe(env, "scan")
     entry = _labpipe(env, "pending")[0]["entry_id"]
     _labpipe(env, "xrd", "analyze", "--entry", entry)
@@ -263,7 +263,7 @@ def test_report_shows_eds_panels_and_sem_gallery_one_at_a_time(tmp_path):
         (raw / "EDS" / f"s-14{n}.jpg").write_bytes((raw / "EDS" / f"s-13{n}.jpg").read_bytes())
     steering = project / "config" / "measurements" / "eds" / "S-14.yaml"
     steering.parent.mkdir(parents=True, exist_ok=True)
-    steering.write_text("note: the report links S-13's images\nimages: [s-140.jpg, s-141.jpg]\n")
+    steering.write_text("note: the report links S-13's images\nimages: [s-140.jpg, s-141.jpg]\n", encoding="utf-8")
     counts = _labpipe(env, "scan")["counts"]
     assert counts.get("pending") == 4 and "unrecognised" not in counts      # s-14x.jpg claimed
     _labpipe(env, "analyze", "--pending", "--method", "sem")
@@ -280,11 +280,11 @@ def test_report_shows_eds_panels_and_sem_gallery_one_at_a_time(tmp_path):
 def test_roots_rename_keeps_entries(tmp_path):
     project, raw, env = _project(tmp_path)
     x, y = synthetic_pattern([(40.0, 5000.0, 1.0, 0.5)])
-    (raw / "XRD" / "SYN-3_test.xrdml").write_text(xrdml_text(x, y, "SYN-3"))
+    (raw / "XRD" / "SYN-3_test.xrdml").write_text(xrdml_text(x, y, "SYN-3"), encoding="utf-8")
     _labpipe(env, "scan")
     before = _labpipe(env, "pending")[0]
     local = project / "config" / "local.yaml"
-    local.write_text(local.read_text().replace("id: lab", "id: renamed"))
+    local.write_text(local.read_text(encoding="utf-8").replace("id: lab", "id: renamed"))
     assert _labpipe(env, "roots", "rename", "lab", "renamed")["renamed"] == 1
     assert _labpipe(env, "scan")["changes"] == []          # same files, nothing new
     after = _labpipe(env, "pending")[0]
@@ -296,11 +296,11 @@ def test_automation_run_and_setup_files(tmp_path, monkeypatch):
     env["LABPIPE_AGENT_MODE"] = "unattended"
     assert _labpipe(env, "automation", "run")["status"] == "nothing_to_do"
     x, y = synthetic_pattern([(40.0, 5000.0, 1.0, 0.5)])
-    (raw / "XRD" / "SYN-4_test.xrdml").write_text(xrdml_text(x, y, "SYN-4"))
+    (raw / "XRD" / "SYN-4_test.xrdml").write_text(xrdml_text(x, y, "SYN-4"), encoding="utf-8")
     # no agents configured -> the AI step cannot start; reported, not crashed
     result = _labpipe(env, "automation", "run")
     assert result["status"] == "run_failed" and "harness" in result["reason"]
-    log = (project / "logs" / "automation.log").read_text()
+    log = (project / "logs" / "automation.log").read_text(encoding="utf-8")
     assert '"event": "notify"' in log and "analysis started" in log
 
     monkeypatch.setattr("labpipe.automation.PROJECT_ROOT", project)
@@ -310,7 +310,7 @@ def test_automation_run_and_setup_files(tmp_path, monkeypatch):
     local = project / "config" / "local.yaml"
     set_local_block("automation", {"settle_minutes": 3, "nightly_at": "02:00"})
     set_local_block("automation", {"settle_minutes": 5, "nightly_at": "03:30"})
-    text = local.read_text()
+    text = local.read_text(encoding="utf-8")
     assert text.count("automation:") == 1 and "settle_minutes: 5" in text and "raw_roots" in text
     units = automation._systemd_units({"claude": "/opt/claude/bin/claude", "nightly_at": "03:30"})
     assert "OnCalendar=*-*-* 03:30:00" in units["labpipe-nightly.timer"]
@@ -325,7 +325,7 @@ def test_notifications_tell_once_and_name_the_users_agent(tmp_path):
     log = project / "logs" / "automation.log"
 
     def messages() -> list[str]:
-        return [json.loads(line)["message"] for line in log.read_text().splitlines()
+        return [json.loads(line)["message"] for line in log.read_text(encoding="utf-8").splitlines()
                 if '"event": "notify"' in line]
 
     (raw / "TEM").mkdir()
@@ -336,13 +336,13 @@ def test_notifications_tell_once_and_name_the_users_agent(tmp_path):
     [message] = messages()
     assert "1 new file(s) not recognised: TEM/a.dm3" in message
     assert "Open Codex in" in message and "say: check the new files" in message
-    assert "TEM/a.dm3" in (project / "logs" / "review_queue.md").read_text()
+    assert "TEM/a.dm3" in (project / "logs" / "review_queue.md").read_text(encoding="utf-8")
     _labpipe(env, "automation", "run")
     assert len(messages()) == 1                         # told once
     (raw / "TEM" / "a.dm3").write_bytes(b"two, changed")
     _labpipe(env, "automation", "run")
     assert len(messages()) == 2                         # new content: told again
-    (project / "config" / "ignore.yaml").write_text('ignore: ["TEM/**"]\n')
+    (project / "config" / "ignore.yaml").write_text('ignore: ["TEM/**"]\n', encoding="utf-8")
     assert _labpipe(env, "scan")["counts"] == {"ignored_by_you": 1, "system_file": 2}
     assert _labpipe(env, "status")["not_recognised"] == 0
 
@@ -357,7 +357,7 @@ def test_notifications_tell_once_and_name_the_users_agent(tmp_path):
 
     steering = project / "config" / "measurements" / "sem" / "S-1_a001.yaml"
     steering.parent.mkdir(parents=True, exist_ok=True)
-    steering.write_text("info_bar_px: 60\n")
+    steering.write_text("info_bar_px: 60\n", encoding="utf-8")
     _labpipe(env, "automation", "run")
     [stale] = [m for m in messages() if "out of date" in m]
     assert "1 analysis(es) out of date (settings changed: 1" in stale
@@ -385,7 +385,7 @@ def test_inventory_baseline_and_batches(tmp_path):
     project, raw, env = _project(tmp_path)
     x, y = synthetic_pattern([(40.0, 5000.0, 1.0, 0.5)])
     for n in (1, 2, 3):
-        (raw / "XRD" / f"SYN-{n}_test.xrdml").write_text(xrdml_text(x, y, f"SYN-{n}"))
+        (raw / "XRD" / f"SYN-{n}_test.xrdml").write_text(xrdml_text(x, y, f"SYN-{n}"), encoding="utf-8")
     (raw / "report.docx").write_bytes(b"not data")
     root = _labpipe(env, "inventory")["roots"][0]
     assert root["recognised"]["xrd"]["files"] == {".xrdml (analysed)": 3}
@@ -396,7 +396,7 @@ def test_inventory_baseline_and_batches(tmp_path):
     assert _labpipe(env, "scan", "--baseline")["counts"] == {"baseline": 3, "unrecognised": 1}
     assert _labpipe(env, "scan")["changes"] == []
     assert _labpipe(env, "pending") == []
-    (raw / "XRD" / "SYN-4_test.xrdml").write_text(xrdml_text(x, y, "SYN-4"))
+    (raw / "XRD" / "SYN-4_test.xrdml").write_text(xrdml_text(x, y, "SYN-4"), encoding="utf-8")
     assert _labpipe(env, "scan")["counts"] == {"baseline": 3, "pending": 1, "unrecognised": 1}
 
     assert len(_labpipe(env, "requeue", "--baseline")["requeued"]) == 3
@@ -443,8 +443,8 @@ def test_recognise_hook_disambiguates_shared_extensions(tmp_path):
     methods = {"sem": {"patterns": ["**/*.tif"], "ignore": ["**/*.txt"],
                        "recognise": "tests.test_pipeline:_starts_with_cm"},
                "echem": {"patterns": ["**/*.txt"]}}
-    (tmp_path / "a001.txt").write_text("$CM_FORMAT JEOL/SEM\n")
-    (tmp_path / "LSV.txt").write_text("Potential applied (V);Time (s)\n")
+    (tmp_path / "a001.txt").write_text("$CM_FORMAT JEOL/SEM\n", encoding="utf-8")
+    (tmp_path / "LSV.txt").write_text("Potential applied (V);Time (s)\n", encoding="utf-8")
     assert classify("a001.txt", methods, root=tmp_path) == ("sem", "ignore")
     assert classify("LSV.txt", methods, root=tmp_path) == ("echem", "analyse")
     assert classify("LSV.txt", methods) == ("sem", "ignore")   # globs only, without a root
@@ -457,7 +457,7 @@ def test_methods_check_passes_for_xrd(tmp_path):
                               (positions[2], 2200.0, 1.8, 0.6), (positions[3], 2000.0, 2.1, 0.6)])
     example = tmp_path / "raw" / "S-1_test.xrdml"
     example.parent.mkdir()
-    example.write_text(xrdml_text(x, y, "S-1"))
+    example.write_text(xrdml_text(x, y, "S-1"), encoding="utf-8")
     result = check("xrd", example, work_dir=tmp_path / "work")
     assert result["ok"], [c for c in result["checks"] if not c["ok"]]
     broken = check("xrd", tmp_path / "raw" / "absent.xrdml", work_dir=tmp_path / "work2")
@@ -474,18 +474,18 @@ def test_methods_new_scaffolds_and_never_overwrites(tmp_path):
     env = dict(os.environ, LABPIPE_CODE=str(project), LABPIPE_PROJECT=str(project),
                PYTHONPATH=str(REPO / "src"))      # code and project: the folder is its own project
     example = tmp_path / "scan.dat"
-    example.write_text("1 2\n")
+    example.write_text("1 2\n", encoding="utf-8")
     created = _labpipe(env, "methods", "new", "demo", "--example", str(example),
                        "--description", "Demo technique")["created"]
     for path in ("src/labpipe/methods/demo/analyze.py", "config/demo.yaml",
                  "agents/demo-analyst.md", "tests/test_demo.py", "docs/methods/demo.md"):
         assert path in created and (project / path).exists()
-    analyze = (project / "src/labpipe/methods/demo/analyze.py").read_text()
+    analyze = (project / "src/labpipe/methods/demo/analyze.py").read_text(encoding="utf-8")
     assert 'METHOD = "demo"' in analyze and "labpipe.demo.results/1" in analyze
-    role = (project / "agents/demo-analyst.md").read_text()
+    role = (project / "agents/demo-analyst.md").read_text(encoding="utf-8")
     assert "name: demo-analyst" in role and "labpipe notes verify" in role and "{{" not in role
     import yaml
-    entry = yaml.safe_load((project / "methods.yaml").read_text())["methods"]["demo"]
+    entry = yaml.safe_load((project / "methods.yaml").read_text(encoding="utf-8"))["methods"]["demo"]
     assert entry["patterns"] == ["**/*.dat"] and entry["subagent"] == "demo-analyst"
     assert "already" in _labpipe(env, "methods", "new", "demo", "--example", str(example),
                                  "--description", "again")["error"]
@@ -506,14 +506,14 @@ def test_watcher_sees_unrecognised_files_but_not_system_files(tmp_path):
 def test_a_failed_ai_run_is_reported_as_an_error(tmp_path):
     fake = tmp_path / "claude"
     project, raw, env = _project(tmp_path, automation={"claude": str(fake)})
-    fake.write_text("#!/bin/sh\necho 'Warning: only a warning' >&2\necho 'Error: something broke' >&2\nexit 1\n")
+    fake.write_text("#!/bin/sh\necho 'Warning: only a warning' >&2\necho 'Error: something broke' >&2\nexit 1\n", encoding="utf-8")
     fake.chmod(0o755)
     with open(project / "config" / "local.yaml", "a") as stream:
         stream.write("agents: {harness: claude-code}\n")
     x, y = synthetic_pattern([(40.0, 5000.0, 1.0, 0.5)])
-    (raw / "XRD" / "SYN-6_test.xrdml").write_text(xrdml_text(x, y, "SYN-6"))
+    (raw / "XRD" / "SYN-6_test.xrdml").write_text(xrdml_text(x, y, "SYN-6"), encoding="utf-8")
     assert _labpipe(env, "automation", "run")["exit_code"] == 1
-    last = json.loads([line for line in (project / "logs" / "automation.log").read_text()
+    last = json.loads([line for line in (project / "logs" / "automation.log").read_text(encoding="utf-8")
                        .splitlines() if '"event": "notify"' in line][-1])["message"]
     assert "AI run stopped with an error (Error: something broke)" in last
     assert "1 of 1 measurement(s) still waiting" in last and "Open Claude Code in" in last

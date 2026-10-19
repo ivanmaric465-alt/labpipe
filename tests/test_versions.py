@@ -68,7 +68,7 @@ def test_docs_report_agents_and_infrastructure_change_no_version(src_copy):
     for name in ("report.py", "agents.py", "postdoc.py", "safety.py", "provenance.py",
                  "settings.py", "scanner.py", "cli.py"):
         _append(src_copy / name)
-    (src_copy.parent / "NOTES.md").write_text("docs are not even read")
+    (src_copy.parent / "NOTES.md").write_text("docs are not even read", encoding="utf-8")
     assert _snapshot() == before
 
 
@@ -123,7 +123,7 @@ def test_hashing_ignores_line_endings(src_copy):
 
 def test_a_lazy_import_inside_a_function_is_followed(src_copy):
     module = src_copy / "methods" / "sem" / "analyze.py"
-    module.write_text(module.read_text() + "\n\ndef _late():\n"
+    module.write_text(module.read_text(encoding="utf-8") + "\n\ndef _late():\n"
                       "    from labpipe.methods.xrd import lattice\n    return lattice\n")
     assert "labpipe.methods.xrd.lattice" in versions.describe("sem")["analysis_modules"]
 
@@ -144,7 +144,7 @@ def analysed(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("analysed")
     project, raw, env = _project(tmp)
     x, y = synthetic_pattern(PEAKS)
-    (raw / "XRD" / "SYN-1_test.xrdml").write_text(xrdml_text(x, y, "SYN-1"))
+    (raw / "XRD" / "SYN-1_test.xrdml").write_text(xrdml_text(x, y, "SYN-1"), encoding="utf-8")
     _labpipe(env, "scan")
     [pending] = _labpipe(env, "pending")
     result = _labpipe(env, "xrd", "analyze", "--entry", pending["entry_id"])
@@ -172,17 +172,17 @@ def project(analysed, tmp_path):
             return _labpipe(self.env, *args)
 
         def entry(self):
-            return json.loads((target / "manifest.json").read_text())["entries"][eid]
+            return json.loads((target / "manifest.json").read_text(encoding="utf-8"))["entries"][eid]
 
         def edit_entry(self, **changes):
             path = target / "manifest.json"
-            data = json.loads(path.read_text())
+            data = json.loads(path.read_text(encoding="utf-8"))
             for key, value in changes.items():
                 if value is None:
                     data["entries"][eid].pop(key, None)
                 else:
                     data["entries"][eid][key] = value
-            path.write_text(json.dumps(data))
+            path.write_text(json.dumps(data), encoding="utf-8")
     return Project()
 
 
@@ -191,7 +191,7 @@ def test_manifest_and_provenance_record_both_versions(project):
     expected = project.run("methods", "versions")["xrd"]
     assert entry["analysis_version"] == expected["analysis_version"]
     assert entry["plot_version"] == expected["plot_version"]
-    record = json.loads((project.root / entry["output_dir"] / "provenance.json").read_text())
+    record = json.loads((project.root / entry["output_dir"] / "provenance.json").read_text(encoding="utf-8"))
     assert record["code"]["analysis_version"] == expected["analysis_version"]
     assert record["code"]["plot_version"] == expected["plot_version"]
     assert "commit" in record["code"]
@@ -199,7 +199,9 @@ def test_manifest_and_provenance_record_both_versions(project):
 
 def test_replay_still_reproduces_with_versions_recorded(project):
     entry = project.entry()
-    out = project.run("replay", str(project.root / entry["output_dir"] / "provenance.json"))
+    # --force: the commit check is replay's own (a clean tree); here only the outputs matter
+    out = project.run("replay", str(project.root / entry["output_dir"] / "provenance.json"),
+                      "--force")
     assert out["all_outputs_identical"] is True, out
 
 
@@ -258,6 +260,8 @@ def test_failed_entry_without_a_version_retries_on_a_new_commit(project):
 def test_migration_adopts_the_versions_when_analysed_with_the_current_commit(project):
     expected = project.run("methods", "versions")["xrd"]
     current = project.run("scan")["code_version"]
+    if current.endswith("+dirty"):
+        pytest.skip("adopting needs a clean working tree (the rule under test)")
     project.edit_entry(analysis_version=None, plot_version=None, code_version=current)
     project.run("scan")
     entry = project.entry()

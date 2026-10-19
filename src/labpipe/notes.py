@@ -117,7 +117,7 @@ def verify(notes_path: Path, results: dict[str, Any], provenance: dict[str, Any]
     if accepted and not any(sha in text for sha in accepted):
         problems.append("notes do not name the results.json sha256 they describe "
                         "(they may describe an older analysis)")
-    return {"notes": str(notes_path.relative_to(PROJECT_ROOT)) if notes_path.is_relative_to(
+    return {"notes": notes_path.relative_to(PROJECT_ROOT).as_posix() if notes_path.is_relative_to(
                 PROJECT_ROOT) else str(notes_path),
             "ok": not problems, "problems": problems, "numbers_checked": len(matched) + len(unmatched),
             "unmatched": unmatched, "review_codes_required": review_codes,
@@ -179,4 +179,4 @@ def retire(config: dict, eid: str) -> dict[str, Any]:
     target = (notes.parent.parent / "_superseded" / entry["measurement_id"]
               / f"{_stamp()}-notes" / "notes.md")
     _move(notes, target, config)
-    return {"entry_id": eid, "retired": str(target.relative_to(PROJECT_ROOT))}
+    return {"entry_id": eid, "retired": target.relative_to(PROJECT_ROOT).as_posix()}
