@@ -372,6 +372,9 @@ def pipeline_container_block() -> dict:
 # ---- commands ------------------------------------------------------------------------
 
 def _prepare() -> tuple[dict, dict, str]:
+    if local_container_block() is None:
+        raise ContainerError("container mode is not set up in config/local.yaml (no "
+                             "`container:` block): run `labpipe container setup`")
     config = load_config()
     return config, config["container"], current_engine()
 

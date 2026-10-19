@@ -81,7 +81,8 @@ def _environment() -> list[dict[str, Any]]:
     if _synced(Path(sys.prefix)):
         items.append(_item("venv_location", "warn", f"virtual environment {sys.prefix} is inside a "
                            "synced folder", "recreate it outside synced folders (README → Install)"))
-    lock = PROJECT_ROOT / "requirements.lock"
+    # inside the container the image's own lock applies (container/requirements.lock)
+    lock = PROJECT_ROOT / ("container" if in_container() else "") / "requirements.lock"
     if lock.exists():
         mismatched = []
         for line in lock.read_text(encoding="utf-8").splitlines():

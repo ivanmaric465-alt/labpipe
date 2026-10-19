@@ -209,3 +209,9 @@ def test_doctor_reports_container_state(monkeypatch):
     state.update(running=False, next="labpipe container start")
     [item] = doctor._container()
     assert item["status"] == "todo" and item["next"] == "labpipe container start"
+
+
+def test_commands_refuse_without_container_block(monkeypatch):
+    monkeypatch.setattr(ct, "local_container_block", lambda: None)
+    with pytest.raises(ct.ContainerError, match="labpipe container setup"):
+        ct._prepare()

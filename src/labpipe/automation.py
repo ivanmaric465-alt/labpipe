@@ -23,7 +23,7 @@ Settings (config/local.yaml):
 
     automation:
       check_every_seconds: 60
-      settle_minutes: 3            # also used by `labpipe scan`
+      settle_minutes: 3            # also used by `labpipe scan` (else pipeline.yaml's)
       nightly_at: "02:00"          # safety net
       max_measurements_per_run: 10 # the rest follows in the next run
       max_budget_usd: 5            # per AI run
@@ -333,9 +333,11 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
         if not work["pending"] and not work["notes"]:
             if code_only:
                 return {"status": "finished", "exit_code": 0, "done": code_only, "failed": [],
-                        "remaining": 0, "ai": False}
-            _log(config, {"event": "nothing_to_do", "trigger": reason})
-            return {"status": "nothing_to_do"}
+                        "remaining": 0, "ai": False,
+                        "settling": scan["counts"].get("settling", 0)}
+            _log(config, {"event": "nothing_to_do", "trigger": reason,
+                          "settling": scan["counts"].get("settling", 0)})
+            return {"status": "nothing_to_do", "settling": scan["counts"].get("settling", 0)}
         queued = work["pending"] + [i for i in work["notes"] if i not in work["pending"]]
         todo_ids = queued[:max(1, int(chosen["max_measurements_per_run"]))]
         remaining = len(queued) - len(todo_ids)
@@ -461,12 +463,17 @@ def _start_page(config: dict) -> None:
 
 def watch(config: dict) -> None:
     chosen = settings(config)
-    interval, settle = chosen["check_every_seconds"], 60 * chosen["settle_minutes"]
+    # the scan's settle time (automation.settle_minutes overrides pipeline.yaml in
+    # load_pipeline_config), so the watcher never runs a pass the scan still waits out
+    interval, settle = chosen["check_every_seconds"], 60 * float(config["settle_minutes"])
     _log(config, {"event": "watch_started", "check_every_seconds": interval,
-                  "settle_minutes": chosen["settle_minutes"]})
+                  "settle_minutes": config["settle_minutes"]})
     _start_page(config)
-    more = _more_batches(run(config, reason="watch started"))
-    last, changed_at = _snapshot(config), None
+    result = run(config, reason="watch started")
+    more = _more_batches(result)
+    last = _snapshot(config)
+    # files still settling: look again once they have had time to settle
+    changed_at = time.time() if result.get("settling") else None
     started_with = code_version()
     inside = in_container()   # no systemd timer there: the watcher also does the nightly pass
     last_nightly = _last_nightly(config) if inside else None
@@ -488,8 +495,9 @@ def watch(config: dict) -> None:
         if current != last:
             changed_at, last = time.time(), current
         elif changed_at is not None and time.time() - changed_at >= settle:
-            changed_at = None
-            more = _more_batches(run(config, reason="change detected"))
+            result = run(config, reason="change detected")
+            more = _more_batches(result)
+            changed_at = time.time() if result.get("settling") else None
         elif more:
             more = _more_batches(run(config, reason="next batch"))
 
