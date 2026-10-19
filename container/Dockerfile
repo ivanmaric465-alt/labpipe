@@ -42,6 +42,8 @@ RUN chmod 0755 /usr/local/bin/labpipe /usr/local/bin/labpipe-entrypoint
 
 # The code, last: a code change only rebuilds from here.
 COPY . /opt/labpipe
+# readable by the unprivileged user whatever the file modes on the host were
+RUN chmod -R a+rX,go-w /opt/labpipe
 
 ENV HOME=/home/labpipe \
     LABPIPE_CODE=/opt/labpipe \
