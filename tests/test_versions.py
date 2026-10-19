@@ -124,7 +124,8 @@ def test_hashing_ignores_line_endings(src_copy):
 def test_a_lazy_import_inside_a_function_is_followed(src_copy):
     module = src_copy / "methods" / "sem" / "analyze.py"
     module.write_text(module.read_text(encoding="utf-8") + "\n\ndef _late():\n"
-                      "    from labpipe.methods.xrd import lattice\n    return lattice\n")
+                      "    from labpipe.methods.xrd import lattice\n    return lattice\n",
+                      encoding="utf-8")
     assert "labpipe.methods.xrd.lattice" in versions.describe("sem")["analysis_modules"]
 
 

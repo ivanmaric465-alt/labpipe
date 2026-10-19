@@ -18,9 +18,9 @@ CHOSEN = {"claude": "/host/bin/claude", "codex": "/host/bin/codex", "max_budget_
 def _local(tmp_path, monkeypatch, roots="[{id: lab, path: /host/raw}, {id: other, path: /h/o}]",
            protected="[/host/sync]"):
     (tmp_path / "config").mkdir()
-    (tmp_path / "config" / "pipeline.yaml").write_text("analysis_dir: analysis\n")
+    (tmp_path / "config" / "pipeline.yaml").write_text("analysis_dir: analysis\n", encoding="utf-8")
     (tmp_path / "config" / "local.yaml").write_text(
-        f"raw_roots: {roots}\nprotected_paths: {protected}\n")
+        f"raw_roots: {roots}\nprotected_paths: {protected}\n", encoding="utf-8")
     monkeypatch.setattr(safety, "PROJECT_ROOT", tmp_path)
 
 
@@ -72,8 +72,8 @@ def test_claude_command(monkeypatch):
 
 
 def test_container_settings_are_host_settings_without_sandbox():
-    host = json.loads((REPO / ".claude" / "unattended.json").read_text())
-    container = json.loads((REPO / ".claude" / "unattended-container.json").read_text())
+    host = json.loads((REPO / ".claude" / "unattended.json").read_text(encoding="utf-8"))
+    container = json.loads((REPO / ".claude" / "unattended-container.json").read_text(encoding="utf-8"))
     assert "sandbox" in host and "sandbox" not in container
     assert container == {k: v for k, v in host.items() if k != "sandbox"}
 
@@ -100,7 +100,7 @@ def test_codex_trust_reads_codex_home_and_project(tmp_path, monkeypatch):
     from labpipe import agents
     (tmp_path / "home").mkdir()
     (tmp_path / "home" / "config.toml").write_text(
-        f"[projects.'{tmp_path}']\ntrust_level = \"trusted\"\n")   # literal string: Windows paths
+        f"[projects.'{tmp_path}']\ntrust_level = \"trusted\"\n", encoding="utf-8")   # literal string: Windows paths
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "home"))
     assert agents.codex_trust(tmp_path) == "trusted"
     monkeypatch.delenv("CODEX_HOME")
@@ -128,9 +128,9 @@ def test_last_nightly_from_log(tmp_path, monkeypatch):
              "trigger": "nightly"},
             {"utc": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "event": "run_finished",
              "trigger": "manual"}]
-    (tmp_path / "logs" / "automation.log").write_text("\n".join(map(json.dumps, rows)) + "\n")
+    (tmp_path / "logs" / "automation.log").write_text("\n".join(map(json.dumps, rows)) + "\n", encoding="utf-8")
     assert automation._last_nightly(CONFIG) == now.astimezone().date()
-    (tmp_path / "logs" / "automation.log").write_text("")
+    (tmp_path / "logs" / "automation.log").write_text("", encoding="utf-8")
     assert automation._last_nightly(CONFIG) is None
 
 
@@ -148,7 +148,7 @@ def test_provenance_runtime(monkeypatch):
 def test_replay_resolves_input_through_raw_root(tmp_path):
     raw = tmp_path / "data" / "lab"
     (raw / "XRD").mkdir(parents=True)
-    (raw / "XRD" / "a.xy").write_text("1 2")
+    (raw / "XRD" / "a.xy").write_text("1 2", encoding="utf-8")
     config = {"raw_roots": [{"id": "lab", "path": str(raw)}]}
     recorded = {"path": "/host/gone/XRD/a.xy", "relative_path": "XRD/a.xy", "raw_root": "lab"}
     assert replay._input_path(recorded, config) == raw / "XRD" / "a.xy"

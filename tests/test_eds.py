@@ -97,7 +97,7 @@ def test_eds_sigma_columns_are_uncertainty_not_composition():
 def test_eds_recognises_reports_and_their_images_only(tmp_path):
     report = make_example(tmp_path)
     (tmp_path / "photo.jpg").write_bytes((tmp_path / "s-90.jpg").read_bytes())
-    (tmp_path / "page.htm").write_text("<html>hello</html>")
+    (tmp_path / "page.htm").write_text("<html>hello</html>", encoding="utf-8")
     assert analyze.recognise(report) and analyze.recognise(tmp_path / "s-91.jpg")
     assert not analyze.recognise(tmp_path / "photo.jpg")
     assert not analyze.recognise(tmp_path / "page.htm")

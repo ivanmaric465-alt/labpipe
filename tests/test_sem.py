@@ -70,7 +70,7 @@ def test_sem_micrometre_bar_and_unreadable_bar(tmp_path):
 def test_sem_recognises_only_jeol_files(tmp_path):
     image = make_example(tmp_path)
     (tmp_path / "other.tif").write_bytes(image.read_bytes())
-    (tmp_path / "LSV.txt").write_text("Potential applied (V);Time (s)\n")
+    (tmp_path / "LSV.txt").write_text("Potential applied (V);Time (s)\n", encoding="utf-8")
     assert analyze.recognise(image) and analyze.recognise(image.with_suffix(".txt"))
     assert not analyze.recognise(tmp_path / "other.tif")
     assert not analyze.recognise(tmp_path / "LSV.txt")

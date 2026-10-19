@@ -253,7 +253,7 @@ def test_agents_render_codex_toml():
 def test_codex_trust_reads_user_config(tmp_path, monkeypatch):
     from labpipe import agents
     (tmp_path / "config.toml").write_text(
-        f"model = 'x'\n[projects.'{tmp_path / 'repo'}']\ntrust_level = 'trusted'\n")
+        f"model = 'x'\n[projects.'{tmp_path / 'repo'}']\ntrust_level = 'trusted'\n", encoding="utf-8")
     # (single quotes = TOML literal strings, as Codex writes them: Windows backslashes stay)
     (tmp_path / "repo").mkdir()
     monkeypatch.setenv("CODEX_HOME", str(tmp_path))

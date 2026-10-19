@@ -29,7 +29,7 @@ def _config(tmp_path, monkeypatch, **files) -> Path:
     config = tmp_path / "config"
     (config / "measurements" / "xrd").mkdir(parents=True)
     (config / "xrd.yaml").write_text("background: {order: 4}\nphases: null\n"
-                                     "plot: {width_in: 3.25, dpi: 300}\n")
+                                     "plot: {width_in: 3.25, dpi: 300}\n", encoding="utf-8")
     shutil.copy(REPO / "config" / "plots.yaml", config / "plots.yaml")
     for name, text in files.items():
         (config / name.replace("__", "/")).write_text(text, encoding="utf-8")

@@ -111,7 +111,7 @@ def _project(tmp_path: Path, automation: dict | None = None) -> tuple[Path, Path
     block = {"settle_minutes": 0, "notify": {"desktop": False}, **(automation or {})}
     (project / "config" / "local.yaml").write_text(
         f"raw_roots: [{{id: lab, path: '{raw.as_posix()}'}}]\nprotected_paths: []\n"
-        f"automation: {json.dumps(block)}\n")
+        f"automation: {json.dumps(block)}\n", encoding="utf-8")
     env = dict(os.environ, LABPIPE_PROJECT=str(project), PYTHONPATH=str(REPO / "src"))
     env.pop("LABPIPE_ROOT", None)
     return project, raw, env
@@ -131,7 +131,7 @@ def test_end_to_end_scan_analyse_rescan(tmp_path):
              (positions[2], 2200.0, 1.8, 0.6), (positions[3], 2000.0, 2.1, 0.6)]
     x, y = synthetic_pattern(peaks)
     (raw / "XRD" / "SYN-1_test.xrdml").write_text(xrdml_text(x, y, "SYN-1"), encoding="utf-8")
-    (raw / "XRD" / "SYN-1_test.xy").write_text("\n".join(f"{a} {b}" for a, b in zip(x, y)))
+    (raw / "XRD" / "SYN-1_test.xy").write_text("\n".join(f"{a} {b}" for a, b in zip(x, y)), encoding="utf-8")
     (raw / "XRD" / "SYN-1_test.rd").write_bytes(b"\x00binary")
     (raw / "XRD" / "weird name.xrdml").write_text(xrdml_text(x, y), encoding="utf-8")
     raw_before = {p.name: p.read_bytes() for p in (raw / "XRD").iterdir()}
@@ -173,13 +173,13 @@ def test_settings_precedence_and_typos(tmp_path, monkeypatch):
     config = tmp_path / "config"
     (config / "measurements" / "xrd").mkdir(parents=True)
     (config / "xrd.yaml").write_text("background: {order: 4, anchor_ranges_deg: []}\n"
-                                     "phases: null\n")
+                                     "phases: null\n", encoding="utf-8")
     shutil.copy(REPO / "config" / "plots.yaml", config / "plots.yaml")
     (config / "samples.yaml").write_text(
         "presets: {p1: {xrd: {background: {order: 3}, phases: [Pt]}}}\n"
-        "samples: {S-1: {presets: [p1], xrd: {phases: [Pd]}}}\n")
+        "samples: {S-1: {presets: [p1], xrd: {phases: [Pd]}}}\n", encoding="utf-8")
     (config / "measurements" / "xrd" / "S-1_a.yaml").write_text(
-        "note: user asked on 2026-10-16\nbackground: {anchor_ranges_deg: [[30, 35]]}\n")
+        "note: user asked on 2026-10-16\nbackground: {anchor_ranges_deg: [[30, 35]]}\n", encoding="utf-8")
     monkeypatch.setattr(settings, "CONFIG", config)
     monkeypatch.setattr(settings, "DEFAULTS", config)
     resolved, sources = settings.resolve("xrd", "S-1", "S-1_a")
@@ -199,7 +199,7 @@ def test_template_method_fulfils_the_contract(tmp_path):
     import yaml
     from labpipe.methods.template import analyze as template
     data = tmp_path / "S-1_curve.txt"
-    data.write_text("# x y\n" + "\n".join(f"{i} {i * (20 - i)}" for i in range(21)))
+    data.write_text("# x y\n" + "\n".join(f"{i} {i * (20 - i)}" for i in range(21)), encoding="utf-8")
     settings = yaml.safe_load((Path(template.__file__).parent / "config.example.yaml").read_text(encoding="utf-8"))
     summary = template.run(data, tmp_path / "out", settings=settings, pipeline=False,
                            context={"sample_id": "S-1", "measurement_id": "S-1_curve"})
@@ -284,7 +284,7 @@ def test_roots_rename_keeps_entries(tmp_path):
     _labpipe(env, "scan")
     before = _labpipe(env, "pending")[0]
     local = project / "config" / "local.yaml"
-    local.write_text(local.read_text(encoding="utf-8").replace("id: lab", "id: renamed"))
+    local.write_text(local.read_text(encoding="utf-8").replace("id: lab", "id: renamed"), encoding="utf-8")
     assert _labpipe(env, "roots", "rename", "lab", "renamed")["renamed"] == 1
     assert _labpipe(env, "scan")["changes"] == []          # same files, nothing new
     after = _labpipe(env, "pending")[0]
@@ -418,7 +418,7 @@ def test_automation_health_reports_failed_runs(tmp_path, monkeypatch):
     assert automation.health(config)["status"] == "ok"   # no run yet
     log.write_text(json.dumps({"utc": "2026-10-16T21:08:00Z", "event": "run_finished",
                                "exit_code": 0, "done": ["a"], "failed": [],
-                               "cost_usd": 0.395}) + "\n")
+                               "cost_usd": 0.395}) + "\n", encoding="utf-8")
     report = automation.health(config)
     assert report["status"] == "ok" and "cost 0.40 USD" in report["message"]
     with open(log, "a") as stream:
@@ -428,7 +428,7 @@ def test_automation_health_reports_failed_runs(tmp_path, monkeypatch):
     assert report["status"] == "warn" and "FAILED" in report["message"] and report["next"]
     (tmp_path / "manifest.json").write_text(json.dumps({"schema": "labpipe.manifest/1", "entries": {
         "x": {"entry_id": "x", "status": "pending",
-              "events": [{"utc": "2026-10-10T00:00:00Z", "to": "pending"}]}}}))
+              "events": [{"utc": "2026-10-10T00:00:00Z", "to": "pending"}]}}}), encoding="utf-8")
     report = automation.health(config, now=time.time())
     assert report["details"]["waiting_long"] == ["x"]
 

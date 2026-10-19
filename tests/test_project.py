@@ -155,7 +155,7 @@ def test_project_new_creates_the_structure(tmp_path):
 def test_project_new_takes_the_agents_from_the_users_defaults(tmp_path, _home):
     (_home / ".config" / "labpipe").mkdir(parents=True)
     (_home / ".config" / "labpipe" / "defaults.yaml").write_text(
-        "agents: {harness: codex, models: {supervisor: openai/x}}\n")
+        "agents: {harness: codex, models: {supervisor: openai/x}}\n", encoding="utf-8")
     first, second = tmp_path / "d1", tmp_path / "d2"
     first.mkdir(), second.mkdir()
     result = project.new(tmp_path / "work" / "p", [str(first), str(second), str(tmp_path / "d1")])
@@ -218,11 +218,11 @@ def test_defaults_come_from_the_code_and_lab_files_from_the_project(tmp_path, mo
     folder = _in_project(monkeypatch, Path(_new(tmp_path)["project"]))
     monkeypatch.setattr(settings, "CONFIG", folder / "config")
     (folder / "config" / "lab.yaml").write_text("xrd: {background: {order: 5}}\n"
-                                                "plots: {font_size: 8}\n")
+                                                "plots: {font_size: 8}\n", encoding="utf-8")
     (folder / "config" / "samples.yaml").write_text("samples: {S-1: {xrd: {phases: [Pd]}}}\n", encoding="utf-8")
     (folder / "config" / "measurements" / "xrd").mkdir(parents=True)
     (folder / "config" / "measurements" / "xrd" / "S-1_a.yaml").write_text(
-        "note: x\nbackground: {order: 2}\n")
+        "note: x\nbackground: {order: 2}\n", encoding="utf-8")
     assert not (folder / "config" / "xrd.yaml").exists()         # no copy of the defaults
     resolved, sources = settings.resolve("xrd", "S-1", "S-1_a")
     assert resolved["background"]["order"] == 2 and resolved["phases"] == ["Pd"]
@@ -353,7 +353,7 @@ def test_overlays_are_appended_and_extra_roles_added(tmp_path):
     (folder / "lab" / "agents" / "xrd-analyst.md").write_text("Call the support Vulcan.\n", encoding="utf-8")
     (folder / "lab" / "agents" / "tem-reader.md").write_text(
         "---\nname: tem-reader\nrole: analyst\ndescription: Reads TEM notes.\n"
-        "capabilities: [shell, read]\n---\nRead the TEM description.\n")
+        "capabilities: [shell, read]\n---\nRead the TEM description.\n", encoding="utf-8")
     result = project.sync(folder)
     assert result["problems"] == []
     analyst = (folder / ".claude" / "agents" / "xrd-analyst.md").read_text(encoding="utf-8")
@@ -395,7 +395,7 @@ def test_an_overlay_for_a_role_that_does_not_exist_is_reported(tmp_path, monkeyp
 def test_dev_mode_sync_only_writes_the_agent_files(tmp_path):
     code = _code_copy(tmp_path)
     (code / "config" / "local.yaml").write_text("raw_roots: []\nprotected_paths: []\nagents:\n"
-                                                "  harness: claude-code\n")
+                                                "  harness: claude-code\n", encoding="utf-8")
     tracked = [p for p in code.rglob("*") if p.is_file()]
     before = {p: p.read_bytes() for p in tracked}
     status, out = _run(["project", "sync"], code, LABPIPE_CODE=str(code),
