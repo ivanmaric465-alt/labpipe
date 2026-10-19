@@ -96,6 +96,7 @@ config/                 local.yaml (this machine), lab.yaml, samples.yaml, sampl
 context/                the user's project context and documents
 lab/LAB.md              the lab's conventions for all agents
 lab/agents/<role>.md    appended to that role; <new>.md with frontmatter = an extra role
+lab/references/xrd/     the lab's own XRD reference phases (`labpipe xrd refs add`)
 analysis/  manifest.json  logs/       results and state
 AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's additions" (LAB.md)
 .labpipe/                             generated: docs/, config/ (defaults), methods.yaml, references/,
@@ -183,7 +184,8 @@ characters, stored per entry in `manifest.json` and in `provenance.json` → `co
 
 - **Analysis version** of a method: the modules its `module` in `methods.yaml` imports
   (`labpipe.*`, followed through the AST, also imports inside functions), plus the files in
-  `analysis_data:` (XRD: `references/xrd/patterns/*.json`: a rebuilt or added phase can change
+  `analysis_data:` (globs in the code folder; `lab/…` ones in the project. XRD:
+  `references/xrd/patterns/*.json` and `lab/references/xrd/patterns/*.json`: a rebuilt or added phase can change
   which phase matches, so XRD analyses become out of date; the reference hashes are in
   provenance too). Left out:
   - the plot modules (`plot_modules:` in `methods.yaml`) and `labpipe.plotting`;

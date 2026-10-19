@@ -33,15 +33,16 @@ from labpipe.methods.xrd import fitting, lattice, peaks as peakfinder, plot, siz
 from labpipe.methods.xrd import standard as std
 from labpipe.methods.xrd.io_xrdml import PatternFile, read_xrdml
 from labpipe.methods.xrd.io_xy import read_xy
-from labpipe.methods.xrd.references import load_references, match_reference
+from labpipe.methods.xrd.references import load_all, match_reference
 from labpipe.naming import sample_ids_agree
 from labpipe.plotting import acs
 from labpipe.safety import (CODE_ROOT, PROJECT_ROOT, assert_not_protected, assert_pipeline_writable,
-                            atomic_write_bytes)
+                            atomic_write_bytes, dev_mode)
 
 METHOD = "xrd"
 RESULTS_SCHEMA = "labpipe.xrd.results/2"
 REFERENCE_DIR = CODE_ROOT / "references" / "xrd" / "patterns"
+LAB_REFERENCE_DIR = Path("lab") / "references" / "xrd" / "patterns"   # in the project
 CUBIC_F = ("fcc", "rocksalt")  # face-centred cubic lattices: same reflection conditions
 
 
@@ -564,7 +565,10 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
         broad.append(component)
     fit.pop("peaks")
 
-    references = load_references(REFERENCE_DIR)
+    try:
+        references = load_all(REFERENCE_DIR, None if dev_mode() else PROJECT_ROOT / LAB_REFERENCE_DIR)
+    except ValueError as exc:
+        raise AnalysisError(str(exc)) from exc
     allowed = config["phases"]
     if allowed is not None:
         unknown = sorted(set(allowed) - {r.id for r in references})
@@ -703,7 +707,9 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
         method=METHOD, entry_point="labpipe.methods.xrd.analyze.run", input_path=input_path,
         input_sha256=input_sha, context=context, settings=config,
         settings_sources=settings_sources, outputs=outputs, out_dir=out_dir, extra={
-            "references": [{"id": r.id, "file": f"references/xrd/patterns/{r.file}", "root": "code",
+            "references": [{"id": r.id, "root": r.origin,
+                            "file": (f"references/xrd/patterns/{r.file}" if r.origin == "code"
+                                     else f"{LAB_REFERENCE_DIR.as_posix()}/{r.file}"),
                             "sha256": r.file_sha256, "cod_id": r.source.get("cod_id"),
                             "cif_sha256": r.source["cif_sha256"]} for r in references],
             "calibration": ({"file": config["sizing"]["calibration_file"],

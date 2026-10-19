@@ -51,7 +51,8 @@ def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[
     if sha256_file(input_path) != record["input"]["sha256"]:
         return {"error": "input file content differs from the recorded sha256"}
     for reference in record.get("references", []):
-        path = CODE_ROOT / reference["file"]   # references come with the code
+        # shipped references come with the code; the lab's own are in the project (lab/)
+        path = (PROJECT_ROOT if reference.get("root") == "project" else CODE_ROOT) / reference["file"]
         if not path.exists() or sha256_file(path) != reference["sha256"]:
             problems.append(f"reference {reference['file']} differs from the recorded hash")
     if problems and not force:

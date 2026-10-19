@@ -20,6 +20,7 @@ class Reference:
     source: dict[str, Any]
     file: str
     file_sha256: str
+    origin: str = "code"        # "code": shipped with labpipe; "project": the lab's (lab/references/xrd)
 
 
 def bragg_two_theta(d: float, wavelength: float) -> float | None:
@@ -29,7 +30,7 @@ def bragg_two_theta(d: float, wavelength: float) -> float | None:
     return math.degrees(2.0 * math.asin(argument))
 
 
-def load_references(directory: Path) -> list[Reference]:
+def load_references(directory: Path, origin: str = "code") -> list[Reference]:
     references = []
     for path in sorted(directory.glob("*.json")):
         raw = path.read_bytes()
@@ -37,7 +38,22 @@ def load_references(directory: Path) -> list[Reference]:
         references.append(Reference(
             id=data["id"], role=data["role"], structure_type=data["structure_type"],
             cell=data["cell"], reflections=data["reflections"], source=data["source"],
-            file=str(path.name), file_sha256=hashlib.sha256(raw).hexdigest()))
+            file=str(path.name), file_sha256=hashlib.sha256(raw).hexdigest(), origin=origin))
+    return references
+
+
+def load_all(code_dir: Path, lab_dir: Path | None) -> list[Reference]:
+    """The references shipped with labpipe plus the lab's own (lab/references/xrd/patterns,
+    which updates never touch). A lab reference may not reuse a shipped id."""
+    references = load_references(code_dir)
+    if lab_dir is not None and lab_dir.is_dir():
+        shipped = {r.id for r in references}
+        lab = load_references(lab_dir, origin="project")
+        clash = sorted(r.id for r in lab if r.id in shipped)
+        if clash:
+            raise ValueError(f"lab/references/xrd uses ids that come with labpipe: {clash}; "
+                             "give the lab's references other ids")
+        references += lab
     return references
 
 

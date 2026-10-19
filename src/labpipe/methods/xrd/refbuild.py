@@ -5,6 +5,10 @@
                          [--cod-id N] [--note "why this entry"]
     labpipe xrd refs build [--id NAME]
 
+In a project, references you add go to lab/references/xrd/ (cif/, patterns/, phases.yaml),
+which updates never touch; the ones that come with labpipe stay in the code folder. In the
+repository itself (dev mode) `add` and `build` write the shipped ones.
+
 Building needs the optional 'refbuild' dependency (pymatgen):
     pip install -e ".[refbuild]"
 The analysis itself never imports pymatgen; it reads patterns/<id>.json and
@@ -27,10 +31,12 @@ from pathlib import Path
 
 import yaml
 
+from labpipe import safety
 from labpipe.safety import CODE_ROOT, atomic_write_text
 
 REFERENCES = CODE_ROOT / "references" / "xrd"
 CATALOGUE = REFERENCES / "phases.yaml"
+LAB_EMPTY = "# This lab's own XRD reference phases (`labpipe xrd refs add`).\nphases: []\n"
 WAVELENGTH = 1.540598
 TWO_THETA_RANGE = (0.0, 150.0)
 STRUCTURE_TYPES = ("fcc", "rocksalt", "hcp", "bcc", "diamond", "rutile", "other")
@@ -59,13 +65,25 @@ def _authors(text: str) -> list[str]:
     return authors
 
 
+def _lab() -> Path | None:
+    """Where this project's own references go (None in dev mode: the shipped ones)."""
+    return None if safety.dev_mode() else safety.PROJECT_ROOT / "lab" / "references" / "xrd"
+
+
 def _catalogue() -> dict:
-    return yaml.safe_load(CATALOGUE.read_text(encoding="utf-8"))
+    """All references: the shipped ones, then the lab's, each entry tagged with its folder."""
+    phases = [{**e, "_dir": REFERENCES}
+              for e in yaml.safe_load(CATALOGUE.read_text(encoding="utf-8"))["phases"]]
+    lab = _lab()
+    if lab is not None and (lab / "phases.yaml").exists():
+        own = yaml.safe_load((lab / "phases.yaml").read_text(encoding="utf-8")) or {}
+        phases += [{**e, "_dir": lab} for e in own.get("phases") or []]
+    return {"phases": phases}
 
 
 def _cif_path(entry: dict) -> Path:
     relative = entry.get("cif") or f"cif/{entry['cod_id']}.cif"
-    return REFERENCES / relative
+    return entry["_dir"] / relative
 
 
 def build_one(entry: dict) -> dict:
@@ -128,11 +146,11 @@ def build(only: str | None = None) -> list[str]:
         if only and entry["id"] != only:
             continue
         data = build_one(entry)
-        atomic_write_text(REFERENCES / "patterns" / f"{entry['id']}.json",
+        atomic_write_text(entry["_dir"] / "patterns" / f"{entry['id']}.json",
                           json.dumps(data, indent=1, ensure_ascii=False) + "\n", pipeline=False)
         built.append(entry["id"])
     if only and not built:
-        raise SystemExit(f"no reference with id {only!r} in {CATALOGUE.name}")
+        raise SystemExit(f"no reference with id {only!r}")
     return built
 
 
@@ -142,38 +160,43 @@ def add(cif: Path, *, phase_id: str, structure_type: str, role: str, cod_id: int
         raise SystemExit(f"invalid id {phase_id!r}: use letters, digits, _ . + -")
     if any(entry["id"] == phase_id for entry in _catalogue()["phases"]):
         raise SystemExit(f"a reference with id {phase_id!r} already exists")
-    target = REFERENCES / "cif" / f"{phase_id}.cif"
+    home = _lab() or REFERENCES
+    catalogue = home / "phases.yaml"
+    target = home / "cif" / f"{phase_id}.cif"
     if target.exists():
-        raise SystemExit(f"{target.relative_to(CODE_ROOT)} already exists")
+        raise SystemExit(f"{target} already exists")
     text = cif.read_text(encoding="utf-8", errors="replace")
     if "_cell_length_a" not in text:
         raise SystemExit(f"{cif} does not look like a CIF (no _cell_length_a)")
+    target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(cif, target)
     block = [f"  - id: {phase_id}", f"    cif: cif/{phase_id}.cif"]
     if cod_id:
         block.append(f"    cod_id: {cod_id}")
     block += [f"    structure_type: {structure_type}", f"    role: {role}",
               f"    note: {json.dumps(note or f'added from {cif.name}', ensure_ascii=False)}"]
-    content = CATALOGUE.read_text(encoding="utf-8")
+    content = catalogue.read_text(encoding="utf-8") if catalogue.exists() else LAB_EMPTY
+    content = content.replace("phases: []", "phases:")
     marker = "\nexcluded:"
     position = content.index(marker) if marker in content else len(content)
     content = content[:position].rstrip("\n") + "\n" + "\n".join(block) + "\n" + content[position:]
-    atomic_write_text(CATALOGUE, content, pipeline=False)
+    atomic_write_text(catalogue, content, pipeline=False)
     build(phase_id)
-    return json.loads((REFERENCES / "patterns" / f"{phase_id}.json").read_text(encoding="utf-8"))
+    return json.loads((home / "patterns" / f"{phase_id}.json").read_text(encoding="utf-8"))
 
 
 def listing() -> list[dict]:
     rows = []
     for entry in _catalogue()["phases"]:
-        pattern = REFERENCES / "patterns" / f"{entry['id']}.json"
+        pattern = entry["_dir"] / "patterns" / f"{entry['id']}.json"
         data = json.loads(pattern.read_text(encoding="utf-8")) if pattern.exists() else None
         rows.append({"id": entry["id"], "structure_type": entry["structure_type"],
                      "role": entry["role"], "cif": entry.get("cif"),
                      "cod_id": entry.get("cod_id"),
                      "a_angstrom": data["cell"]["a"] if data else None,
                      "c_angstrom": data["cell"]["c"] if data else None,
-                     "built": data is not None})
+                     "built": data is not None,
+                     "source": "labpipe" if entry["_dir"] == REFERENCES else "lab"})
     return rows
 
 

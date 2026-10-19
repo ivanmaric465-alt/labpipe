@@ -218,7 +218,7 @@ labpipe xrd refs add my_phase.cif --id NiO --structure-type rocksalt
 labpipe xrd refs build
 ```
 
-Do not commit licensed CIFs (ICSD, ICDD).
+In a project, the references you add are kept in `lab/references/xrd/` (updates never touch them). Do not commit licensed CIFs (ICSD, ICDD).
 
 ## Update
 

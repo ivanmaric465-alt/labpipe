@@ -17,6 +17,7 @@ labpipe project sync          # after a labpipe update, or a change in lab/
 |---|---|
 | "we call the support Vulcan", "answer in Croatian" | a sentence in `lab/LAB.md` (added to the end of `AGENTS.md` and `CLAUDE.md`), then `labpipe project sync` |
 | "the XRD analyst should always give Å" | `lab/agents/xrd-analyst.md`: plain sentences, appended to that role |
+| "add our own XRD reference phase" | `labpipe xrd refs add file.cif --id NAME --structure-type …`: kept in `lab/references/xrd/` (docs/methods/xrd.md → Reference phases) |
 | "we need our own agent role" | `lab/agents/<name>.md` starting with frontmatter (`name`, `role`, `description`, `capabilities`); see `lab/agents/README.md` |
 | "a second project" | `labpipe project new <another folder>`: its own settings, results, container and port |
 

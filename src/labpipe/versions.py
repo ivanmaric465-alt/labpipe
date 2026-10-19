@@ -104,10 +104,15 @@ def closure(start: str, excluded: set[str]) -> list[str]:
     return sorted(seen)
 
 
+def _data_root(pattern: str):
+    """Data globs starting with lab/ are the project's own (e.g. its XRD references)."""
+    return safety.PROJECT_ROOT if pattern.startswith("lab/") else safety.CODE_ROOT
+
+
 def _data_files(spec: dict[str, Any]) -> list[str]:
-    root = safety.CODE_ROOT
-    files = {p.relative_to(root).as_posix() for pattern in spec.get("analysis_data") or []
-             for p in root.glob(pattern) if p.is_file()}
+    files = {p.relative_to(_data_root(pattern)).as_posix()
+             for pattern in spec.get("analysis_data") or []
+             for p in _data_root(pattern).glob(pattern) if p.is_file()}
     return sorted(files)
 
 
@@ -135,11 +140,10 @@ def describe(method: str, methods: dict[str, dict[str, Any]] | None = None) -> d
     analysis = closure(spec["module"], set(plots))
     data = _data_files(spec)
     plot_all = sorted({*plots, *plotting_modules()})
-    root = safety.CODE_ROOT
     return {
         "analysis_version": _digest(
             [(n, read_source(n)) for n in analysis]
-            + [(f, (root / f).read_bytes().replace(b"\r\n", b"\n")) for f in data]),
+            + [(f, (_data_root(f) / f).read_bytes().replace(b"\r\n", b"\n")) for f in data]),
         "plot_version": _digest([(n, read_source(n)) for n in plot_all]),
         "analysis_modules": analysis,
         "analysis_data": data,
