@@ -47,6 +47,12 @@ Interactive work: in the container (`labpipe shell`, the same protections as aut
   - Claude Code: the user runs `claude setup-token` on the host (a one-year token); `labpipe container setup` stores it as a Podman/Docker secret, passed to the container as `CLAUDE_CODE_OAUTH_TOKEN`.
   - Codex: `labpipe container login codex` runs `codex login --device-auth` inside the container once (open a link, enter a code); the login stays in the labpipe volume.
 
+## `labpipe` commands started on the host
+When container mode is set up, `labpipe` on the host runs pipeline commands **inside the running container** (`podman/docker exec`, as the user, working folder mapped into `/labpipe`), with the same arguments, output and exit code. So every analysis uses the same image whoever starts it (a desktop app, an IDE, the user's terminal), reads raw data only through the read-only mount, and only one side writes `manifest.json` (file locks may not reach across the VM boundary on Windows and macOS).
+- Stay on the host: `guard` (the hook; must be fast), `container …`, `setup`, `init`, `doctor`, `agents sync`, `readonly-view`, `methods new | check` (development tasks).
+- If the container is not running, a forwarded command stops with "container not running: `labpipe container start`" instead of running on the host.
+- Paths in arguments: inside the repository they are mapped to `/labpipe/…`; others are refused.
+
 ## Interactive sessions and personal settings
 - `labpipe shell [claude|codex]` starts the agent tool inside the running container, in `/labpipe`, with the raw data read-only and the same network limits. On every OS this is the safe way to talk to the agent.
 - Skills, agents and settings for labpipe live in the repository (`.claude/`, `.codex/`, `.agents/skills/`), so they work on the host and in the container alike; develop them there.
