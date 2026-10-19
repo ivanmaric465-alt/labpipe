@@ -105,6 +105,18 @@ def resolve(method: str, sample_id: str | None,
     return config, sources
 
 
+def load_lab() -> tuple[dict[str, Any], str | None]:
+    """config/lab.yaml (the lab's own preferences, git-ignored): its sections and sha256,
+    or ({}, None) without the file. Sections: plots, report, and one per method."""
+    path = CONFIG / "lab.yaml"
+    if not path.exists():
+        return {}, None
+    data, digest = _load(path)
+    if not isinstance(data, dict):
+        raise SettingsError("config/lab.yaml: expected sections such as plots:, report:, xrd:")
+    return data, digest
+
+
 def fingerprint(config: dict[str, Any]) -> str:
     """sha256 of the resolved settings (canonical JSON)."""
     text = json.dumps(config, sort_keys=True, separators=(",", ":"), ensure_ascii=False)

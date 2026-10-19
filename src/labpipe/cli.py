@@ -68,7 +68,7 @@ def _print(value, as_json: bool = True) -> None:
 def cmd_init(args, config) -> int:
     """Create the git-ignored files from their examples; never overwrites."""
     created, existing = [], []
-    for name in ("local", "samples"):
+    for name in ("local", "samples", "lab"):
         target = PROJECT_ROOT / "config" / f"{name}.yaml"
         if target.exists():
             existing.append(str(target))

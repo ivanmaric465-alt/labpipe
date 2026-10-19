@@ -21,6 +21,7 @@ build/
 # Your lab's own settings: sample presets, sample-ID answers, per-measurement steering.
 # Recorded in every provenance.json; back them up or keep them in a private repo.
 /config/samples.yaml
+/config/lab.yaml
 /config/sample_ids.yaml
 /config/measurements/
 /config/ignore.yaml

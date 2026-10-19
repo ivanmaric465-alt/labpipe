@@ -1,0 +1,15 @@
+# Your lab's preferences. `labpipe init` copies this file to config/lab.yaml (git-ignored:
+# it is your lab's, never committed). Each section overrides labpipe's defaults; keys must
+# exist in the default file named, so a typo fails loudly. What each setting does:
+# docs/settings/README.md.
+
+# plots:                       # the look of all plots (defaults: config/plots.yaml)
+#   font_size: 9
+
+# report:                      # layout of analysis/report.html (defaults: config/report.yaml)
+#   group_by: sample           # sample | method | none
+
+# xrd:                         # lab-wide XRD settings (defaults: config/xrd.yaml)
+#   background: {order: 3}
+
+# eds:                         # lab-wide EDS settings (defaults: config/eds.yaml)
