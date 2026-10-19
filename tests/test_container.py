@@ -60,7 +60,8 @@ def test_run_args_docker_codex(tmp_path, monkeypatch):
                 "docker", claude_login=True)
     joined = " ".join(args)
     assert "keep-id" not in joined and "--user" not in args
-    assert "--env-file /home/u/.config/labpipe/claude.env" in joined and "--secret" not in joined
+    assert f"--env-file {Path('/home/u/.config/labpipe/claude.env')}" in joined
+    assert "--secret" not in joined
     assert "LABPIPE_ALLOWED_HOSTS=github.com,o.example" in joined
     assert f"{Path('~/raw').expanduser()}:/data/lab:ro" in joined
     assert "--env-file" not in " ".join(_run(_config(tmp_path), "docker"))
@@ -106,8 +107,9 @@ def test_native_watcher_refused_in_container_mode(tmp_path):
 def test_forward_refuses_outside_paths(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
+    outside = tmp_path / "elsewhere.json"   # absolute on every OS (Windows: with a drive)
     with pytest.raises(ct.ForwardError, match="outside the repository"):
-        _fwd(["replay", "/etc/passwd"], repo, repo)
+        _fwd(["replay", str(outside)], repo, repo)
     with pytest.raises(ct.ForwardError):
         _fwd(["replay", "../"], repo, repo)
 

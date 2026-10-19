@@ -100,7 +100,7 @@ def test_codex_trust_reads_codex_home_and_project(tmp_path, monkeypatch):
     from labpipe import agents
     (tmp_path / "home").mkdir()
     (tmp_path / "home" / "config.toml").write_text(
-        f'[projects."{tmp_path}"]\ntrust_level = "trusted"\n')
+        f"[projects.'{tmp_path}']\ntrust_level = \"trusted\"\n")   # literal string: Windows paths
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "home"))
     assert agents.codex_trust(tmp_path) == "trusted"
     monkeypatch.delenv("CODEX_HOME")
