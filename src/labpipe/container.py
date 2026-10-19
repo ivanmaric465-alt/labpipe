@@ -453,19 +453,30 @@ def cmd_stop(args) -> int:
     return result.returncode
 
 
-def cmd_status(args) -> int:
+def container_mode() -> bool:
+    """On the host with container mode set up (not inside the container itself)."""
+    return local_container_block() is not None and not os.environ.get("LABPIPE_IN_CONTAINER")
+
+
+def status_record() -> dict:
+    """State of this machine's container (for `container status` and doctor)."""
     _, cfg, engine = _prepare()
     record = inspect(engine, cfg["name"])
     state = (record or {}).get("State") or {}
     labels = ((record or {}).get("Config") or {}).get("Labels") or {}
     have, current = labels.get(HASH_LABEL), container_hash()
-    _say({"engine": engine, "name": cfg["name"], "exists": record is not None,
-          "running": bool(state.get("Running")), "started_at": state.get("StartedAt"),
-          "image_hash": have, "current_hash": current,
-          "image_up_to_date": have == current if record else None,
-          "page": page_url(cfg["port"], cfg.get("page_token", "")),
-          "next": None if (record and have == current) else
-          "labpipe container start --replace" if record else "labpipe container start"})
+    return {"engine": engine, "name": cfg["name"], "exists": record is not None,
+            "running": bool(state.get("Running")), "started_at": state.get("StartedAt"),
+            "image_hash": have, "current_hash": current,
+            "image_up_to_date": have == current if record else None,
+            "claude_login": claude_login_present(engine),
+            "page": page_url(cfg["port"], cfg.get("page_token", "")),
+            "next": None if (record and have == current) else
+            "labpipe container start --replace" if record else "labpipe container start"}
+
+
+def cmd_status(args) -> int:
+    _say(status_record())
     return 0
 
 
@@ -559,6 +570,7 @@ def cmd_setup(args) -> int:
     config = load_config()
     tag = build(engine, config["container"])
     _say({"engine": engine, "image": tag, "next": [
+        "labpipe agents sync",
         "claude setup-token   (on this computer), then: labpipe container login claude",
         "labpipe container start",
         "labpipe container login codex   (only if you use Codex)",

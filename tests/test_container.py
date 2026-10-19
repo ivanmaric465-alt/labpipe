@@ -194,3 +194,18 @@ def test_ensure_page_token_keeps_other_keys(tmp_path, monkeypatch):
     token = block["page_token"]
     assert ct.ensure_page_token() is False
     assert ct.local_container_block()["page_token"] == token
+
+
+def test_doctor_reports_container_state(monkeypatch):
+    from labpipe import doctor
+    state = {"name": "labpipe", "engine": "podman", "running": True, "image_up_to_date": True,
+             "claude_login": False, "page": "http://localhost:8765/?token=t", "next": None}
+    monkeypatch.setattr(ct, "status_record", lambda: dict(state))
+    monkeypatch.setattr(doctor, "load_pipeline_config",
+                        lambda: {"agents": {"harness": "claude-code"}})
+    items = {i["check"]: i for i in doctor._container()}
+    assert items["container"]["status"] == "ok" and "token=t" in items["container"]["message"]
+    assert items["container_login"]["status"] == "todo"
+    state.update(running=False, next="labpipe container start")
+    [item] = doctor._container()
+    assert item["status"] == "todo" and item["next"] == "labpipe container start"

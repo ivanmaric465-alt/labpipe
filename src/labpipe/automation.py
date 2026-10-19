@@ -613,7 +613,9 @@ def health(config: dict, now: float | None = None) -> dict[str, Any]:
     """For doctor: services running, last run succeeded, nothing waiting too long. Reads only."""
     now = time.time() if now is None else now
     problems, fixes = [], []
-    services = {} if in_container() else _services()   # no systemd inside the container
+    from labpipe.container import container_mode
+    # no systemd services inside the container, nor with container mode on the host
+    services = {} if in_container() or container_mode() else _services()
     stopped = [unit for unit, state in services.items() if state != "active"]
     if stopped:
         problems.append(f"not running: {', '.join(stopped)}")

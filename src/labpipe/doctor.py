@@ -20,6 +20,7 @@ import yaml
 
 from labpipe import manifest as mf
 from labpipe.registry import load_methods
+from labpipe.container import container_mode
 from labpipe.safety import PROJECT_ROOT, SetupError, in_container, load_pipeline_config
 
 SYNC_MARKERS = ("koofr", "onedrive", "dropbox", "google drive", "googledrive", "icloud",
@@ -105,6 +106,31 @@ def _environment() -> list[dict[str, Any]]:
     return items
 
 
+def _container() -> list[dict[str, Any]]:
+    """Container mode on this computer: running, up to date, logged in."""
+    from labpipe.container import ContainerError, status_record
+    try:
+        state = status_record()
+    except (ContainerError, SetupError) as exc:
+        return [_item("container", "todo", str(exc), "labpipe container setup")]
+    if not state["running"]:
+        return [_item("container", "todo", f"container {state['name']} is not running",
+                      state["next"] or "labpipe container start")]
+    items = [_item("container", "warn" if state["image_up_to_date"] is False else "ok",
+                   f"container {state['name']} running ({state['engine']}); notifications page: "
+                   f"{state['page']}" + ("; its image is older than container/"
+                                          if state["image_up_to_date"] is False else ""),
+                   "labpipe container start --replace" if state["image_up_to_date"] is False
+                   else None)]
+    harness = ((load_pipeline_config().get("agents") or {}).get("harness"))
+    if harness == "claude-code" and not state["claude_login"]:
+        items.append(_item("container_login", "todo", "the container has no Claude login, so "
+                           "automatic AI runs stop at 'Not logged in'",
+                           "the user runs `claude setup-token`, then `labpipe container login "
+                           "claude` and `labpipe container start --replace`"))
+    return items
+
+
 def _raw_roots(config: dict) -> tuple[list[dict[str, Any]], list[tuple[str, Path]]]:
     items, usable = [], []
     if not config["raw_roots"]:
@@ -125,6 +151,10 @@ def _raw_roots(config: dict) -> tuple[list[dict[str, Any]], list[tuple[str, Path
         is_protected = any(real == p or p in real.parents for p in protected)
         if read_only is True:
             items.append(_item(label, "ok", f"{path}: {how}"))
+        elif container_mode():
+            items.append(_item(label, "ok", f"{path}: writable on this computer; the container "
+                               "reads it read-only (container mode), and here the guard "
+                               "keeps agents out of it when it is in protected_paths"))
         elif read_only is None:
             items.append(_item(label, "warn", f"{path}: {how}", "confirm with the user"))
         else:
@@ -138,6 +168,8 @@ def _raw_roots(config: dict) -> tuple[list[dict[str, Any]], list[tuple[str, Path
             items.append(_item(f"protected:{root['id']}", "todo",
                                f"{path} is not listed in protected_paths",
                                "add it (and the writable original it mirrors) to protected_paths"))
+    if container_mode():
+        items.extend(_container())
     if in_container():
         items.append(_item("container", "ok", "inside the container: the raw data is the "
                            "read-only mount, Claude Code's and Codex's own sandboxes and the "
