@@ -41,6 +41,13 @@ The contract `run(...)` fulfils is in the docstring of `src/labpipe/methods/temp
 - declare the numbers worth comparing across samples as `quantities(results)` in the method's summary module (name `<method>.<what>[.<id>]`, `{value, sigma, unit, key, note?}`, copied from `results.json`), and list them under "Quantities" in the design note; a method with none says so.
 - raise `AnalysisError` for unusable input.
 
+Versions (`labpipe methods versions`): the analysis version covers `module` and what it imports, so changing it marks the method's analyses out of date. To keep drawing out of it, put the drawing in its own module and list it (the template draws inside `analyze.py`, so it counts as analysis):
+
+```yaml
+    plot_modules: [labpipe.methods.sem.plot]     # drawing only: a change means "plot out of date", not stale
+    analysis_data: ["references/sem/*.json"]     # data the numbers depend on (globs from the project root)
+```
+
 If other methods use the same file type (`.txt`, `.jpg`), add a content check:
 
 ```yaml

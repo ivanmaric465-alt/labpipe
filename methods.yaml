@@ -19,6 +19,8 @@ methods:
     cli: "labpipe xrd analyze --entry {entry_id}"
     module: labpipe.methods.xrd.analyze        # must provide run(...) — see docs/ADDING_A_METHOD.md
     cli_extension: labpipe.methods.xrd.refbuild  # optional: adds `labpipe xrd refs ...`
+    plot_modules: [labpipe.methods.xrd.plot]   # drawing only: a change marks "plot out of date", not stale
+    analysis_data: ["references/xrd/patterns/*.json"]  # data the numbers depend on: part of the analysis version
     summary: labpipe.methods.xrd.summary       # optional: summarize(results) for the report and agents
     config: config/xrd.yaml
     outputs: [results.json, plot.png, plot.pdf, provenance.json, notes.md]

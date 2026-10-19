@@ -49,4 +49,4 @@ labpipe replot --entry ID  # one measurement (also --method M, --all)
 
 ## After a change
 
-Plots become "plot out of date" (not re-analysed). The next automatic pass, or `labpipe replot`, redraws them: the analysis code runs again, `results.json` must come out the same (otherwise nothing is replaced and the review queue says so), old figures go to `_superseded/`. No AI: the notes stay valid. Provenance records the plot settings, so `labpipe replay` redraws the same figure.
+Plots become "plot out of date" (not re-analysed). The same happens when an update changes the method's drawing code (its plot version). The next automatic pass, or `labpipe replot`, redraws them: the analysis code runs again, `results.json` must come out the same (otherwise nothing is replaced and the review queue says so), old figures go to `_superseded/`. No AI: the notes stay valid. Provenance records the plot settings, so `labpipe replay` redraws the same figure.

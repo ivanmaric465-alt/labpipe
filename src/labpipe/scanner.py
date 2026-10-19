@@ -2,10 +2,14 @@
 
 * unchanged file (same sha256): left alone;
 * changed file: previous state moved to the entry's history, status pending;
-* done with an older code version or different analysis settings: marked stale
-  (not reprocessed automatically); settings that only concern the plots (`plot:` blocks,
-  plot style) leave it done and mark it `plot_outdated` (`labpipe replot` redraws);
-* failed: back to pending only if the code version changed and the attempt
+* done with another analysis version of its method (src/labpipe/versions.py) or different
+  analysis settings: marked stale (not reprocessed automatically); a git commit that does not
+  change the method's calculation changes nothing. Settings that only concern the plots
+  (`plot:` blocks, plot style) or another plot version leave it done and mark it
+  `plot_outdated` (`labpipe replot` redraws);
+* done and analysed before versions existed: the current versions are adopted if the
+  entry's code_version is the current, clean commit; otherwise it is marked stale;
+* failed: back to pending only if the method's analysis version changed and the attempt
   budget for this file hash is not used up;
 * needs_review: back to pending once a human override resolves it;
 * files modified within settle_minutes are skipped (a sync client or the instrument PC may still be writing);
@@ -35,6 +39,7 @@ import yaml
 
 from labpipe import manifest as mf
 from labpipe import settings as settings_mod
+from labpipe import versions as versions_mod
 from labpipe.naming import DEFAULT_SEPARATORS, derive_sample_id, entry_id, measurement_id
 from labpipe.provenance import code_version, sha256_file, utc_now
 from labpipe.registry import classify, load_methods, skip_reason, user_ignore
@@ -85,6 +90,32 @@ def _content_duplicates(entries: dict[str, dict[str, Any]], changes: list, count
                 move(twin, "duplicate", f"identical content to {keeper['relative_path']}")
 
 
+def _stale_reason(entry: dict[str, Any], versions: dict[str, Any], current_code: str) -> str | None:
+    """Why a done entry is out of date because of the code (None: it is not). An entry from
+    before per-method versions adopts the current ones if it was analysed with exactly the
+    current clean commit; otherwise nobody knows whether its calculation changed."""
+    now, then = versions["analysis_version"], entry.get("analysis_version")
+    if then is None:
+        if entry.get("code_version") == current_code and not current_code.endswith("+dirty"):
+            entry.update(analysis_version=now, plot_version=versions["plot_version"])
+            return None
+        return ("analysed before per-method versions; redo to be sure "
+                "(`labpipe requeue --stale`)")
+    if then != now:
+        return f"the {entry['method']} calculation changed (version {then} → {now})"
+    return None
+
+
+def _changed_since_failure(entry: dict[str, Any], versions: dict[str, Any],
+                           current_code: str) -> bool:
+    """A failed entry is retried when its method's calculation changed. One from before
+    versions existed is retried when the git commit changed (the old rule), once."""
+    then = entry.get("analysis_version")
+    if then is None:
+        return entry.get("code_version") != current_code
+    return then != versions["analysis_version"]
+
+
 def _walk(root: Path):
     for directory, subdirectories, files in os.walk(root, followlinks=False):
         subdirectories.sort()
@@ -103,6 +134,7 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
     settle_seconds = 60 * config["settle_minutes"]
     max_attempts = config["max_attempts_per_hash"]
     current_code = code_version()
+    versions = {name: versions_mod.current(name) for name in methods}
     now = time.time()
     counts: Counter[str] = Counter()
     changes: list[dict[str, Any]] = []
@@ -214,10 +246,9 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                                   if previous_hash != digest else "file reappeared")
                 elif old_status == "needs_review":
                     mf.set_status(entry, "pending", "review resolved")
-                elif old_status == "done" and entry.get("code_version") != current_code:
-                    mf.set_status(entry, "stale",
-                                  f"analysed with {entry.get('code_version')}, "
-                                  f"current code is {current_code}")
+                elif old_status == "done" and (reason := _stale_reason(
+                        entry, versions[method], current_code)):
+                    mf.set_status(entry, "stale", reason)
                 elif old_status == "done" and entry.get("settings_sha256"):
                     resolved = settings_mod.resolve(method, sample, entry["measurement_id"])[0]
                     state = settings_mod.compare_entry(entry, resolved)
@@ -226,17 +257,20 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                                                       "last run")
                     else:
                         entry.update(state["adopt"])
-                        if not state["plot_current"]:
+                        plot_code = entry.get("plot_version") == versions[method]["plot_version"]
+                        if not (state["plot_current"] and plot_code):
                             entry["plot_outdated"] = True
                             entry["plot_sha256_wanted"] = settings_mod.plot_fingerprint(resolved)
-                            entry["plot_outdated_reason"] = ("plot settings changed since the "
-                                                             "figures were drawn")
+                            entry["plot_outdated_reason"] = (
+                                "plot settings changed since the figures were drawn"
+                                if not state["plot_current"] else
+                                "the plot code changed since the figures were drawn")
                         else:
                             entry["plot_outdated"] = False
                             entry.pop("plot_outdated_reason", None)
                             entry.pop("plot_sha256_wanted", None)
-                elif (old_status == "failed" and entry.get("code_version") != current_code
-                      and entry["attempts"] < max_attempts):
+                elif (old_status == "failed" and entry["attempts"] < max_attempts
+                      and _changed_since_failure(entry, versions[method], current_code)):
                     mf.set_status(entry, "pending", "code changed since failure; retrying")
                 if entry.get("status") != old_status:
                     changes.append({"entry_id": eid, "relative_path": relative,

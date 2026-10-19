@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from labpipe import manifest as mf
+from labpipe import versions as versions_mod
 from labpipe.provenance import code_version, sha256_file, utc_now
 from labpipe.registry import load_methods
 from labpipe.safety import PROJECT_ROOT, assert_pipeline_writable, atomic_write_text
@@ -63,6 +64,7 @@ def analyze_entry(config: dict, eid: str, *, rerun: bool = False) -> dict[str, A
     assert_pipeline_writable(staging, config)
 
     status, reason, summary = "failed", None, None
+    versions = versions_mod.current(entry["method"])   # of the code this run uses
     try:
         digest = sha256_file(input_path)
         if digest != entry["sha256"]:
@@ -94,6 +96,7 @@ def analyze_entry(config: dict, eid: str, *, rerun: bool = False) -> dict[str, A
         stored = data["entries"][eid]
         stored["attempts"] = stored.get("attempts", 0) + 1
         stored["code_version"] = code_version()
+        stored.update(versions)
         stored["last_processed_utc"] = utc_now()
         if status == "done":
             stored["output_dir"] = str(final.relative_to(PROJECT_ROOT))
@@ -228,6 +231,7 @@ def replot_entry(config: dict, eid: str) -> dict[str, Any]:
     with mf.locked(config) as data:
         stored = data["entries"][eid]
         stored["plot_sha256"] = summary["plot_sha256"]
+        stored["plot_version"] = versions_mod.current(stored["method"])["plot_version"]
         stored["plot_outdated"] = False
         for key in ("plot_outdated_reason", "plot_sha256_wanted", "replot_problem"):
             stored.pop(key, None)

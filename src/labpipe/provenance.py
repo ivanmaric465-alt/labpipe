@@ -123,6 +123,7 @@ def build_record(*, method: str, entry_point: str, input_path: Path, input_sha25
     ``entry_point`` is "package.module.run"; `labpipe replay` imports it.
     """
     from labpipe.settings import fingerprint  # local import: settings imports safety only
+    from labpipe.versions import current as method_versions
 
     final_dir = context.get("output_dir") or str(out_dir)
     record = {
@@ -134,7 +135,7 @@ def build_record(*, method: str, entry_point: str, input_path: Path, input_sha25
                   "size_bytes": Path(input_path).stat().st_size},
         "sample_id": context.get("sample_id"),
         "measurement_id": context.get("measurement_id"),
-        "code": git_info() | {"labpipe_entry": entry_point},
+        "code": git_info() | method_versions(method) | {"labpipe_entry": entry_point},
         "parameters": {"sources": settings_sources or [], "resolved": settings,
                        "resolved_sha256": fingerprint(settings)},
         "environment": environment(),

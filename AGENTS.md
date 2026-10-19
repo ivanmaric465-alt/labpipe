@@ -57,6 +57,7 @@ All commands print JSON.
 | `labpipe agents sync` | Generate the harness's agent files from `agents/` and `lab/agents/` (in a project: the whole `project sync`) |
 | `labpipe automation run \| status` | One automatic pass / state of the watcher and nightly run |
 | `labpipe methods new \| check` | New method (only in a method-design task with the user) |
+| `labpipe methods versions` | Per method: analysis version, plot version, the modules in each (read-only) |
 | `labpipe container setup \| start [--replace] \| stop \| status \| logs \| login \| popups` | Container mode (`docs/settings/container.md`); the user runs `setup`, `login` and `popups` (they ask questions or install a service) |
 | `labpipe shell` | An agent session inside the container (the user runs it) |
 | `labpipe roots rename OLD NEW` | Re-key manifest entries after a raw root's `id` changed in `local.yaml` |
@@ -121,7 +122,7 @@ docs/methods/<method>.md                           per method: design, settings,
 
 - **Sample ID**: the file stem up to the first separator (`config/pipeline.yaml` → `sample_id`), if it matches the pattern there. Otherwise the entry is `needs_review`: ask the user and record the answer in `config/sample_ids.yaml` (keyed by relative path).
 - **Measurement ID**: the file stem made filesystem-safe (`S-17_3.2.26_long scan + Si` → `S-17_3.2.26_long_scan_Si`).
-- **Status**: `pending`; `done` (its `review` flag: a human should look); `failed` (reason recorded; retried when the file or code changes, at most 3 times); `needs_review` (a human decision); `duplicate`; `ignored`; `stale` (code or settings changed; redone only on `requeue --stale`); `missing` (file gone; outputs kept); `baseline` (already there at setup; not analysed unless asked).
+- **Status**: `pending`; `done` (its `review` flag: a human should look); `failed` (reason recorded; retried when the file or the method's calculation changes, at most 3 times); `needs_review` (a human decision); `duplicate`; `ignored`; `stale` (the method's calculation or the analysis settings changed; the reason says which; redone only on `requeue --stale`); `missing` (file gone; outputs kept); `baseline` (already there at setup; not analysed unless asked).
 
 ## Recognising the user's files
 
