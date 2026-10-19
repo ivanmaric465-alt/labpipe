@@ -118,3 +118,21 @@ def test_nothing_else_is_served(server):
         assert b"secret" not in body
     for method in ("POST", "PUT", "DELETE"):
         assert get(server + "/" + auth, method=method)[0] == 405
+
+
+def test_extra_reports_are_linked_and_served(server, project):
+    auth = f"?token={TOKEN}"
+    assert b"/report/xrd-only" not in get(server + "/" + auth)[1]
+    assert get(server + "/report/xrd-only" + auth)[0] == 404
+    (project / "analysis").mkdir()
+    (project / "analysis" / "report-xrd-only.html").write_text("<html>XRD</html>")
+    (project / "analysis" / "report-bad name.html").write_text("<html>BAD</html>")
+    page = get(server + "/" + auth)[1]
+    assert b'<a href="/report/xrd-only">Report: xrd-only</a>' in page and b"bad name" not in page
+    code, body, headers = get(server + "/report/xrd-only" + auth)
+    assert code == 200 and body == b"<html>XRD</html>" and "text/html" in headers["Content-Type"]
+    assert get(server + "/report/xrd-only")[0] == 403           # token needed
+    assert get(server + "/report/xrd-only", {"Cookie": f"labpipe_token={TOKEN}"})[0] == 200
+    assert get(server + "/report/xrd-only", method="POST")[0] == 405
+    for path in ("/report/bad%20name", "/report/..%2fmanifest.json", "/report/x/y"):
+        assert get(server + path + auth)[0] == 404, path
