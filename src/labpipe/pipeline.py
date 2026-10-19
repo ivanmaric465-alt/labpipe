@@ -144,6 +144,15 @@ def review_queue(config: dict) -> dict[str, Any]:
         elif status == "done" and entry.get("review"):
             groups["done_flagged"].append(entry)
     lines = [f"# Review queue ({utc_now()})", ""]
+    unrecognised = sorted(data.get("unrecognised", {}).values(),
+                          key=lambda r: (r["raw_root"], r["relative_path"]))
+    lines.append(f"## Not recognised by any method ({len(unrecognised)})")
+    lines.append("Tell the agent what these are (it can add them to a method or create one), "
+                 "or list them in config/ignore.yaml to leave them alone.")
+    for record in unrecognised:
+        lines.append(f"- `{record['relative_path']}` ({record['raw_root']}, first seen "
+                     f"{record['first_seen_utc']})")
+    lines.append("")
     titles = {
         "needs_review": "Needs a human decision (answer in config/sample_ids.yaml)",
         "failed": "Failed analyses",
@@ -161,4 +170,4 @@ def review_queue(config: dict) -> dict[str, Any]:
         lines.append("")
     atomic_write_text(PROJECT_ROOT / config["logs_dir"] / "review_queue.md", "\n".join(lines),
                       config)
-    return {key: len(value) for key, value in groups.items()}
+    return {"not_recognised": len(unrecognised)} | {key: len(value) for key, value in groups.items()}

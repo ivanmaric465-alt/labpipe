@@ -23,7 +23,7 @@ Run `labpipe doctor` first (it only reads). If `ready` is true, skip to what the
 - **Instrument specifics**: ask about internal standards (certificate values), sample holders that give peaks, supports or substrates. Put the answers into settings, never code.
 - **First analysis**: `labpipe scan`, pick one file with the user, `labpipe <method> analyze --entry ID`, show `plot.png`, walk through `results.json` and its checks, write the notes (delegate to the method's analyst agent). Then explain steering (below) with their own plot.
 - **Agents and models**: ask which agent harness the user works with and which model each role should use (`supervisor`, `analyst`). Explain the trade-off: the supervisor only runs commands and keeps the books, so a small, fast model is enough; the analyst looks at plots and writes for people, so a stronger model writes better notes. `labpipe notes verify` rejects invented numbers whatever the model. Write the answer into `config/local.yaml` → `agents`, then run `labpipe agents sync`.
-- **Automatic processing** (optional, last): explain what `labpipe automation` does (a watcher that checks for new files, waits until they stop changing, then runs the pipeline in batches of at most 10 measurements per AI run; a nightly safety-net run; notifications when work starts and ends; the AI starts only when there is work). Doctor's `automation` item reports whether the last run succeeded; if it warns, show the user the reason and the log. The user installs it by running `labpipe automation setup` in their own terminal: it asks for the timings and shows the service files before installing. Agents cannot run it.
+- **Automatic processing** (optional, last): explain what `labpipe automation` does (a watcher that checks for new files, waits until they stop changing, then runs the pipeline in batches of at most 10 measurements per AI run; a nightly safety-net run; notifications when work starts and ends and about new unrecognised files, files needing a decision, failed and out-of-date analyses; the AI starts only when there is work). Doctor's `automation` item reports whether the last run succeeded; if it warns, show the user the reason and the log. The user installs it by running `labpipe automation setup` in their own terminal: it asks for the timings and shows the service files before installing. Agents cannot run it.
 
 Keep a short record of the setup decisions (paths chosen, naming rule, standards) in the `note:` fields of the settings files you change, so the next person knows why.
 
@@ -126,10 +126,23 @@ Do this after the data folder is set, and whenever doctor reports unrecognised f
 1. Run `labpipe inventory`. Show the user, in plain words: which files each method recognised (counts, two examples), which file types no method reads (with examples), and which names give no sample ID.
 2. Ask: *"Is this right?"* Then go through what is off, one thing at a time:
    - **recognised but wrong** (e.g. a `.txt` that is not what the method thinks): ask what it is; narrow that method's `patterns` in `methods.yaml` or add an `ignore` pattern, with the user's OK;
-   - **not recognised**: ask what these files are. Not data (reports, photos, slides): leave them, nothing to do. Exports of a format a method already reads: propose a pattern. A technique labpipe cannot analyse yet: offer to design a new method with the user ("Adding a new analysis method");
+   - **not recognised**: ask what these files are. Not data (reports, photos, slides): with the user's OK, add them to `config/ignore.yaml` (`ignore:` globs relative to the data folder, e.g. `"TEM/**"`, with a `#` comment saying why) so they are never reported again. Exports of a format a method already reads: propose a pattern. A technique labpipe cannot analyse yet: offer to design a new method with the user ("Adding a new analysis method");
    - **no sample ID**: as in "Sample IDs" above.
 3. Rerun `labpipe inventory` and show the difference. Repeat until the user says it is right.
 4. If the manifest is still empty for this folder, ask whether to analyse everything already there, or only files added from now on (`labpipe scan --baseline` records the existing ones without analysing them). This is the user's decision; explain that analysis is free but AI notes cost money.
+
+### When the user comes from a notification
+
+Automatic processing notifies the user about anything new that needs them, ending with what to say to you:
+
+| The user says | Do |
+|---|---|
+| "check the new files" | Read `logs/review_queue.md` → "Not recognised" (run `labpipe review` first), then the steps above for those files. |
+| "check the review queue" | `labpipe review`; for each "needs a human decision" entry, show the reason and ask (sample IDs: "Sample IDs" above). |
+| "check the last automatic run" | Read the last `run_finished` / `run_failed` event in `logs/automation.log` and the end of its `transcript`; explain in plain words what stopped it and what would fix it (a setting, the harness setup, `labpipe doctor`). Nothing to rerun yourself: the next automatic run retries. |
+| "check the failed analyses" | `labpipe review`; for each failed entry show `labpipe status --entry ID` (reason, history), say what went wrong in plain words, and propose a fix (a setting, a sample ID, or a bug report for the code). Rerun with `labpipe <method> analyze --entry ID` only with the user's OK. |
+
+Out-of-date (stale) analyses need nothing from you unless the user asks: `labpipe requeue --stale` puts them back in the queue.
 
 ## Steering an analysis (how the user changes an analysis)
 

@@ -4,9 +4,13 @@
   the AI supervisor only if there is work (pending entries or missing notes),
   for at most `max_measurements_per_run` of them (the batch, passed to the
   agents' `labpipe pending` / `notes todo` as LABPIPE_BATCH). Notifies when
-  work is found and when it is done, with what is left.
+  work is found and when it is done, with what is left, and about anything new
+  that needs the user: files no method recognises, files needing a decision,
+  failed analyses, analyses out of date (stale). Each is told once; the message
+  says what to do, naming the user's own agent tool (config/local.yaml → agents).
 * `watch`: checks the raw roots every `check_every_seconds` (file sizes and
-  modification times only, no hashing). After a change, once nothing has
+  modification times only, no hashing; every file except system files and
+  config/ignore.yaml, so unrecognised files count too). After a change, once nothing has
   changed for `settle_minutes`, it calls `run`. If work is left after a clean
   run that made progress, the next batch runs at the next check.
 * `health`: for `labpipe doctor` (services running, last run ok, nothing stuck).
@@ -45,7 +49,7 @@ from labpipe import scanner
 from labpipe.locking import try_exclusive
 from labpipe.notes import todo as notes_todo
 from labpipe.provenance import code_version, utc_now
-from labpipe.registry import classify, load_methods
+from labpipe.registry import load_methods, skip_reason, user_ignore
 from labpipe.safety import PROJECT_ROOT, assert_pipeline_writable, set_local_block
 
 DEFAULTS = {"check_every_seconds": 60, "settle_minutes": 3, "nightly_at": "02:00",
@@ -100,6 +104,71 @@ def notify(config: dict, message: str) -> list[str]:
     return sent
 
 
+HARNESS_NAMES = {"claude-code": "Claude Code", "codex": "Codex", "opencode": "OpenCode"}
+
+
+def _where() -> str:
+    home = Path.home()
+    return f"~/{PROJECT_ROOT.relative_to(home).as_posix()}" \
+        if PROJECT_ROOT.is_relative_to(home) else str(PROJECT_ROOT)
+
+
+def _ask_agent(config: dict, request: str) -> str:
+    """What to do about a notification, naming the agent tool this machine uses."""
+    name = HARNESS_NAMES.get((config.get("agents") or {}).get("harness"))
+    if name:
+        return f"Open {name} in {_where()} and say: {request}."
+    return f"Run `labpipe review` in {_where()} and read logs/review_queue.md."
+
+
+def _listed(items: list[str], limit: int = 4) -> str:
+    return ", ".join(items[:limit]) + (f" and {len(items) - limit} more" if len(items) > limit else "")
+
+
+def _statuses(config: dict) -> dict[str, tuple]:
+    return {eid: (e.get("status"), e.get("status_reason"))
+            for eid, e in mf.load(config)["entries"].items()}
+
+
+def _notify_news(config: dict, before: dict[str, tuple],
+                 unrecognised: list[str] | None = None) -> dict[str, tuple]:
+    """Notify about what newly needs the user since `before`; returns the new state."""
+    from labpipe.pipeline import review_queue
+    entries = mf.load(config)["entries"]
+
+    def new(status: str) -> list[dict]:
+        return sorted((e for eid, e in entries.items() if e.get("status") == status
+                       and before.get(eid) != (status, e.get("status_reason"))),
+                      key=lambda e: e["relative_path"])
+
+    needs_review, failed, stale = new("needs_review"), new("failed"), new("stale")
+    if unrecognised or needs_review or failed or stale:
+        review_queue(config)
+    if unrecognised:
+        notify(config, f"labpipe: {len(unrecognised)} new file(s) not recognised: "
+                       f"{_listed(unrecognised)}. " + _ask_agent(config, "check the new files"))
+    if needs_review:
+        notify(config, f"labpipe: {len(needs_review)} file(s) need a decision from you: "
+                       + _listed([f"{e['relative_path']} ({e.get('status_reason')})"
+                                  for e in needs_review], 3)
+                       + ". " + _ask_agent(config, "check the review queue"))
+    if failed:
+        notify(config, f"labpipe: {len(failed)} analysis(es) failed: "
+                       + _listed([f"{e['relative_path']} ({str(e.get('status_reason'))[:80]})"
+                                  for e in failed], 3)
+                       + ". " + _ask_agent(config, "check the failed analyses"))
+    if stale:
+        why = {"code updated": sum("current code is" in str(e.get("status_reason"))
+                                   for e in stale)}
+        why["settings changed"] = len(stale) - why["code updated"]
+        notify(config, f"labpipe: {len(stale)} analysis(es) out of date ("
+                       + ", ".join(f"{k}: {n}" for k, n in why.items() if n)
+                       + f"; e.g. {_listed([e['relative_path'] for e in stale], 2)}). Their "
+                       f"results are kept; to redo them run `labpipe requeue --stale` in "
+                       f"{_where()} (done in the next run).")
+    return {eid: (e.get("status"), e.get("status_reason")) for eid, e in entries.items()}
+
+
 def _work(config: dict) -> dict[str, list[str]]:
     entries = mf.load(config)["entries"].values()
     return {"pending": sorted(e["entry_id"] for e in entries if e.get("status") == "pending"),
@@ -127,9 +196,9 @@ def _analyse_code_only(config: dict, reason: str) -> list[str]:
     build_report(config)
     _log(config, {"event": "code_only_finished", "trigger": reason, "done": done,
                   "failed": failed})
-    notify(config, f"labpipe: analysed {len(done)} measurement(s) by code alone "
-                   f"({_describe(config, done)})" + (f", {len(failed)} failed" if failed else "")
-                   + "; see analysis/report.html")
+    if done:   # failures are told separately (_notify_news)
+        notify(config, f"labpipe: analysed {len(done)} measurement(s) by code alone "
+                       f"({_describe(config, done)}); see analysis/report.html")
     return done
 
 
@@ -194,6 +263,7 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
         if not acquired:
             _log(config, {"event": "skipped", "reason": "another run is in progress"})
             return {"status": "skipped", "reason": "another run is in progress"}
+        before = _statuses(config)
         try:
             scan = scanner.scan(config)
         except RuntimeError as exc:  # e.g. raw root not mounted
@@ -201,10 +271,8 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
             _log(config, {"event": "scan_failed", "reason": str(exc), "trigger": reason})
             return {"status": "scan_failed", "reason": str(exc)}
         code_only = _analyse_code_only(config, reason)
+        before = _notify_news(config, before, scan.get("unrecognised_new"))
         work = _work(config)
-        if work["needs_review"] and any(c["to"] == "needs_review" for c in scan["changes"]):
-            notify(config, f"labpipe: {len(work['needs_review'])} file(s) need a decision "
-                           "from you (sample ID); see logs/review_queue.md")
         if not work["pending"] and not work["notes"]:
             if code_only:
                 return {"status": "finished", "exit_code": 0, "done": code_only, "failed": [],
@@ -233,14 +301,17 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
                                            timeout=3 * 3600)
         except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
             notify(config, f"labpipe: the AI run could not start or finish ({exc})")
+            _notify_news(config, before)
             _log(config, {"event": "run_failed", "reason": str(exc), "trigger": reason})
             return {"status": "run_failed", "reason": str(exc)}
-        result, tokens = {}, {}
+        result, tokens, errors = {}, {}, []
         for line in transcript.read_text(encoding="utf-8").splitlines():
             try:
                 event = json.loads(line)
             except json.JSONDecodeError:
-                continue  # stderr lines interleaved with the JSON stream
+                if line.strip():
+                    errors.append(line.strip())   # stderr lines interleaved with the JSON stream
+                continue
             if isinstance(event, dict) and event.get("type") == "result":
                 result = event            # Claude Code: includes total_cost_usd
             elif isinstance(event, dict) and event.get("type") == "turn.completed":
@@ -249,16 +320,24 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
         entries = mf.load(config)["entries"]
         done = [i for i in todo_ids if entries.get(i, {}).get("status") in ("done", "stale")]
         failed = [i for i in todo_ids if entries.get(i, {}).get("status") == "failed"]
-        review = [i for i in done if entries[i].get("review")]
         still_missing = {row["entry_id"] for row in notes_todo(config)}
-        message = (f"labpipe: analysis done, {len(done)} measurement(s) ({_describe(config, done)})"
-                   + (f", {len(review)} to check" if review else "")
-                   + (f", {len(failed)} failed" if failed else "")
-                   + (f", {len(still_missing & set(todo_ids))} without notes"
-                      if still_missing & set(todo_ids) else "")
-                   + "; see analysis/report.html"
-                   + (f"; {remaining} left for the next run" if remaining else ""))
+        finished = [i for i in done if i not in still_missing]
+        review = [i for i in finished if entries[i].get("review")]
+        if completed.returncode != 0 or result.get("is_error"):
+            why = str(result.get("result") or (errors[0] if errors else "no output"))[:150]
+            message = (f"labpipe: the AI run stopped with an error ({why}); "
+                       f"{len(todo_ids) - len(finished)} of {len(todo_ids)} measurement(s) still "
+                       "waiting. " + _ask_agent(config, "check the last automatic run"))
+        else:
+            message = (f"labpipe: analysis done, {len(finished)} measurement(s) "
+                       f"({_describe(config, finished)})"
+                       + (f", {len(review)} to check" if review else "")
+                       + (f", {len(still_missing & set(todo_ids))} without notes"
+                          if still_missing & set(todo_ids) else "")
+                       + "; see analysis/report.html"
+                       + (f"; {remaining} left for the next run" if remaining else ""))
         notify(config, message)
+        _notify_news(config, before)
         summary = {"event": "run_finished", "trigger": reason, "exit_code": completed.returncode,
                    "transcript": str(transcript.relative_to(PROJECT_ROOT)),
                    "cost_usd": result.get("total_cost_usd"), "done": done, "failed": failed,
@@ -268,7 +347,7 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
 
 
 def _snapshot(config: dict) -> dict[str, tuple[int, float]]:
-    methods = load_methods()
+    ignored = user_ignore()
     state = {}
     for root in config["raw_roots"]:
         base = Path(root["path"])
@@ -276,7 +355,7 @@ def _snapshot(config: dict) -> dict[str, tuple[int, float]]:
             for name in names:
                 full = Path(directory) / name
                 relative = full.relative_to(base).as_posix()
-                if classify(relative, methods)[0] is None:
+                if skip_reason(relative, config, ignored):
                     continue
                 try:
                     stat = full.stat()

@@ -6,6 +6,7 @@
       "Edit(/config/measurements/**)",
       "Edit(/config/samples.yaml)",
       "Edit(/config/sample_ids.yaml)",
+      "Edit(/config/ignore.yaml)",
       "Edit(/analysis/**/notes.md)",
       "Edit(/logs/**)"
     ],

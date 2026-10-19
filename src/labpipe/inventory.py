@@ -17,7 +17,7 @@ import yaml
 
 from labpipe import manifest as mf
 from labpipe.naming import DEFAULT_SEPARATORS, derive_sample_id
-from labpipe.registry import classify, load_methods
+from labpipe.registry import classify, load_methods, skip_reason, user_ignore
 from labpipe.safety import PROJECT_ROOT
 
 
@@ -39,6 +39,7 @@ def data_folder(config: dict, root: dict) -> str | None:
 
 def inventory(config: dict, examples: int = 3) -> dict[str, Any]:
     methods = load_methods()
+    ignored = user_ignore()
     overrides = _overrides(config)
     known = Counter(e["raw_root"] for e in mf.load(config)["entries"].values())
     roots = []
@@ -54,11 +55,16 @@ def inventory(config: dict, examples: int = 3) -> dict[str, Any]:
         unknown: Counter[str] = Counter()
         unknown_examples: dict[str, list[str]] = defaultdict(list)
         unclear: list[str] = []
+        skipped: Counter[str] = Counter()
         for directory, subdirectories, names in os.walk(path):
             subdirectories.sort()
             for name in sorted(names):
                 relative = (Path(directory) / name).relative_to(path).as_posix()
                 extension = Path(name).suffix.lower() or "(none)"
+                skip = skip_reason(relative, config, ignored)
+                if skip:
+                    skipped[skip] += 1
+                    continue
                 method, kind = classify(relative, methods, root=path)
                 if method is None:
                     unknown[extension] += 1
@@ -80,6 +86,7 @@ def inventory(config: dict, examples: int = 3) -> dict[str, Any]:
                                      for m, c in sorted(by_method.items())},
                       "not_recognised": {ext: {"files": n, "examples": unknown_examples[ext]}
                                          for ext, n in unknown.most_common()},
+                      "left_out": dict(skipped),
                       "no_sample_id": {"files": len(unclear), "examples": unclear[:8],
                                        "pattern": config["sample_id"]["pattern"]},
                       "already_in_manifest": known.get(root["id"], 0)})
@@ -108,6 +115,8 @@ def describe(result: dict[str, Any]) -> str:
             lines.append("  Not recognised (no method reads these):")
             for ext, info in list(root["not_recognised"].items())[:12]:
                 lines.append(f"    {ext}: {info['files']}   e.g. {', '.join(info['examples'][:2])}")
+        if root.get("left_out"):
+            lines.append("  Left out: " + ", ".join(f"{n} {why}" for why, n in root["left_out"].items()))
         if root["no_sample_id"]["files"]:
             lines.append(f"  No sample ID from the file name ({root['no_sample_id']['files']}): "
                          + ", ".join(root["no_sample_id"]["examples"][:4]))

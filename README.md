@@ -129,6 +129,14 @@ loginctl enable-linger           # Linux: keep it running when you are logged ou
 
 A watcher checks for new files; once they have stopped changing, it analyses them, at most 10 per AI run (the rest follow in the next runs). A nightly run catches anything missed. `labpipe doctor` reports whether the last run succeeded. Log: `logs/automation.log`.
 
+You get a desktop notification when analyses start and finish, and once for each new thing that needs you: files no method recognises, files needing a decision (e.g. no sample ID), failed analyses, analyses out of date after a code or settings change. Each message says what to do, e.g. *Open Claude Code in ~/labpipe and say: check the new files.* All of them are listed in `logs/review_queue.md`. Files you never want to hear about go into `config/ignore.yaml`:
+
+```yaml
+ignore: ["TEM/**", "EDS/*.docx"]
+```
+
+Test the notification: `labpipe automation notify-test`.
+
 Stop it:
 
 ```bash

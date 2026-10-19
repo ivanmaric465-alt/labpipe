@@ -14,6 +14,10 @@
 * baseline=True (setup, "only new files from now on"): files seen for the first
   time are recorded as baseline, not analysed; they become pending when their
   content changes or on `labpipe requeue --baseline | --entry ID`.
+* files no method recognises are recorded once (path, size, sha256) in the
+  manifest's `unrecognised` section and returned as `unrecognised_new` when new
+  or changed, so the user is told once per file and content; system files and
+  files in config/ignore.yaml are left out (registry.skip_reason).
 
 Raw files are only ever opened for reading (hashing).
 """
@@ -32,7 +36,7 @@ from labpipe import manifest as mf
 from labpipe import settings as settings_mod
 from labpipe.naming import DEFAULT_SEPARATORS, derive_sample_id, entry_id, measurement_id
 from labpipe.provenance import code_version, sha256_file, utc_now
-from labpipe.registry import classify, load_methods
+from labpipe.registry import classify, load_methods, skip_reason, user_ignore
 from labpipe.safety import PROJECT_ROOT
 
 
@@ -102,9 +106,13 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
     counts: Counter[str] = Counter()
     changes: list[dict[str, Any]] = []
 
+    ignored = user_ignore()
+    new_unrecognised: list[str] = []
     with mf.locked(config) as data:
         entries = data["entries"]
+        unrecognised = data.setdefault("unrecognised", {})
         seen: set[str] = set()
+        seen_unrecognised: set[str] = set()
         for root in config["raw_roots"]:
             root_path = Path(root["path"])
             if not root_path.is_dir():
@@ -118,13 +126,38 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                     path.suffix.lower())
 
             for full, relative in files:
-                method, kind = classify(relative, methods, root=root_path)
-                if method is None:
-                    counts["unclaimed"] += 1
+                skip = skip_reason(relative, config, ignored)
+                if skip == "system file":
+                    counts["system_file"] += 1
                     continue
+                method, kind = classify(relative, methods, root=root_path)
+                if method is None and skip:
+                    counts["ignored_by_you"] += 1
+                    continue
+                if skip:
+                    kind = "ignore"
                 stat = full.stat()
+                key = f"{root['id']}:{relative}"
                 if now - stat.st_mtime < settle_seconds:
                     counts["settling"] += 1
+                    if method is None and key in unrecognised:
+                        seen_unrecognised.add(key)
+                    continue
+                if method is None:
+                    seen_unrecognised.add(key)
+                    counts["unrecognised"] += 1
+                    mtime = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(stat.st_mtime))
+                    record = unrecognised.get(key)
+                    if record and (record["size_bytes"], record["mtime_utc"]) == (stat.st_size, mtime):
+                        continue
+                    digest = sha256_file(full)
+                    if (record is None or record["sha256"] != digest) and not baseline:
+                        new_unrecognised.append(relative)
+                    unrecognised[key] = {"raw_root": root["id"], "relative_path": relative,
+                                         "size_bytes": stat.st_size, "mtime_utc": mtime,
+                                         "sha256": digest,
+                                         "first_seen_utc": (record or {}).get("first_seen_utc")
+                                         or utc_now()}
                     continue
                 spec = methods[method]
                 eid = entry_id(method, root["id"], relative)
@@ -163,7 +196,7 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
 
                 old_status = entry.get("status")
                 if kind == "ignore":
-                    mf.set_status(entry, "ignored", "matches an ignore pattern in methods.yaml")
+                    mf.set_status(entry, "ignored", skip or "matches an ignore pattern in methods.yaml")
                 elif primary_sibling:
                     primary = path.with_suffix(spec["primary_extension"]).as_posix()
                     entry["duplicate_of"] = entry_id(method, root["id"], primary)
@@ -198,6 +231,8 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                 counts[entry["status"]] += 1
 
         _content_duplicates(entries, changes, counts)
+        for key in [k for k in unrecognised if k not in seen_unrecognised]:
+            del unrecognised[key]       # gone, now recognised, or ignored
         for eid, entry in entries.items():
             if eid not in seen and entry.get("status") != "missing" and any(
                     entry["raw_root"] == root["id"] for root in config["raw_roots"]):
@@ -214,4 +249,5 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
     return {"code_version": current_code,
             "counts": dict(sorted((k, n) for k, n in counts.items() if n)),
             "changes": changes,
+            "unrecognised_new": new_unrecognised,
             "raw_roots": [{"id": r["id"], "path": r["path"]} for r in config["raw_roots"]]}

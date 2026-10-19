@@ -12,6 +12,14 @@ settle_minutes: 10
 # and at most this many times per file hash.
 max_attempts_per_hash: 3
 
+# File names that are never measurements (operating system, office and sync
+# client leftovers): not analysed and not reported as unrecognised.
+system_files: [".*", "~$*", "~*.tmp", "Thumbs.db", "desktop.ini", "*.tmp", "*.part",
+               "*.crdownload", "*.lnk"]
+
+# Your own list of files to leave alone is config/ignore.yaml (git-ignored):
+#   ignore: ["TEM/**", "EDS/old notes.docx"]
+
 analysis_dir: analysis
 logs_dir: logs
 manifest: manifest.json

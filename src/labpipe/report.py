@@ -355,12 +355,15 @@ def build(config: dict) -> dict[str, Any]:
                            f"{r.get(h, '')}</td>" for h in headers) + "</tr>" for r in rows)
                        + "</tbody></table></div>")
     pending = statuses.get("pending", 0) + statuses.get("needs_review", 0) + statuses.get("failed", 0)
+    unrecognised = len(data.get("unrecognised", {}))
     page = (f'<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             f"<title>labpipe report</title><style>{CSS}</style><main>"
             f"<h1>Analysis report</h1><p class=sub>{len(entries)} analysed measurement(s) · "
             f"generated {utc_now()} · code {html.escape(code_version())}"
             + (f" · {pending} waiting, failed or needing a decision (logs/review_queue.md)"
                if pending else "")
+            + (f" · {unrecognised} file(s) not recognised (logs/review_queue.md)"
+               if unrecognised else "")
             + "</p>" + table_html + "".join(sections) + f"</main><script>{SCRIPT}</script>")
     target = PROJECT_ROOT / config["analysis_dir"] / "report.html"
     atomic_write_text(target, page, config)

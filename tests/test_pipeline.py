@@ -263,7 +263,7 @@ def test_report_shows_eds_panels_and_sem_gallery_one_at_a_time(tmp_path):
     steering.parent.mkdir(parents=True, exist_ok=True)
     steering.write_text("note: the report links S-13's images\nimages: [s-140.jpg, s-141.jpg]\n")
     counts = _labpipe(env, "scan")["counts"]
-    assert counts.get("pending") == 4 and "unclaimed" not in counts      # s-14x.jpg claimed
+    assert counts.get("pending") == 4 and "unrecognised" not in counts      # s-14x.jpg claimed
     _labpipe(env, "analyze", "--pending", "--method", "sem")
     for item in _labpipe(env, "pending"):
         _labpipe(env, "eds", "analyze", "--entry", item["entry_id"])
@@ -317,6 +317,53 @@ def test_automation_run_and_setup_files(tmp_path, monkeypatch):
     assert "automation watch" in units["labpipe-watch.service"]
 
 
+def test_notifications_tell_once_and_name_the_users_agent(tmp_path):
+    from tests import test_sem
+    project, raw, env = _project(tmp_path)
+    with open(project / "config" / "local.yaml", "a") as stream:
+        stream.write("agents: {harness: codex}\nautomation: {notify: {desktop: false}}\n")
+    log = project / "logs" / "automation.log"
+
+    def messages() -> list[str]:
+        return [json.loads(line)["message"] for line in log.read_text().splitlines()
+                if '"event": "notify"' in line]
+
+    (raw / "TEM").mkdir()
+    (raw / "TEM" / "a.dm3").write_bytes(b"one")
+    (raw / "Thumbs.db").write_bytes(b"x")              # system files: never reported
+    (raw / "XRD" / "~$notes.docx").write_bytes(b"x")
+    _labpipe(env, "automation", "run")
+    [message] = messages()
+    assert "1 new file(s) not recognised: TEM/a.dm3" in message
+    assert "Open Codex in" in message and "say: check the new files" in message
+    assert "TEM/a.dm3" in (project / "logs" / "review_queue.md").read_text()
+    _labpipe(env, "automation", "run")
+    assert len(messages()) == 1                         # told once
+    (raw / "TEM" / "a.dm3").write_bytes(b"two, changed")
+    _labpipe(env, "automation", "run")
+    assert len(messages()) == 2                         # new content: told again
+    (project / "config" / "ignore.yaml").write_text('ignore: ["TEM/**"]\n')
+    assert _labpipe(env, "scan")["counts"] == {"ignored_by_you": 1, "system_file": 2}
+    assert _labpipe(env, "status")["not_recognised"] == 0
+
+    # code-only method (SEM): a broken image fails, a good one is done
+    good = test_sem.make_example(raw / "SEM", "S-1 a001")
+    bad = test_sem.make_example(raw / "SEM", "S-1 a002", mag=50000)
+    bad.write_bytes(b"not a tiff")
+    _labpipe(env, "automation", "run")
+    failed = [m for m in messages() if "failed" in m]
+    assert len(failed) == 1 and "SEM/S-1 a002.tif" in failed[0]
+    assert "say: check the failed analyses" in failed[0]
+
+    steering = project / "config" / "measurements" / "sem" / "S-1_a001.yaml"
+    steering.parent.mkdir(parents=True, exist_ok=True)
+    steering.write_text("info_bar_px: 60\n")
+    _labpipe(env, "automation", "run")
+    [stale] = [m for m in messages() if "out of date" in m]
+    assert "1 analysis(es) out of date (settings changed: 1" in stale
+    assert "labpipe requeue --stale" in stale and good.name in stale
+
+
 def test_try_exclusive_does_not_wait(tmp_path):
     from labpipe.locking import try_exclusive
     with try_exclusive(tmp_path / "x.mutex") as first:
@@ -346,11 +393,11 @@ def test_inventory_baseline_and_batches(tmp_path):
     assert root["already_in_manifest"] == 0
 
     # "only new files from now on": existing files are recorded, not queued
-    assert _labpipe(env, "scan", "--baseline")["counts"] == {"baseline": 3, "unclaimed": 1}
+    assert _labpipe(env, "scan", "--baseline")["counts"] == {"baseline": 3, "unrecognised": 1}
     assert _labpipe(env, "scan")["changes"] == []
     assert _labpipe(env, "pending") == []
     (raw / "XRD" / "SYN-4_test.xrdml").write_text(xrdml_text(x, y, "SYN-4"))
-    assert _labpipe(env, "scan")["counts"] == {"baseline": 3, "pending": 1, "unclaimed": 1}
+    assert _labpipe(env, "scan")["counts"] == {"baseline": 3, "pending": 1, "unrecognised": 1}
 
     assert len(_labpipe(env, "requeue", "--baseline")["requeued"]) == 3
     pending = _labpipe(env, "pending")
@@ -443,3 +490,30 @@ def test_methods_new_scaffolds_and_never_overwrites(tmp_path):
                                  "--description", "again")["error"]
     assert "name" in _labpipe(env, "methods", "new", "Bad-Name", "--example", str(example),
                               "--description", "x")["error"]
+
+
+def test_watcher_sees_unrecognised_files_but_not_system_files(tmp_path):
+    from labpipe import automation
+    for name in ("a.dm3", "Thumbs.db", ".~lock.x.docx#"):
+        (tmp_path / name).write_bytes(b"1")
+    config = {"raw_roots": [{"id": "r", "path": str(tmp_path)}],
+              "system_files": [".*", "Thumbs.db"]}
+    assert set(automation._snapshot(config)) == {"r:a.dm3"}
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the fake agent tool is a shell script")
+def test_a_failed_ai_run_is_reported_as_an_error(tmp_path):
+    project, raw, env = _project(tmp_path)
+    fake = tmp_path / "claude"
+    fake.write_text("#!/bin/sh\necho 'Error: something broke' >&2\nexit 1\n")
+    fake.chmod(0o755)
+    with open(project / "config" / "local.yaml", "a") as stream:
+        stream.write(f"agents: {{harness: claude-code}}\nautomation: {{claude: '{fake}', "
+                     "notify: {desktop: false}}\n")
+    x, y = synthetic_pattern([(40.0, 5000.0, 1.0, 0.5)])
+    (raw / "XRD" / "SYN-6_test.xrdml").write_text(xrdml_text(x, y, "SYN-6"))
+    assert _labpipe(env, "automation", "run")["exit_code"] == 1
+    last = json.loads([line for line in (project / "logs" / "automation.log").read_text()
+                       .splitlines() if '"event": "notify"' in line][-1])["message"]
+    assert "AI run stopped with an error (Error: something broke)" in last
+    assert "1 of 1 measurement(s) still waiting" in last and "Open Claude Code in" in last

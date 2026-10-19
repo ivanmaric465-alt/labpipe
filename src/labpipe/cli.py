@@ -257,7 +257,8 @@ def cmd_status(args, config) -> int:
         return 0
     counts = Counter((e["method"], e["status"]) for e in data["entries"].values())
     _print({"updated_utc": data.get("updated_utc"),
-            "counts": {f"{method}/{status}": n for (method, status), n in sorted(counts.items())}})
+            "counts": {f"{method}/{status}": n for (method, status), n in sorted(counts.items())},
+            "not_recognised": len(data.get("unrecognised", {}))})
     return 0
 
 
