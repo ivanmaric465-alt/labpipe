@@ -404,8 +404,9 @@ def run_headless(config: dict, question: str, budget_usd: float | None = None) -
     """`labpipe postdoc run`: start a run and let the configured harness write it, the way
     automatic runs start the supervisor (same command builder, same container handling; in
     container mode the CLI forwards this command into the container). Never started by
-    automatic runs. Claude Code takes a USD limit (default automation.max_budget_usd);
-    Codex has no cost flag in the command, so a budget is not applied there."""
+    automatic runs. Usage counts against the harness's own limits (the subscription); a USD
+    limit (`--budget-usd`, else automation.max_budget_usd) applies only when given, and only
+    to Claude Code (Codex has no cost flag)."""
     from labpipe import automation
     chosen = automation.settings(config)
     info = start(config, question)

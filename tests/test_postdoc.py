@@ -429,3 +429,13 @@ def test_report_shows_a_newer_failed_run_and_the_last_good_one(config, project, 
     assert "<em>Which samples again?</em>) did not pass its checks: 1 number(s)" in section
     assert "The last one that passed is below." in section
     assert "compare with the reference?" in section
+
+
+def test_no_cost_limit_unless_set(config, project):
+    from labpipe import automation
+    chosen = {**automation.DEFAULTS, "claude": "/x/claude"}
+    command = automation._harness_command(config, chosen, project / "last.md")
+    assert "--max-budget-usd" not in command          # the subscription's own limits apply
+    command = automation._harness_command(config, {**chosen, "max_budget_usd": 3}, project / "l.md")
+    assert command[command.index("--max-budget-usd") + 1] == "3"
+    assert automation._budget("none") is None and automation._budget("") is None

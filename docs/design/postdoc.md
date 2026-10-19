@@ -82,8 +82,8 @@ path it comes from. The method's doc lists them under a new heading "Quantities"
 
 | Method | Quantity | From |
 |---|---|---|
-| xrd | `xrd.a.<phase>` lattice parameter (Å, σ) | the fcc phase with that ID, not a list position |
-| xrd | `xrd.size.<phase>` crystallite size (nm, lower bound) | sizing |
+| xrd | `xrd.a.fcc` lattice parameter (Å, σ); the note says "possibly Pd" (closest reference) | the main fcc phase, same name in every sample; others `fcc-2`, … |
+| xrd | `xrd.size.fcc` crystallite size (nm, lower bound) | sizing |
 | eds | `eds.at.<element>` metal-basis composition (at%) | `metal_basis.at_percent` |
 | eds | `eds.at_minus_nominal.<element>` (at% points) | `nominal_comparison` |
 | sem | none | images only; the postdoc may look at them, but makes no quantitative claims |

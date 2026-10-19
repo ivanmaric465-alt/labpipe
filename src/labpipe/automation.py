@@ -26,7 +26,8 @@ Settings (config/local.yaml):
       settle_minutes: 3            # also used by `labpipe scan` (else pipeline.yaml's)
       nightly_at: "02:00"          # safety net
       max_measurements_per_run: 10 # the rest follows in the next run
-      max_budget_usd: 5            # per AI run
+      max_budget_usd: null         # none: the harness's own usage limits apply (subscription);
+                                   # set a USD limit per AI run only when paying per use (API key)
       claude: /home/me/.local/bin/claude
       notify: {desktop: true, command: null}   # command: ["prog", "{message}"]
 """
@@ -54,7 +55,7 @@ from labpipe.registry import load_methods, skip_reason, user_ignore
 from labpipe.safety import PROJECT_ROOT, assert_pipeline_writable, in_container, set_local_block
 
 DEFAULTS = {"check_every_seconds": 60, "settle_minutes": 3, "nightly_at": "02:00",
-            "max_measurements_per_run": 10, "max_budget_usd": 5, "claude": None, "codex": None,
+            "max_measurements_per_run": 10, "max_budget_usd": None, "claude": None, "codex": None,
             "notify": {"desktop": True, "command": None}}
 WAITING_TOO_LONG_HOURS = 24
 
@@ -306,8 +307,14 @@ def _harness_command(config: dict, chosen: dict, last_message: Path, agent: str 
             "--setting-sources", "project", "--strict-mcp-config",
             "--permission-mode", "dontAsk", "--settings",
             ".claude/unattended-container.json" if inside else ".claude/unattended.json",
-            "--output-format", "stream-json", "--verbose",
-            "--max-budget-usd", str(budget_usd or chosen["max_budget_usd"])]
+            "--output-format", "stream-json", "--verbose"] + (
+            ["--max-budget-usd", str(budget)]
+            if (budget := budget_usd or chosen.get("max_budget_usd")) else [])
+
+
+
+def _budget(answer: str) -> float | None:
+    return None if answer.strip().lower() in ("", "none", "no", "0") else float(answer)
 
 
 def _describe(config: dict, ids: list[str]) -> str:
@@ -558,8 +565,10 @@ def setup(config: dict, *, assume_yes: bool = False) -> int:
         "max_measurements_per_run": int(_ask("At most how many measurements per AI run "
                                              "(the rest follow in the next run)?",
                                              str(current["max_measurements_per_run"]))),
-        "max_budget_usd": float(_ask("Maximum AI cost per run (USD; Claude Code only, Codex "
-                                     "has no cost limit)?", str(current["max_budget_usd"]))),
+        "max_budget_usd": _budget(_ask(
+            "Cost limit per AI run in USD, only if you pay per use with an API key (Claude Code "
+            "only). Enter or 'none': your subscription's own usage limits apply",
+            str(current["max_budget_usd"] or "none"))),
         "claude": current["claude"], "codex": current["codex"],
         "notify": {"desktop": _ask("Desktop notifications? (y/n)",
                                    "y" if current["notify"]["desktop"] else "n").lower().startswith("y"),

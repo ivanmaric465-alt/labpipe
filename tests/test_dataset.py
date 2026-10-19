@@ -48,23 +48,33 @@ def eds_results(pt=23.66, nominal=True):
     return results
 
 
-def test_xrd_quantities_by_phase_id():
+def test_xrd_quantities_generic_fcc_name():
     q = xrd_summary.quantities(xrd_results())
-    assert set(q) == {"xrd.a.fcc-1", "xrd.a.fcc-2", "xrd.size.fcc-1"}   # no standard
-    assert q["xrd.a.fcc-1"] == {"value": 3.8870, "sigma": 0.0035, "unit": "Å",
-                                "key": "phases.fcc_indexed[0].a_angstrom",
-                                "note": "closest reference Pd"}
+    assert set(q) == {"xrd.a.fcc", "xrd.a.fcc-2", "xrd.size.fcc"}   # no standard
+    assert q["xrd.a.fcc"] == {"value": 3.8870, "sigma": 0.0035, "unit": "Å",
+                              "key": "phases.fcc_indexed[0].a_angstrom",
+                              "note": "main of 2 fcc phases (phase fcc-1 in results.json); "
+                                      "possibly Pd (closest reference, Δa -0.07 %)"}
     assert q["xrd.a.fcc-2"]["sigma"] is None and "tentative (2 reflections)" in q["xrd.a.fcc-2"]["note"]
-    size = q["xrd.size.fcc-1"]
+    size = q["xrd.size.fcc"]
     assert (size["value"], size["sigma"], size["unit"]) == (5.55, 0.034, "nm")
     assert size["key"] == "size_strain[0].scherrer[0].size_nm"
     assert "lower bound until an instrument calibration exists" in size["note"]
 
 
+def test_xrd_main_fcc_phase_is_the_one_with_most_reflections():
+    results = xrd_results()
+    results["phases"]["fcc_indexed"].reverse()          # order found no longer decides
+    results["phases"]["fcc_indexed"][0]["tentative"] = False
+    results["phases"]["fcc_indexed"][0]["n_reflections"] = 2
+    q = xrd_summary.quantities(results)
+    assert q["xrd.a.fcc"]["value"] == 3.8870 and q["xrd.a.fcc-2"]["value"] == 4.05
+
+
 def test_xrd_size_without_lower_bound_note_when_calibrated():
     results = xrd_results(uncalibrated=False)
     results["size_strain"][0]["instrument_correction"] = "Si standard"
-    assert "lower bound" not in xrd_summary.quantities(results)["xrd.size.fcc-1"]["note"]
+    assert "lower bound" not in xrd_summary.quantities(results)["xrd.size.fcc"]["note"]
 
 
 def test_eds_quantities():
@@ -136,7 +146,7 @@ def test_build_shape_order_and_gaps(project):
                                        "plots": ["analysis/S-1/sem/S-1_i/plot.png"]}}
     xrd = next(m for m in data["samples"]["S-2"]["measurements"] if m["method"] == "xrd")
     assert xrd["notes"] == "analysis/S-2/xrd/S-2_a/notes.md" and xrd["review_codes"] == ["wh_unreliable"]
-    assert "xrd.a.fcc-1" in xrd["quantities"] and xrd["results_sha256"] == "abc"
+    assert "xrd.a.fcc" in xrd["quantities"] and xrd["results_sha256"] == "abc"
     failed = data["samples"]["S-10"]["measurements"][0]
     assert (failed["status"], failed["quantities"], failed["notes"]) == ("failed", {}, None)
     assert data["samples"]["S-3"]["measurements"] == []                # only in samples.yaml
@@ -144,7 +154,7 @@ def test_build_shape_order_and_gaps(project):
 
 
 def test_compare_on_a_built_project(project):
-    out = dataset.compare(CONFIG, "xrd.a.fcc-1", reference="S-1")
+    out = dataset.compare(CONFIG, "xrd.a.fcc", reference="S-1")
     assert [p["sample"] for p in out["points"]] == ["S-2"]
     assert out["points"][0]["difference"] == pytest.approx(3.8870 - 3.9)
     assert {"sample": "S-10", "reason": "failed"} in out["left_out"]
@@ -178,7 +188,7 @@ def _data(samples):
         for sample, spec in samples.items()}}
 
 
-A = "xrd.a.fcc-1"
+A = "xrd.a.fcc"
 
 
 def test_difference_values_and_sigma():
@@ -287,7 +297,7 @@ def test_cli_compare_saves_into_a_postdoc_run(project, monkeypatch, capsys):
     monkeypatch.setattr(cli, "PROJECT_ROOT", project)
     run = project / "analysis" / "_postdoc" / "r1"
     run.mkdir(parents=True)
-    args = SimpleNamespace(action="compare", quantity="xrd.a.fcc-1", reference="S-1",
+    args = SimpleNamespace(action="compare", quantity="xrd.a.fcc", reference="S-1",
                            against=None, measurement=None, each=False,
                            run="analysis/_postdoc/r1")
     assert cli.cmd_dataset(args, CONFIG) == 0

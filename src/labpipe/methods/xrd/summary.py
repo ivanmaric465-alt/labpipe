@@ -194,29 +194,41 @@ def summarize(results: dict[str, Any]) -> dict[str, Any]:
 def quantities(results: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Named numbers for comparing samples (`labpipe dataset`); copied from results.json.
 
-    - `xrd.a.<phase id>`: lattice parameter of each fcc-indexed phase, with its σ.
-    - `xrd.size.<phase id>`: Scherrer size of the phase's first reflection (as in the
-      overview), σ from the peak-width fit only; a lower bound without instrument calibration.
+    - `xrd.a.fcc`: lattice parameter of the sample's fcc phase, with its σ, the same name in
+      every sample. With several fcc phases, the main one (not tentative, most reflections,
+      then the order found) is `fcc` and the others `fcc-2`, `fcc-3`. The note names the
+      closest reference ("possibly Pd") as a candidate, never an identification.
+    - `xrd.size.fcc`: Scherrer size of the phase's first reflection (as in the overview), σ
+      from the peak-width fit only; a lower bound without instrument calibration.
     The internal standard is left out: its lattice parameter is a database or certificate
-    value, not a result. Phase ids (fcc-1, fcc-2) are numbered within one measurement.
+    value, not a result.
     """
     units = results.get("units") or {}
     out: dict[str, dict[str, Any]] = {}
     sizes = {row["phase"]: (i, row) for i, row in enumerate(results.get("size_strain") or [])}
     uncalibrated = any(c.get("code") == "no_instrument_correction"
                        for c in results.get("checks") or [])
-    for i, phase in enumerate(results["phases"]["fcc_indexed"]):
+    phases = list(enumerate(results["phases"]["fcc_indexed"]))
+    ranked = sorted(phases, key=lambda item: (bool(item[1].get("tentative")),
+                                              -(item[1].get("n_reflections") or 0), item[0]))
+    for rank, (i, phase) in enumerate(ranked):
+        name = "fcc" if rank == 0 else f"fcc-{rank + 1}"
         notes = []
+        if len(ranked) > 1:
+            notes.append(f"{'main' if rank == 0 else 'other'} of {len(ranked)} fcc phases "
+                         f"(phase {phase['id']} in results.json)")
         if phase.get("tentative"):
             notes.append(f"tentative ({phase.get('n_reflections')} reflections)")
         nearest = (phase.get("reference_comparison") or [None])[0]
         if nearest:
-            notes.append(f"closest reference {nearest['phase']}")
+            delta = nearest.get("delta_a_percent")
+            notes.append(f"possibly {nearest['phase']} (closest reference"
+                         + (f", Δa {delta:+.2f} %" if delta is not None else "") + ")")
         entry = {"value": phase["a_angstrom"], "sigma": phase.get("a_sigma_angstrom"),
                  "unit": "Å", "key": f"phases.fcc_indexed[{i}].a_angstrom"}
         if notes:
             entry["note"] = "; ".join(notes)
-        out[f"xrd.a.{phase['id']}"] = entry
+        out[f"xrd.a.{name}"] = entry
         if phase["id"] in sizes:
             j, row = sizes[phase["id"]]
             for k, scherrer in enumerate(row.get("scherrer") or []):
@@ -225,7 +237,7 @@ def quantities(results: dict[str, Any]) -> dict[str, dict[str, Any]]:
                 note = f"Scherrer, {_hkl(scherrer['hkl'])} reflection"
                 if uncalibrated or str(row.get("instrument_correction", "")).startswith("none"):
                     note += "; lower bound until an instrument calibration exists"
-                out[f"xrd.size.{phase['id']}"] = {
+                out[f"xrd.size.{name}"] = {
                     "value": scherrer["size_nm"], "sigma": scherrer.get("size_sigma_nm_from_fwhm"),
                     "unit": units.get("size", "nm"),
                     "key": f"size_strain[{j}].scherrer[{k}].size_nm", "note": note}
