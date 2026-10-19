@@ -31,4 +31,4 @@ labpipe scan             # apply the changes
 
 ## After a change
 
-`labpipe scan` picks it up. A file waiting for its sample ID (`needs_review`) is analysed in the next pass. A file already analysed under another ID: rerun it (`labpipe <method> analyze --entry ID --rerun`, code), then its notes are rewritten (AI).
+`labpipe scan` picks it up. A file waiting for its sample ID (`needs_review`) is analysed in the next pass. After an update, only analyses whose method's calculation changed become `stale` (the reason names the method and versions; `labpipe methods versions` lists them). A file already analysed under another ID: rerun it (`labpipe <method> analyze --entry ID --rerun`, code), then its notes are rewritten (AI).

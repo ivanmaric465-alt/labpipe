@@ -7,6 +7,7 @@
   labpipe inventory                         what labpipe recognises in the data folder(s)
   labpipe methods new NAME --example F --description D   scaffold a new analysis method
   labpipe methods check NAME --example F    run a method on an example and verify its contract
+  labpipe methods versions                  analysis and plot version of every method
   labpipe scan [--baseline]                 update manifest.json from the raw roots
   labpipe pending [--json]                  entries waiting for analysis (+ subagent)
   labpipe status [ENTRY] [--json]           manifest summary or one entry
@@ -106,6 +107,10 @@ def cmd_notes_todo(args, config) -> int:
 
 def cmd_methods(args, config) -> int:
     from labpipe import methods_kit
+    if args.action == "versions":
+        from labpipe.versions import all_versions
+        _print(all_versions())
+        return 0
     try:
         if args.action == "new":
             _print(methods_kit.new(args.name, Path(args.example), args.description,
@@ -481,7 +486,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan.set_defaults(func=cmd_scan)
     sub.add_parser("inventory", help="what labpipe recognises in the data folder(s)"
                    ).set_defaults(func=cmd_inventory)
-    methods_parser = sub.add_parser("methods", help="scaffold a new analysis method, check one"
+    methods_parser = sub.add_parser("methods", help="scaffold a new analysis method, check one, show versions"
                                     ).add_subparsers(dest="action", required=True)
     method_new = methods_parser.add_parser("new", help="create a method from the template")
     method_new.add_argument("name")
@@ -495,6 +500,9 @@ def build_parser() -> argparse.ArgumentParser:
     method_check.add_argument("name")
     method_check.add_argument("--example", required=True)
     method_check.set_defaults(func=cmd_methods)
+    methods_parser.add_parser("versions", help="analysis version and plot version of every "
+                              "method, with the modules in each").set_defaults(
+        func=cmd_methods, needs_config=False)
     sub.add_parser("pending").set_defaults(func=cmd_pending)
     status = sub.add_parser("status")
     status.add_argument("entry", nargs="?")

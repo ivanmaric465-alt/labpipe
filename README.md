@@ -216,7 +216,7 @@ labpipe agents sync
 labpipe doctor
 ```
 
-Old analyses become `stale` but stay valid. Redo them only if you want to:
+An update marks `stale` only the analyses of methods whose calculation changed (`labpipe methods versions` shows each method's version); docs, report, agent or other-method changes leave them alone. Stale analyses stay valid. Redo them only if you want to:
 
 ```bash
 labpipe requeue --stale

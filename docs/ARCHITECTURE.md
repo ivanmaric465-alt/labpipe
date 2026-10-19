@@ -14,10 +14,14 @@ docs belong to which code: `docs/docmap.yaml` (`scripts/check_docs.py` checks it
 2. **Numbers come from code.** Analyses are deterministic Python. Agent text is checked by code
    (`notes verify`, `postdoc verify`): every number must be found in the outputs.
 3. **Every output can be regenerated from its `provenance.json`**: input hash, resolved
-   settings, the settings files used and their hashes, code version, environment, output hashes
-   (`replay`).
-4. **Nothing is deleted.** Reruns go to `_superseded/`, failures to `_failed/`.
-5. **Failures are recorded and skipped**: one bad file never stops a run.
+   settings, the settings files used and their hashes, git commit, the method's analysis and
+   plot version, environment, output hashes (`replay`).
+4. **Only a changed calculation marks an analysis out of date.** Each method has an
+   *analysis version* and a *plot version* (`versions.py`): hashes of the source that computes
+   the results, and of the drawing code. A new git commit, a doc, the report, an agent, another
+   method or a local edit changes neither. Details below.
+5. **Nothing is deleted.** Reruns go to `_superseded/`, failures to `_failed/`.
+6. **Failures are recorded and skipped**: one bad file never stops a run.
 
 ## Data flow
 
@@ -67,13 +71,14 @@ Generated and git-ignored: `analysis/`, `manifest.json`, `logs/`, `context/`,
 |---|---|---|
 | Entry | `cli.py` | argparse commands; forwards host commands into the container in container mode |
 | State | `manifest.py` | load, save and lock `manifest.json`; status changes |
-| | `scanner.py` | raw roots → manifest; settle time, hashes, duplicates, stale (code or settings), plot out of date, unrecognised files |
+| | `scanner.py` | raw roots → manifest; settle time, hashes, duplicates, stale (analysis version or settings), plot out of date (plot version or settings), unrecognised files |
 | | `registry.py` | `methods.yaml`: patterns, `recognise:` hooks, ignore rules |
 | | `naming.py` | sample ID and measurement ID from file names |
 | | `inventory.py` | what is recognised in the data folder (read-only) |
 | Analysis | `pipeline.py` | run a method on an entry; staging, `_superseded/`, `_failed/`; replot; review queue |
 | | `settings.py` | layered settings (defaults ← `lab.yaml` ← samples ← measurement), key checks, fingerprints (analysis and plot separate) |
-| | `provenance.py` | provenance records, code version, environment |
+| | `provenance.py` | provenance records, git commit, environment |
+| | `versions.py` | analysis version and plot version per method (hash of the source), `labpipe methods versions` |
 | | `replay.py` | regenerate from `provenance.json` and compare hashes |
 | | `methods/<m>/analyze.py` | `run(...)`: the method contract (below) |
 | | `methods/<m>/summary.py` | `summarize(results)` for report and agents; `quantities(results)` for the dataset |
@@ -113,9 +118,37 @@ Details: `docs/ADDING_A_METHOD.md`, template: `methods/template/`.
   - a `recognise:` content check;
   - a `cli_extension`;
   - `report: gallery` (+ `gallery.select`);
-  - `figures` in results.
+  - `figures` in results;
+  - `plot_modules` (drawing code in its own modules, not in the analyze module: a change marks "plot
+    out of date" instead of stale) and `analysis_data` (data files the numbers depend on).
 - **Docs**: `docs/methods/<m>.md` covers design, settings, interpretation, quantities and
   conventions. An agent role goes in `agents/<m>-analyst.md`, unless the method is code only.
+
+## Versions: what marks an analysis out of date
+
+`versions.py` hashes source (line endings normalised, so Windows and Linux agree). Both are 16 hex
+characters, stored per entry in `manifest.json` and in `provenance.json` → `code`.
+
+- **Analysis version** of a method: the modules its `module` in `methods.yaml` imports
+  (`labpipe.*`, followed through the AST, also imports inside functions), plus the files in
+  `analysis_data:` (XRD: `references/xrd/patterns/*.json`: a rebuilt or added phase can change
+  which phase matches, so XRD analyses become out of date; the reference hashes are in
+  provenance too). Left out:
+  - the plot modules (`plot_modules:` in `methods.yaml`) and `labpipe.plotting`;
+  - infrastructure that computes no numbers: `safety`, `provenance`, `settings` (the resolved
+    settings are fingerprinted instead), `manifest`, `locking`, `registry`
+    (`versions.INFRASTRUCTURE`).
+
+  Everything else stays in, for example `naming` (XRD uses it for a check in results.json).
+  eds and sem draw inside their analyze module, so their drawing code is part of their analysis
+  version: a change to it marks their analyses out of date.
+- **Plot version**: the method's `plot_modules` plus `labpipe.plotting`. A change marks done
+  entries "plot out of date" (`labpipe replot`), never stale.
+- **Scanner**: a done entry whose analysis version differs is stale ("the <method> calculation
+  changed (version a → b)"). A failed entry is retried when it changes. An entry from before
+  versions existed adopts the current ones if its `code_version` is the current clean commit,
+  otherwise it is stale ("analysed before per-method versions; redo to be sure").
+- **Replay** still compares the git commit; the versions show whether a commit changed anything.
 
 ## Agents and the harness
 

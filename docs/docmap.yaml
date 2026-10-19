@@ -30,7 +30,7 @@ areas:
     code: [src/labpipe/report.py, config/report.yaml]
     docs: [docs/settings/report.md, README.md]
   provenance:       # what is recorded, replay, the rules in Invariants
-    code: [src/labpipe/provenance.py, src/labpipe/replay.py, src/labpipe/safety.py]
+    code: [src/labpipe/provenance.py, src/labpipe/versions.py, src/labpipe/replay.py, src/labpipe/safety.py]
     docs: [docs/ARCHITECTURE.md, docs/SAFETY.md]
   method-xrd:
     code: ["src/labpipe/methods/xrd/*", config/xrd.yaml, "references/xrd/*.yaml"]
