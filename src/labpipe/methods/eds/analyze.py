@@ -94,8 +94,14 @@ def _linked_images(report: Path) -> list[str]:
     return parser.images
 
 
+def _named_for(image: Path, report: Path) -> bool:
+    """INCA names a report's images after it: S-10.htm -> s-100.jpg, s-101.jpg."""
+    return image.stem.lower()[:-1] == report.stem.lower()
+
+
 def recognise(path: Path) -> bool:
-    """methods.yaml `recognise`: INCA reports, the JPGs they link, INCA .ipj projects."""
+    """methods.yaml `recognise`: INCA reports, the JPGs they link or that are named for
+    one (`images` in the settings may choose those), INCA .ipj projects."""
     suffix = path.suffix.lower()
     if suffix in REPORT_SUFFIXES:
         return _is_inca(_read_text(path))
@@ -104,7 +110,8 @@ def recognise(path: Path) -> bool:
     if suffix in (".jpg", ".jpeg"):
         for report in sorted(path.parent.iterdir()):
             if report.suffix.lower() in REPORT_SUFFIXES and _is_inca(_read_text(report)) and \
-                    path.name.lower() in (name.lower() for name in _linked_images(report)):
+                    (_named_for(path, report) or
+                     path.name.lower() in (name.lower() for name in _linked_images(report))):
                 return True
     return False
 
@@ -252,6 +259,22 @@ def compare_with_nominal(measured: dict[str, float],
 
 # --- run ----------------------------------------------------------------------------------
 
+def _composition_bars(bars, metals: dict[str, float], nominal: dict | None) -> None:
+    names = sorted(metals, key=lambda name: -metals[name])
+    positions = range(len(names))
+    if nominal:
+        nominal_values = {r["element"]: r["nominal_at_percent"] for r in nominal["rows"]}
+        bars.bar([p - 0.2 for p in positions], [metals[n] for n in names], 0.4, color="0.2",
+                 label="measured")
+        bars.bar([p + 0.2 for p in positions], [nominal_values.get(n) or 0 for n in names], 0.4,
+                 color="0.7", label="nominal")
+        bars.legend(frameon=False, fontsize=7)
+    else:
+        bars.bar(list(positions), [metals[n] for n in names], 0.6, color="0.2")
+    bars.set_xticks(list(positions), names)
+    bars.set_ylabel("Metals (at%, sum 100)")
+
+
 def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
         settings_sources: list | None = None, context: dict[str, Any] | None = None,
         pipeline: bool = True) -> dict[str, Any]:
@@ -301,21 +324,29 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
         checks.append({"code": "no_nominal", "severity": "info",
                        "message": "no nominal composition for this sample (config/samples.yaml → "
                                   "samples.<id>.eds.nominal_at_percent)"})
-    images = [(link, find_image(input_path, link)) for link in report["linked_images"]]
+    chosen = settings.get("images")
+    if chosen:
+        images = [(name, find_image(input_path, name)) for name in chosen]
+        checks.append({"code": "images_from_settings", "severity": "info",
+                       "message": f"images set in the settings: {list(chosen)} (the report "
+                                  f"links {report['linked_images']})"})
+    else:
+        images = [(link, find_image(input_path, link)) for link in report["linked_images"]]
     missing = [link for link, found in images if found is None]
     if missing:
         checks.append({"code": "images_missing", "severity": "warning",
-                       "message": f"linked image(s) not found next to the report: {missing}"})
+                       "message": f"image(s) not found next to the report: {missing}"})
     foreign = [link for link in report["linked_images"]
-               if Path(link).stem.lower()[:-1] != input_path.stem.lower()]
-    if foreign:
+               if not _named_for(Path(link), input_path)]
+    if foreign and not chosen:
         own = sorted(p.name for p in input_path.parent.iterdir()
-                     if p.suffix.lower() in (".jpg", ".jpeg")
-                     and p.stem.lower()[:-1] == input_path.stem.lower())
+                     if p.suffix.lower() in (".jpg", ".jpeg") and _named_for(p, input_path))
         checks.append({"code": "linked_images_other_name", "severity": "review",
                        "message": f"the report links {foreign}, named for another report"
                                   + (f"; images named for this report exist: {own}" if own else "")
-                                  + ". Check which electron image and spectrum belong here"})
+                                  + ". Check which electron image and spectrum belong here; "
+                                    "set them with `images:` in config/measurements/eds/"
+                                    "<measurement_id>.yaml"})
     if report["unread_rows"]:
         checks.append({"code": "rows_not_read", "severity": "review",
                        "message": f"table rows that could not be read: {report['unread_rows']}"})
@@ -324,6 +355,7 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
         "schema": RESULTS_SCHEMA, "status": status,
         "sample_id": context.get("sample_id"), "measurement_id": context.get("measurement_id"),
         "input": {"file_name": input_path.name, "sha256": input_sha,
+                  "images_source": "settings" if chosen else "report links",
                   "images": [{"link": link, "file": found.name if found else None,
                               "sha256": prov.sha256_file(found) if found else None}
                              for link, found in images]},
@@ -355,20 +387,7 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
             axis.imshow(opened.convert("RGB"))
         axis.set_axis_off()
         axis.set_title(label, fontsize=8)
-    bars = axes[-1]
-    names = sorted(metals, key=lambda name: -metals[name])
-    positions = range(len(names))
-    if nominal:
-        nominal_values = {r["element"]: r["nominal_at_percent"] for r in nominal["rows"]}
-        bars.bar([p - 0.2 for p in positions], [metals[n] for n in names], 0.4, color="0.2",
-                 label="measured")
-        bars.bar([p + 0.2 for p in positions], [nominal_values.get(n) or 0 for n in names], 0.4,
-                 color="0.7", label="nominal")
-        bars.legend(frameon=False, fontsize=7)
-    else:
-        bars.bar(list(positions), [metals[n] for n in names], 0.6, color="0.2")
-    bars.set_xticks(list(positions), names)
-    bars.set_ylabel("Metals (at%, sum 100)")
+    _composition_bars(axes[-1], metals, nominal)
     figure.tight_layout()
     staging = out_dir / ".plot-staging"
     staging.mkdir(exist_ok=True)
@@ -377,15 +396,31 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
     figure.savefig(staging / "plot.pdf",
                    metadata={"Creator": None, "Producer": None, "CreationDate": None})
     plt.close(figure)
-    for name in ("plot.png", "plot.pdf"):
+    # The panels one by one, for the report (shown large, one at a time); the images are
+    # byte copies of the INCA JPGs, the bar chart is drawn again on its own.
+    single, axis = plt.subplots(figsize=(3.25, 2.6))
+    _composition_bars(axis, metals, nominal)
+    single.tight_layout()
+    single.savefig(staging / "panel_composition.png", dpi=int(settings["plot"]["dpi"]),
+                   metadata={"Software": None})
+    plt.close(single)
+    figures = []
+    for picture, label, name in zip(pictures, ("electron image", "spectrum"),
+                                    ("panel_electron_image", "panel_spectrum")):
+        file = name + picture.suffix.lower()
+        (staging / file).write_bytes(picture.read_bytes())
+        figures.append({"file": file, "caption": f"{label} ({picture.name})"})
+    figures.append({"file": "panel_composition.png", "caption": "metals (at%, sum 100)"})
+    results["figures"] = figures
+    files = ["plot.png", "plot.pdf"] + [f["file"] for f in figures]
+    for name in files:
         atomic_write_bytes(out_dir / name, (staging / name).read_bytes(), pipeline=pipeline)
         (staging / name).unlink()
     staging.rmdir()
     atomic_write_bytes(out_dir / "results.json",
                        (json.dumps(results, indent=1, ensure_ascii=False, allow_nan=False)
                         + "\n").encode(), pipeline=pipeline)
-    outputs = {name: prov.sha256_file(out_dir / name)
-               for name in ("results.json", "plot.png", "plot.pdf")}
+    outputs = {name: prov.sha256_file(out_dir / name) for name in ["results.json"] + files}
     record = prov.build_record(
         method=METHOD, entry_point="labpipe.methods.eds.analyze.run",
         input_path=input_path, input_sha256=input_sha, context=context, settings=settings,

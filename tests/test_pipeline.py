@@ -248,6 +248,33 @@ def test_summary_and_report(tmp_path):
     assert report["measurements"] == 1 and "SYN-2" in page and "No notes yet" in page
 
 
+def test_report_shows_eds_panels_and_sem_gallery_one_at_a_time(tmp_path):
+    from tests import test_eds, test_sem
+    project, raw, env = _project(tmp_path)
+    test_sem.make_example(raw / "SEM", "S-14 a001", mag=10000)
+    second = test_sem.make_example(raw / "SEM", "S-14 a002", mag=50000)
+    second.write_bytes(second.read_bytes()[:-1] + b"\x01")   # not a byte-identical duplicate
+    test_eds.make_example(raw / "EDS", "S-13")
+    (raw / "EDS" / "S-14.htm").write_text(test_eds.REPORT.format(stem="S-13") + "\n",
+                                         encoding="latin-1")
+    for n in (0, 1):
+        (raw / "EDS" / f"s-14{n}.jpg").write_bytes((raw / "EDS" / f"s-13{n}.jpg").read_bytes())
+    steering = project / "config" / "measurements" / "eds" / "S-14.yaml"
+    steering.parent.mkdir(parents=True, exist_ok=True)
+    steering.write_text("note: the report links S-13's images\nimages: [s-140.jpg, s-141.jpg]\n")
+    counts = _labpipe(env, "scan")["counts"]
+    assert counts.get("pending") == 4 and "unclaimed" not in counts      # s-14x.jpg claimed
+    _labpipe(env, "analyze", "--pending", "--method", "sem")
+    for item in _labpipe(env, "pending"):
+        _labpipe(env, "eds", "analyze", "--entry", item["entry_id"])
+    results = json.loads((project / "analysis" / "S-14" / "eds" / "S-14" / "results.json")
+                         .read_text(encoding="utf-8"))
+    assert [i["file"] for i in results["input"]["images"]] == ["s-140.jpg", "s-141.jpg"]
+    page = (project / _labpipe(env, "report")["report"]).read_text(encoding="utf-8")
+    assert page.count("data-car tabindex") == 3 and page.count("1 / 3") == 2 and "1 / 2" in page
+    assert "spectrum (s-141.jpg)" in page and "the report links S-13" in page
+
+
 def test_roots_rename_keeps_entries(tmp_path):
     project, raw, env = _project(tmp_path)
     x, y = synthetic_pattern([(40.0, 5000.0, 1.0, 0.5)])

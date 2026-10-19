@@ -175,6 +175,7 @@ EDS keys (`config/eds.yaml`):
 |---|---|
 | "S-9 should be equimolar Ru, Rh, Pd, Ir, Pt" | `samples.S-9.eds.nominal_at_percent: {Ru: 20, Rh: 20, Pd: 20, Ir: 20, Pt: 20}` (copy the user's numbers; never compute them) |
 | "count Si as a metal" / "leave out Cu (grid)" | `non_metals: [...]` |
+| "the images of S-14 are s-140.jpg and s-141.jpg" (report links the wrong ones) | `config/measurements/eds/S-14.yaml`: `images: [s-140.jpg, s-141.jpg]` plus a `note:` |
 
 ## Adding a reference phase (XRD)
 

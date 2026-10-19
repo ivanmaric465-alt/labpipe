@@ -125,3 +125,25 @@ def test_eds_flags_images_named_for_another_report(tmp_path):
     summary = analyze.run(other, tmp_path / "out", context={}, pipeline=False)
     [flag] = [c for c in summary["checks"] if c["code"] == "linked_images_other_name"]
     assert "S-130.jpg" in flag["message"] and "s-140.jpg" in flag["message"]
+
+
+def test_eds_images_from_settings_replace_the_links(tmp_path):
+    from labpipe import settings as settings_mod
+    make_example(tmp_path, "S-13")
+    other = tmp_path / "S-14.htm"
+    other.write_text(REPORT.format(stem="S-13"), encoding="latin-1")
+    for n in (0, 1):
+        (tmp_path / f"s-14{n}.jpg").write_bytes((tmp_path / f"s-13{n}.jpg").read_bytes())
+    assert analyze.recognise(tmp_path / "s-140.jpg")      # named for a report, not linked
+    settings = settings_mod.resolve("eds", None, None)[0] | {"images": ["s-140.jpg", "s-141.jpg"]}
+    out = tmp_path / "out"
+    summary = analyze.run(other, out, settings=settings, context={}, pipeline=False)
+    results = json.loads((out / "results.json").read_text(encoding="utf-8"))
+    codes = {c["code"] for c in results["checks"]}
+    assert "images_from_settings" in codes and "linked_images_other_name" not in codes
+    assert [i["file"] for i in results["input"]["images"]] == ["s-140.jpg", "s-141.jpg"]
+    assert results["input"]["images_source"] == "settings" and summary["status"] == "ok"
+    assert (out / "panel_electron_image.jpg").read_bytes() == (tmp_path / "s-140.jpg").read_bytes()
+    assert [f["file"] for f in results["figures"]] == [
+        "panel_electron_image.jpg", "panel_spectrum.jpg", "panel_composition.png"]
+    assert set(summary["outputs"]) >= {f["file"] for f in results["figures"]}

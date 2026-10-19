@@ -15,6 +15,11 @@ low_concentration_wt_percent: 1.0
 # Renormalised over its metals; compared with the measured metal basis (no flag).
 nominal_at_percent: null
 
+# Electron image and spectrum to use, as file names next to the report, normally per
+# measurement (config/measurements/eds/<measurement_id>.yaml), when the report links
+# the wrong ones, e.g.  images: [s-140.jpg, s-141.jpg].  null = the images it links.
+images: null
+
 plot:
   width_in: 7.0       # ACS double column: electron image | spectrum | metal bar chart
   dpi: 300

@@ -30,6 +30,7 @@ The contract `run(...)` fulfils is in the docstring of `src/labpipe/methods/temp
 - every number someone may quote goes into `results.json`, with units;
 - checks `{code, severity: info|warning|review, message}`; status `review` if any check is `review`;
 - outputs via `atomic_write_bytes`, provenance via `labpipe.provenance.build_record`;
+- optional: `"figures": [{"file", "caption"}]` in `results.json` (files in the output folder, hashed in provenance) makes the report show those one at a time instead of `plot.png`, e.g. the panels of a multi-panel plot;
 - raise `AnalysisError` for unusable input.
 
 If other methods use the same file type (`.txt`, `.jpg`), add a content check:

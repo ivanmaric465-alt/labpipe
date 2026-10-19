@@ -6,8 +6,10 @@ Each method may provide a summary module (methods.yaml → `summary`) with
 `summarize(results) -> {"overview": {...}, "check_before_using": [...], ...}`;
 methods without one get a generic card. Methods with `report: gallery` (SEM) get
 one gallery per sample instead of a card per measurement; their `gallery` module
-chooses the images (`select(items, settings["gallery"])`). The page is grouped by
-sample.
+chooses the images (`select(items, settings["gallery"])`). A method that lists
+`figures` in results.json ([{"file", "caption"}], files in its output folder) gets
+those, one at a time, instead of plot.png; galleries are shown the same way
+(arrows, keys or side scrolling). The page is grouped by sample.
 """
 
 from __future__ import annotations
@@ -51,7 +53,7 @@ tr:last-child td{border-bottom:0} td.num{font-variant-numeric:tabular-nums;white
 a{color:inherit}.flag{display:inline-block;border-radius:99px;padding:0 .55rem;font-size:.8rem;
 font-weight:600;background:var(--chip)}.flag.r{color:var(--bad)}.flag.o{color:var(--ok)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-top:22px;
-padding:18px 20px;display:grid;grid-template-columns:minmax(0,420px) minmax(0,1fr);gap:22px}
+padding:18px 20px;display:grid;grid-template-columns:minmax(0,480px) minmax(0,1fr);gap:22px}
 @media (max-width:760px){.card{grid-template-columns:1fr}}
 .card img{width:100%;border-radius:6px;background:#fff}
 .card h2{margin:0 0 .2rem;font-size:1.15rem}.meta{color:var(--mut);font-size:.82rem;margin-bottom:.7rem}
@@ -61,8 +63,16 @@ margin:1rem 0 .3rem}.card ul{margin:.2rem 0;padding-left:1.1rem}.card li{margin:
 dl{display:grid;grid-template-columns:max-content 1fr;gap:.15rem .9rem;margin:0;font-size:.9rem}
 dt{color:var(--mut)}dd{margin:0;font-variant-numeric:tabular-nums}
 .sample{margin:2.4rem 0 0;font-size:1.3rem;padding-bottom:.3rem;border-bottom:1px solid var(--line)}
-.card.wide{grid-template-columns:1fr}.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
-.gal figure{margin:0}.gal figcaption{font-size:.8rem;color:var(--mut);margin-top:.25rem}
+.card.wide{grid-template-columns:1fr}.card.wide .car{max-width:680px;margin:0 auto}
+.track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory}
+.track figure{flex:0 0 100%;margin:0;scroll-snap-align:start;text-align:center}
+.track img{max-height:540px;object-fit:contain}
+figcaption{font-size:.8rem;color:var(--mut);margin-top:.25rem}
+.nav{display:flex;justify-content:center;align-items:center;gap:.8rem;margin-top:.35rem;
+font-size:.85rem;color:var(--mut)}.nav button{width:2.2rem;height:2.2rem;border-radius:99px;
+border:1px solid var(--line);background:var(--card);color:var(--fg);font-size:1.1rem;cursor:pointer}
+.nav button:disabled{opacity:.3;cursor:default}
+@media print{.track{display:block;overflow:visible}.nav{display:none}}
 .plain{font-size:.97rem}details{margin-top:1rem}summary{cursor:pointer;color:var(--mut);font-size:.85rem}.notes{font-size:.88rem}.notes h4{margin:.8rem 0 .2rem}.warnbox{border-left:3px solid var(--warn);padding:.2rem .7rem;margin:.6rem 0}
 """
 
@@ -151,9 +161,39 @@ EMBED_MAX_BYTES = 400_000   # larger plots (photos, e.g. EDS) are embedded as a 
 EMBED_WIDTH_PX = 1100
 
 
-def _embedded(png: Path) -> str:
+SCRIPT = """
+document.querySelectorAll('[data-car]').forEach(c=>{
+const t=c.querySelector('.track'),n=t.children.length,p=c.querySelector('[data-prev]'),
+x=c.querySelector('[data-next]'),s=c.querySelector('[data-status]');
+const at=()=>Math.round(t.scrollLeft/t.clientWidth);
+const show=()=>{const k=at();p.disabled=k<=0;x.disabled=k>=n-1;s.textContent=(k+1)+' / '+n};
+const go=d=>{t.scrollTo({left:(at()+d)*t.clientWidth});show()};
+p.onclick=()=>go(-1);x.onclick=()=>go(1);t.addEventListener('scroll',show,{passive:true});
+c.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){e.preventDefault();go(-1)}
+else if(e.key==='ArrowRight'){e.preventDefault();go(1)}});show()});
+"""
+
+
+def _carousel(figures: list[str]) -> str:
+    """Figures one at a time: arrows, arrow keys, or side scrolling (all shown when printed)."""
+    if len(figures) == 1:
+        return f'<div class=track>{figures[0]}</div>'
+    return (f'<div class=car data-car tabindex=0 aria-label="figures">'
+            f'<div class=track>{"".join(figures)}</div><div class=nav>'
+            f'<button type=button data-prev aria-label="previous figure">&larr;</button>'
+            f'<span data-status>1 / {len(figures)}</span>'
+            f'<button type=button data-next aria-label="next figure">&rarr;</button></div></div>')
+
+
+def _figure(path: Path, caption: str | None = None) -> str:
+    text = f"<figcaption>{html.escape(caption)}</figcaption>" if caption else ""
+    return f"<figure>{_embedded(path, caption or 'plot')}{text}</figure>"
+
+
+def _embedded(png: Path, alt: str = "plot") -> str:
     """The plot as an <img> data URI; plot.png itself stays untouched (publication copy)."""
-    data, kind = png.read_bytes(), "png"
+    data = png.read_bytes()
+    kind = "jpeg" if png.suffix.lower() in (".jpg", ".jpeg") else "png"
     if len(data) > EMBED_MAX_BYTES:
         import io
         from PIL import Image
@@ -165,14 +205,18 @@ def _embedded(png: Path) -> str:
             buffer = io.BytesIO()
             image.save(buffer, format="JPEG", quality=85)
         data, kind = buffer.getvalue(), "jpeg"
-    return f'<img alt="plot" src="data:image/{kind};base64,{base64.b64encode(data).decode()}">'
+    return (f'<img alt="{html.escape(alt)}" '
+            f'src="data:image/{kind};base64,{base64.b64encode(data).decode()}">')
 
 
 def _card(entry: dict, results: dict, summary: dict, notes_text: str | None,
           notes_ok: bool | None) -> str:
     out = PROJECT_ROOT / entry["output_dir"]
-    png = out / "plot.png"
-    image = _embedded(png) if png.exists() else ""
+    figures = [_figure(out / f["file"], f.get("caption")) for f in results.get("figures") or []
+               if (out / f["file"]).exists()]
+    if not figures and (out / "plot.png").exists():
+        figures = [_figure(out / "plot.png")]
+    image = _carousel(figures) if figures else ""
     rows = "".join(f"<dt>{html.escape(k)}</dt><dd>{html.escape(str(v))}</dd>"
                    for k, v in summary.get("overview", {}).items())
     for extra in ("internal_standard", "broad_bands"):
@@ -234,9 +278,8 @@ def _gallery(method: str, spec: dict, sample: str, items: list[dict]) -> tuple[s
             f"WD {acquisition['working_distance_mm']:g} mm"
             if acquisition.get("working_distance_mm") is not None else None,
             item["entry"]["measurement_id"]) if part)
-        image = (f'<img alt="{html.escape(caption)}" src="data:image/jpeg;base64,'
-                 f'{base64.b64encode(thumb.read_bytes()).decode()}">' if thumb.exists() else "")
-        figures.append(f"<figure>{image}<figcaption>{html.escape(caption)}</figcaption></figure>")
+        if thumb.exists():
+            figures.append(_figure(thumb, caption))
     targets = ", ".join(f"×{m:,}" for m in chosen_settings["gallery"].get("magnifications") or [])
     magnifications = sorted((i["results"].get("acquisition") or {}).get("magnification") or 0
                             for i in items)
@@ -245,7 +288,7 @@ def _gallery(method: str, spec: dict, sample: str, items: list[dict]) -> tuple[s
             f"<div class=meta>{len(chosen)} of {len(items)} image(s) shown: closest to {targets}"
             f" (both series compete); change in config/{method}.yaml → gallery, per sample in "
             f"config/samples.yaml. All outputs: <code>analysis/{html.escape(sample)}/{method}/</code>"
-            f"</div><div class=gal>{''.join(figures)}</div></div></section>")
+            f"</div>{_carousel(figures) if figures else ''}</div></section>")
     row = {"Sample": f'<a href="#{html.escape(sample)}-{method}">{html.escape(sample)}</a>',
            "Images": str(len(items)),
            "Magnifications": (f"×{magnifications[0]:,} – ×{magnifications[-1]:,}"
@@ -318,7 +361,7 @@ def build(config: dict) -> dict[str, Any]:
             f"generated {utc_now()} · code {html.escape(code_version())}"
             + (f" · {pending} waiting, failed or needing a decision (logs/review_queue.md)"
                if pending else "")
-            + "</p>" + table_html + "".join(sections) + "</main>")
+            + "</p>" + table_html + "".join(sections) + f"</main><script>{SCRIPT}</script>")
     target = PROJECT_ROOT / config["analysis_dir"] / "report.html"
     atomic_write_text(target, page, config)
     return {"report": str(target.relative_to(PROJECT_ROOT)), "measurements": len(entries)}
