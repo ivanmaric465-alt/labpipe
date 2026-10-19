@@ -100,22 +100,20 @@ def test_ported_parsers_match_upstream():
         assert np.array_equal([p[1] for p in upstream], ours.intensity)
 
 
-def _project(tmp_path: Path) -> tuple[Path, Path, dict]:
+def _project(tmp_path: Path, automation: dict | None = None) -> tuple[Path, Path, dict]:
+    """A project folder (only the lab's files); the code and its defaults are the repository's."""
     project = tmp_path / "project"
-    for item in ("config", "references", "methods.yaml"):
-        source = REPO / item
-        (shutil.copytree if source.is_dir() else shutil.copy)(source, project / item)
+    (project / "config").mkdir(parents=True)
+    (project / "labpipe.yaml").write_text("schema: labpipe.project/1\nname: test\n")
     raw = tmp_path / "raw"
     (raw / "XRD").mkdir(parents=True)
+    # settle time 0, no pop-ups from tests
+    block = {"settle_minutes": 0, "notify": {"desktop": False}, **(automation or {})}
     (project / "config" / "local.yaml").write_text(
-        f"raw_roots: [{{id: lab, path: '{raw.as_posix()}'}}]\nprotected_paths: []\n")
-    for steering in (project / "config" / "measurements").glob("**/*.yaml"):
-        steering.unlink()  # the user's own steering files are not part of the test
-    env = dict(os.environ, LABPIPE_ROOT=str(project))
-    # settle time 0 for the test
-    config_file = project / "config" / "pipeline.yaml"
-    config_file.write_text(config_file.read_text().replace("settle_minutes: 10",
-                                                           "settle_minutes: 0"))
+        f"raw_roots: [{{id: lab, path: '{raw.as_posix()}'}}]\nprotected_paths: []\n"
+        f"automation: {json.dumps(block)}\n")
+    env = dict(os.environ, LABPIPE_PROJECT=str(project), PYTHONPATH=str(REPO / "src"))
+    env.pop("LABPIPE_ROOT", None)
     return project, raw, env
 
 
@@ -183,7 +181,7 @@ def test_settings_precedence_and_typos(tmp_path, monkeypatch):
     (config / "measurements" / "xrd" / "S-1_a.yaml").write_text(
         "note: user asked on 2026-10-16\nbackground: {anchor_ranges_deg: [[30, 35]]}\n")
     monkeypatch.setattr(settings, "CONFIG", config)
-    monkeypatch.setattr(settings, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(settings, "DEFAULTS", config)
     resolved, sources = settings.resolve("xrd", "S-1", "S-1_a")
     plots = resolved.pop("plots")      # the plot style, resolved on its own (plots.yaml)
     assert plots["preset"] == "acs"
@@ -296,8 +294,6 @@ def test_roots_rename_keeps_entries(tmp_path):
 def test_automation_run_and_setup_files(tmp_path, monkeypatch):
     project, raw, env = _project(tmp_path)
     env["LABPIPE_AGENT_MODE"] = "unattended"
-    with open(project / "config" / "local.yaml", "a") as stream:
-        stream.write("automation: {notify: {desktop: false}}\n")   # no pop-ups from tests
     assert _labpipe(env, "automation", "run")["status"] == "nothing_to_do"
     x, y = synthetic_pattern([(40.0, 5000.0, 1.0, 0.5)])
     (raw / "XRD" / "SYN-4_test.xrdml").write_text(xrdml_text(x, y, "SYN-4"))
@@ -325,7 +321,7 @@ def test_notifications_tell_once_and_name_the_users_agent(tmp_path):
     from tests import test_sem
     project, raw, env = _project(tmp_path)
     with open(project / "config" / "local.yaml", "a") as stream:
-        stream.write("agents: {harness: codex}\nautomation: {notify: {desktop: false}}\n")
+        stream.write("agents: {harness: codex}\n")
     log = project / "logs" / "automation.log"
 
     def messages() -> list[str]:
@@ -475,7 +471,8 @@ def test_methods_new_scaffolds_and_never_overwrites(tmp_path):
         target.parent.mkdir(parents=True, exist_ok=True)
         (shutil.copytree if source.is_dir() else shutil.copy)(source, target)
     (project / "tests").mkdir()
-    env = dict(os.environ, LABPIPE_ROOT=str(project))
+    env = dict(os.environ, LABPIPE_CODE=str(project), LABPIPE_PROJECT=str(project),
+               PYTHONPATH=str(REPO / "src"))      # code and project: the folder is its own project
     example = tmp_path / "scan.dat"
     example.write_text("1 2\n")
     created = _labpipe(env, "methods", "new", "demo", "--example", str(example),
@@ -507,13 +504,12 @@ def test_watcher_sees_unrecognised_files_but_not_system_files(tmp_path):
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the fake agent tool is a shell script")
 def test_a_failed_ai_run_is_reported_as_an_error(tmp_path):
-    project, raw, env = _project(tmp_path)
     fake = tmp_path / "claude"
+    project, raw, env = _project(tmp_path, automation={"claude": str(fake)})
     fake.write_text("#!/bin/sh\necho 'Warning: only a warning' >&2\necho 'Error: something broke' >&2\nexit 1\n")
     fake.chmod(0o755)
     with open(project / "config" / "local.yaml", "a") as stream:
-        stream.write(f"agents: {{harness: claude-code}}\nautomation: {{claude: '{fake}', "
-                     "notify: {desktop: false}}\n")
+        stream.write("agents: {harness: claude-code}\n")
     x, y = synthetic_pattern([(40.0, 5000.0, 1.0, 0.5)])
     (raw / "XRD" / "SYN-6_test.xrdml").write_text(xrdml_text(x, y, "SYN-6"))
     assert _labpipe(env, "automation", "run")["exit_code"] == 1

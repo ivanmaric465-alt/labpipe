@@ -2,8 +2,8 @@
 
 For method M, sample S and measurement X the resolved settings are
 
-    config/M.yaml                                  labpipe's defaults
-    ← config/lab.yaml  M: {...}                    the lab's defaults (git-ignored)
+    config/M.yaml                                  labpipe's defaults (the code's)
+    ← config/lab.yaml  M: {...}                    the lab's defaults (the project's)
     ← config/samples.yaml  presets listed for S    (e.g. a support type)
     ← config/samples.yaml  S: M: {...}             sample-specific settings
     ← config/measurements/M/X.yaml                 measurement-specific settings
@@ -11,7 +11,8 @@ For method M, sample S and measurement X the resolved settings are
 merged in that order (dicts merge key by key; lists and scalars replace).
 Override files may only use keys that exist in config/M.yaml, so a typo
 fails loudly instead of being silently ignored. Every file used is recorded
-with its sha256 in provenance.json, together with the fully resolved
+with its sha256 in provenance.json (`root`: "code" for labpipe's defaults, "project" for
+the lab's files; `file` is relative to that root), together with the fully resolved
 settings, so a steered result is reproducible without the files.
 
 The look of all plots (font, sizes, palette, formats) is resolved separately,
@@ -32,13 +33,22 @@ from typing import Any
 
 import yaml
 
-from labpipe.safety import PROJECT_ROOT
+from labpipe.safety import CODE_ROOT, PROJECT_ROOT
 
-CONFIG = PROJECT_ROOT / "config"
+CONFIG = PROJECT_ROOT / "config"      # the project's files: lab.yaml, samples.yaml, measurements/
+DEFAULTS = CODE_ROOT / "config"       # labpipe's defaults: <method>.yaml, plots.yaml
 
 
 class SettingsError(ValueError):
     pass
+
+
+def _source(path: Path, digest: str | None, layer: str, root: str = "project") -> dict[str, Any]:
+    """The record of one settings file: its path relative to its root ("code" or "project"),
+    which root, its hash."""
+    base = DEFAULTS.parent if root == "code" else CONFIG.parent
+    return {"file": path.relative_to(base).as_posix(), "root": root, "sha256": digest,
+            "layer": layer}
 
 
 def _load(path: Path) -> tuple[dict[str, Any], str]:
@@ -79,10 +89,9 @@ def measurement_file(method: str, measurement_id: str) -> Path:
 
 def _plot_style(lab: dict[str, Any]) -> tuple[dict[str, Any], list]:
     """config/plots.yaml ← lab.yaml plots:; unknown keys and bad values are refused."""
-    path = CONFIG / "plots.yaml"
+    path = DEFAULTS / "plots.yaml"
     style, digest = _load(path)
-    sources = [{"file": str(path.relative_to(PROJECT_ROOT)), "sha256": digest,
-                "layer": "plot style defaults"}]
+    sources = [_source(path, digest, "plot style defaults", "code")]
     layer = lab.get("plots") or {}
     if not isinstance(layer, dict):
         raise SettingsError("config/lab.yaml: plots: must be a section of settings")
@@ -103,10 +112,9 @@ def _plot_style(lab: dict[str, Any]) -> tuple[dict[str, Any], list]:
 def resolve(method: str, sample_id: str | None,
             measurement_id: str | None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Return (resolved settings, list of sources used)."""
-    base_path = CONFIG / f"{method}.yaml"
+    base_path = DEFAULTS / f"{method}.yaml"
     config, digest = _load(base_path)
-    sources = [{"file": str(base_path.relative_to(PROJECT_ROOT)), "sha256": digest,
-                "layer": "global defaults"}]
+    sources = [_source(base_path, digest, "global defaults", "code")]
 
     lab, lab_digest = load_lab()
     style, style_sources = _plot_style(lab)
@@ -120,8 +128,7 @@ def resolve(method: str, sample_id: str | None,
     _check_keys(lab_layer, config, f"config/lab.yaml {method}")
     config = _merge(config, lab_layer)
     if lab_layer or lab.get("plots"):
-        sources.append({"file": "config/lab.yaml", "sha256": lab_digest,
-                        "layer": "lab defaults (config/lab.yaml)"})
+        sources.append(_source(CONFIG / "lab.yaml", lab_digest, "lab defaults (config/lab.yaml)"))
 
     samples_path = CONFIG / "samples.yaml"
     if sample_id and samples_path.exists():
@@ -141,21 +148,17 @@ def resolve(method: str, sample_id: str | None,
         _check_keys(layer, config, f"samples.yaml sample {sample_id}")
         config = _merge(config, layer)
         if used or layer:
-            sources.append({"file": str(samples_path.relative_to(PROJECT_ROOT)),
-                            "sha256": digest,
-                            "layer": f"sample {sample_id}"
-                                     + (f" (presets: {', '.join(entry['presets'])})"
-                                        if entry.get("presets") else "")})
+            sources.append(_source(samples_path, digest, f"sample {sample_id}" + (
+                f" (presets: {', '.join(entry['presets'])})" if entry.get("presets") else "")))
 
     if measurement_id:
         path = measurement_file(method, measurement_id)
         if path.exists():
             layer, digest = _load(path)
             layer.pop("note", None)
-            _check_keys(layer, config, str(path.relative_to(PROJECT_ROOT)))
+            _check_keys(layer, config, str(path.relative_to(CONFIG.parent)))
             config = _merge(config, layer)
-            sources.append({"file": str(path.relative_to(PROJECT_ROOT)), "sha256": digest,
-                            "layer": f"measurement {measurement_id}"})
+            sources.append(_source(path, digest, f"measurement {measurement_id}"))
     config["plots"] = style
     sources.extend(style_sources)
     return config, sources
@@ -224,10 +227,10 @@ def compare_entry(entry: dict[str, Any], config: dict[str, Any]) -> dict[str, An
         old["plot"] = _legacy_plot(method, plot)
     if entry.get("settings_sha256") != fingerprint(old):
         return {"analysis_current": False, "plot_current": False, "adopt": {}}
-    base, _ = _load(CONFIG / f"{method}.yaml")
+    base, _ = _load(DEFAULTS / f"{method}.yaml")
     drawn_plot = {k: (v if k in _legacy_plot(method, plot) else (base.get("plot") or {}).get(k))
                   for k, v in plot.items()}
-    defaults, _ = _load(CONFIG / "plots.yaml")
+    defaults, _ = _load(DEFAULTS / "plots.yaml")
     drawn = {"plot": drawn_plot if plot else config.get("plot"), "plots": defaults}
     return {"analysis_current": True,
             "plot_current": fingerprint(drawn) == plot_fingerprint(config),

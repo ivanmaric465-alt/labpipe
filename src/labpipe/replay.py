@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from labpipe.provenance import git_info, sha256_file, utc_now
-from labpipe.safety import PROJECT_ROOT
+from labpipe.safety import CODE_ROOT, PROJECT_ROOT
 
 
 def _compared(record: dict) -> list[str]:
@@ -51,7 +51,7 @@ def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[
     if sha256_file(input_path) != record["input"]["sha256"]:
         return {"error": "input file content differs from the recorded sha256"}
     for reference in record.get("references", []):
-        path = PROJECT_ROOT / reference["file"]
+        path = CODE_ROOT / reference["file"]   # references come with the code
         if not path.exists() or sha256_file(path) != reference["sha256"]:
             problems.append(f"reference {reference['file']} differs from the recorded hash")
     if problems and not force:

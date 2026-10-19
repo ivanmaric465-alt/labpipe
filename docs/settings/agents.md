@@ -38,6 +38,10 @@ labpipe agents sync           # after editing by hand
 | "the notes are too sloppy" | a stronger `models.analyst` |
 | "automatic runs use too much of my plan" | a smaller `models.supervisor` / `analyst`; fewer `automation.max_measurements_per_run` |
 
+## Instructions of your own
+
+Roles come with labpipe. To add to one role or to add a role of your own, put a file in `lab/agents/` (the project page: [project.md](project.md)); `labpipe agents sync` appends it to the role.
+
 ## After a change
 
-`labpipe agents sync`. Nothing is re-analysed; new notes are written with the new model.
+`labpipe agents sync` (in a project it runs `labpipe project sync`). Nothing is re-analysed; new notes are written with the new model.

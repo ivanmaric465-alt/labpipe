@@ -58,6 +58,19 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 
 The installer creates a venv outside the repo, puts `labpipe` on your PATH, then offers the guided setup.
 
+## Projects
+
+One installation, several projects. A project is a folder (suggestion: `~/labpipe-projects/<name>`, never in a synced folder) with its own data, settings, context, results and container. labpipe finds the project from the folder you run it in.
+
+```bash
+labpipe project new ~/labpipe-projects/pd-films --data ~/labdata/pd
+cd ~/labpipe-projects/pd-films
+labpipe doctor
+```
+
+- The code (defaults, docs, agent roles) stays where it is; the project holds only your files. `AGENTS.md`, `CLAUDE.md` and `.labpipe/` in the project are generated: do not edit them. Your additions go in `lab/LAB.md` (for all agents) and `lab/agents/` (one role, or a role of your own), then `labpipe project sync`. Details: [docs/settings/project.md](docs/settings/project.md).
+- Working in the labpipe repository itself (to change the code) is "dev mode": the repository is its own project.
+
 ## Your data folder
 
 Two folders, the same files:
@@ -94,7 +107,7 @@ labpipe doctor         # what is still missing
 
 ## Use
 
-With an agent, in the repo folder:
+With an agent, in the project folder:
 
 ```
 process the new data
@@ -241,6 +254,8 @@ A read-only view: `sudo umount <view>`, then remove its line from `/etc/fstab`. 
 | doctor: raw root is writable | `labpipe setup --only raw-data` |
 | automatic runs fail (sandbox) | `labpipe setup --only sandbox` |
 | doctor: agent files out of date | `labpipe agents sync` |
+| doctor: generated files out of date | `labpipe project sync` |
+| `not in a labpipe project` | `cd` into your project folder, or `labpipe project new <folder>` |
 
 ## Tests
 

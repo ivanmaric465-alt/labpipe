@@ -14,7 +14,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
-from labpipe.safety import PROJECT_ROOT
+from labpipe.safety import CODE_ROOT
 
 TRACKED_LIBRARIES = ["labpipe", "numpy", "scipy", "matplotlib", "PyYAML"]
 
@@ -38,7 +38,7 @@ def canonical_json(value: Any) -> bytes:
 
 def _git(*args: str) -> str | None:
     try:
-        completed = subprocess.run(["git", "-C", str(PROJECT_ROOT), *args],
+        completed = subprocess.run(["git", "-C", str(CODE_ROOT), *args],
                                    capture_output=True, text=True, timeout=20, check=True)
     except (OSError, subprocess.SubprocessError):
         return None
@@ -52,6 +52,13 @@ def git_info() -> dict[str, Any]:
     could change results (the Claude Code sandbox creates empty placeholder
     files such as .bashrc in the repository while a command runs)."""
     commit = _git("rev-parse", "HEAD")
+    if commit is None:     # the container's baked code has no .git: its identity is a file
+        try:
+            baked = json.loads((CODE_ROOT / ".labpipe-code.json").read_text(encoding="utf-8"))
+            return {key: baked.get(key) for key in ("commit", "dirty", "dirty_files", "branch",
+                                                    "remote")}
+        except (OSError, ValueError):
+            pass
     tracked = _git("status", "--porcelain", "--untracked-files=no", "--", ".",
                    ":(exclude)config")
     untracked = _git("status", "--porcelain", "--untracked-files=all", "--", "src",
@@ -82,7 +89,7 @@ def environment() -> dict[str, Any]:
             libraries[name] = version(name)
         except PackageNotFoundError:
             libraries[name] = None
-    lock = PROJECT_ROOT / "requirements.lock"
+    lock = CODE_ROOT / "requirements.lock"
     return {
         "python": sys.version.split()[0],
         "implementation": platform.python_implementation(),

@@ -7,13 +7,13 @@ Raw data is irreplaceable. Everything in this repository can be regenerated. Sev
 | 1. Read-only view of the raw data | OS: bind mount (Linux) or read-only share (Windows) | Any write from any process the pipeline starts |
 | 2. Agent sandbox (Claude Code in unattended runs; Codex always) | OS isolation (bubblewrap on Linux, Seatbelt on macOS; Claude Code on Windows: WSL2) | Shell commands writing outside the repository, network access from shell commands |
 | 3. Permission rules (`.claude/settings.json`, `.claude/unattended.json`; Codex: `.codex/rules/labpipe.rules`) | Claude Code / Codex | Agents running other commands or editing other files without your approval |
-| 4. PreToolUse hook (`labpipe guard`, via `hooks/guard.py`; `.claude/settings.json`, `.codex/hooks.json`) | Claude Code / Codex + this code | Any agent write inside raw or protected paths, shell commands naming them, agent edits of pipeline outputs and the manifest; in unattended mode anything but plain `labpipe` commands and notes/log writes |
+| 4. PreToolUse hook (`labpipe guard`, via `hooks/guard.py`, in a project `.labpipe/hooks/guard.py`; `.claude/settings.json`, `.codex/hooks.json`) | Claude Code / Codex + this code | Any agent write inside raw or protected paths, shell commands naming them, agent edits of pipeline outputs and the manifest, and (in a project) of the generated files: `AGENTS.md`, `CLAUDE.md`, `.labpipe/`, the harness settings and agent files; in unattended mode anything but plain `labpipe` commands and notes/log writes |
 | 5. `labpipe.safety` in the code | This code | Writing inside raw roots, protected paths, or anywhere outside `analysis/`, `logs/` and `manifest.json` |
 | 6. Independent backup or snapshot | You | Mistakes outside the pipeline; deletions spread by a sync client, if you use one |
 
 ## Agent modes
 
-**Interactive** (you talk to the agent): `.claude/settings.json` pre-approves `labpipe` commands and edits of steering files and notes. Everything else asks you first. Destructive commands (`rm`, `mv`, `sudo`, `chmod`, forced git operations…) are denied outright. Edits of `config/local.yaml`, `config/pipeline.yaml` and `.claude/` always ask.
+**Interactive** (you talk to the agent): `.claude/settings.json` pre-approves `labpipe` commands and edits of steering files and notes. Everything else asks you first. Destructive commands (`rm`, `mv`, `sudo`, `chmod`, forced git operations…) are denied outright. Edits of `config/local.yaml`, `config/pipeline.yaml` and `.claude/` always ask; in a project the generated settings also make edits of `lab/` ask and deny the generated files (`labpipe project sync` writes them; the lab's additions go in `lab/LAB.md` and `lab/agents/`).
 
 **Unattended** (automatic): `labpipe automation setup` installs a watcher and a nightly run (Linux: systemd user services; you confirm before anything is installed). Each pass scans first and starts the AI only if there is work. The command it uses is:
 
@@ -65,7 +65,7 @@ Tested on Linux with Codex CLI 0.163. Codex on Windows uses its own native sandb
 
 ## Where the paths are configured
 
-`config/local.yaml` is per machine and git-ignored. Create it with `labpipe init`.
+`config/local.yaml` is per project and machine and never committed. `labpipe project new` creates it (in the labpipe repository itself: `labpipe init`). The code (defaults, docs, roles, `hooks/guard.py`) lives outside the project; the pipeline writes only to the project's `analysis/`, `logs/` and `manifest.json`.
 
 - **`raw_roots`**: the read-only view. This is the only place labpipe reads raw data from.
 - **`protected_paths`**: where the files really live, if that folder is writable (the original behind a read-only view). labpipe refuses to write anywhere inside them. Not needed when the raw root itself cannot be written.

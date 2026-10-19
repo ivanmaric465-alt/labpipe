@@ -23,11 +23,11 @@ from typing import Any, Callable
 
 import yaml
 
-from labpipe.safety import PROJECT_ROOT
+from labpipe.safety import CODE_ROOT, PROJECT_ROOT
 
 
 def load_methods() -> dict[str, dict[str, Any]]:
-    with open(PROJECT_ROOT / "methods.yaml", encoding="utf-8") as stream:
+    with open(CODE_ROOT / "methods.yaml", encoding="utf-8") as stream:
         return yaml.safe_load(stream)["methods"]
 
 

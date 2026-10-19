@@ -1,9 +1,14 @@
 """Container mode: build, start and use the labpipe container (Podman or Docker).
 
-Container mode is ON for this machine when config/local.yaml has a `container:` block
-(`labpipe container setup` writes it). Then most `labpipe` commands typed on the host are
-run inside the running container (`forward`), so every analysis uses the same image and
-raw data is only read through the read-only mount. See docs/design/container.md.
+Container mode is ON for a project when its config/local.yaml has a `container:` block
+(`labpipe container setup` writes it). Then most `labpipe` commands typed on the host, anywhere
+inside the project, are run inside the project's running container (`forward`), so every
+analysis uses the same image and raw data is only read through the read-only mount.
+
+Per project: the project folder is mounted read-write at /project, the code is baked into the
+image at /opt/labpipe (`labpipe container start --dev`, and a repository that is its own
+project, mount the code folder there instead), and the container has its own name, home
+volume and port. See docs/design/container.md.
 
 Everything that builds a command line is a plain function (`run_args`, `forward_argv`),
 so it can be tested without an engine.
@@ -28,14 +33,18 @@ import yaml
 from labpipe import safety
 from labpipe.safety import SetupError, load_pipeline_config
 
-REPO_MOUNT = "/labpipe"
+PROJECT_MOUNT = "/project"       # the project folder, read-write; the working folder
+CODE_MOUNT = "/opt/labpipe"      # the code: baked into the image; mounted for `--dev`
 HOME_MOUNT = "/home/labpipe"
 HASH_LABEL = "labpipe.container_hash"
+DEV_LABEL = "labpipe.container_dev"
+CODE_IDENTITY = ".labpipe-code.json"   # commit of the baked code (the image has no .git)
+FIRST_PORT = 8765
 SECRET_NAME = "labpipe-claude-token"
 SAFE_ID = re.compile(r"[A-Za-z0-9_.-]+")
 # Commands that always run on the host (the guard must be fast; the rest are host tasks).
 LOCAL_COMMANDS = {"guard", "container", "shell", "setup", "init", "doctor", "agents",
-                  "readonly-view", "methods"}
+                  "readonly-view", "methods", "project"}
 # Only the entrypoint (root) uses them, to set up the firewall and proxy; it then drops
 # every one (SETPCAP lets it empty the bounding set) before running anything as the user.
 CAPABILITIES = ("NET_ADMIN", "SETUID", "SETGID", "CHOWN", "DAC_OVERRIDE", "FOWNER", "KILL",
@@ -56,7 +65,12 @@ class ForwardError(ContainerError):
 
 
 def _root() -> Path:
+    """The project folder."""
     return Path(safety.PROJECT_ROOT)
+
+
+def _code() -> Path:
+    return Path(safety.CODE_ROOT)
 
 
 def _say(value) -> None:
@@ -77,8 +91,12 @@ def local_container_block() -> dict | None:
 
 
 def container_config(config: dict) -> dict:
-    """pipeline.yaml's `container:` block with this machine's `container:` block over it."""
+    """pipeline.yaml's `container:` block with this project's `container:` block over it.
+    A project's container is named `labpipe-<project name>` unless local.yaml says otherwise."""
+    from labpipe.project import project_name, slug
     merged = {**DEFAULTS, **(config.get("container") or {})}
+    if not safety.is_dev(_root()):
+        merged["name"] = f"labpipe-{slug(project_name(_root()))}"
     merged.update(local_container_block() or {})
     return merged
 
@@ -117,18 +135,68 @@ def current_engine() -> str:
     return detect_engine((local_container_block() or {}).get("engine"))
 
 
-# ---- image hash ----------------------------------------------------------------------
+# ---- image: what is copied into it, its hash ----------------------------------------
+
+def _files_under(folder: Path, root: Path, skip: tuple[str, ...] = ()) -> list[Path]:
+    return [p for p in sorted(folder.rglob("*")) if p.is_file() and "__pycache__" not in p.parts
+            and not p.name.endswith(".pyc") and not any(
+                part.endswith(".egg-info") or part in skip for part in p.relative_to(root).parts)]
+
+
+def image_files(code: Path | None = None) -> list[str]:
+    """Paths (relative, sorted) of every file of the code that is copied into the image: the
+    package, the default settings (not the lab's own files), methods.yaml, references, agent
+    roles, templates, docs, the AGENTS.md / CLAUDE.md sources, the harness settings sources
+    (`.claude/*.json`, `.codex/`, `.agents/`), hooks, container/ and pyproject.toml."""
+    code = Path(code or _code())
+    found: list[Path] = []
+    for folder, skip in (("container", ()), ("src", ()), ("references", ()), ("templates", ()),
+                         ("docs", ()), ("hooks", ()), (".agents", ()), (".codex", ("agents",))):
+        if (code / folder).is_dir():
+            found += _files_under(code / folder, code, skip)
+    found += safety.default_config_files(code)
+    found += sorted((code / "agents").glob("*.md"))
+    found += sorted((code / ".claude").glob("*.json"))
+    found += [code / name for name in ("pyproject.toml", "requirements.lock", "methods.yaml",
+                                       "AGENTS.md", "CLAUDE.md")]
+    return sorted({p.relative_to(code).as_posix() for p in found if p.is_file()})
+
+
+def code_identity(code: Path | None = None) -> bytes | None:
+    """The commit of the code as a small file for the image (None: not a git checkout), so
+    provenance in the container records which code made a result (labpipe.provenance)."""
+    from labpipe import provenance
+    if not (Path(code or _code()) / ".git").exists():
+        return None
+    info = provenance.git_info()
+    if not info.get("commit"):
+        return None
+    return (json.dumps(info, sort_keys=True, indent=1) + "\n").encode("utf-8")
+
 
 def container_hash() -> str:
-    """12 hex chars over every file under container/ and pyproject.toml (paths + contents)."""
-    root = _root()
-    files = sorted(p for p in (root / "container").rglob("*") if p.is_file())
-    files.append(root / "pyproject.toml")
+    """12 hex chars over every file copied into the image (paths + contents)."""
+    code = _code()
     digest = hashlib.sha256()
-    for path in sorted(files, key=lambda p: p.relative_to(root).as_posix()):
-        digest.update(path.relative_to(root).as_posix().encode() + b"\0")
-        digest.update(path.read_bytes() + b"\0")
+    for relative in image_files(code):
+        digest.update(relative.encode() + b"\0" + (code / relative).read_bytes() + b"\0")
+    identity = code_identity(code)
+    if identity:
+        digest.update(CODE_IDENTITY.encode() + b"\0" + identity + b"\0")
     return digest.hexdigest()[:12]
+
+
+def stage_context(target: Path) -> Path:
+    """Copy exactly the files of the image into `target` (the build context)."""
+    code = _code()
+    for relative in image_files(code):
+        destination = Path(target) / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(code / relative, destination)
+    identity = code_identity(code)
+    if identity:
+        (Path(target) / CODE_IDENTITY).write_bytes(identity)
+    return Path(target)
 
 
 def image_tag(cfg: dict) -> str:
@@ -213,9 +281,12 @@ def page_url(port, token: str) -> str:
 
 def run_args(config: dict, engine: str, *, image_id: str = "", engine_text: str = "",
              claude_login: bool = False, tag: str | None = None,
-             runtime_dir: str | None = None) -> list[str]:
-    """The full `<engine> run` command line (pure: all machine facts come in as arguments)."""
+             runtime_dir: str | None = None, dev: bool | None = None) -> list[str]:
+    """The full `<engine> run` command line (pure: all machine facts come in as arguments).
+    `dev`: mount the code folder at /opt/labpipe, so code edits take effect without a rebuild
+    (default: yes when the repository is its own project)."""
     cfg = config.get("container") or DEFAULTS
+    dev = safety.is_dev(_root()) if dev is None else dev
     uid, gid = host_ids()
     mounts = raw_mounts(config)
     args = [engine, "run", "-d", "--name", cfg["name"], "--restart", "unless-stopped",
@@ -232,7 +303,8 @@ def run_args(config: dict, engine: str, *, image_id: str = "", engine_text: str 
            "LABPIPE_ROOT_PATHS": ",".join(f"{i}=/data/{i}" for i, _ in mounts),
            "LABPIPE_ALLOWED_HOSTS": ",".join(allowed_hosts(config)),
            "LABPIPE_IMAGE_ID": image_id, "LABPIPE_ENGINE": engine_text,
-           "LABPIPE_HOST_ROOT": _host_path(_root()),   # for messages that name the folder
+           "LABPIPE_PROJECT": PROJECT_MOUNT, "LABPIPE_CODE": CODE_MOUNT,
+           "LABPIPE_HOST_ROOT": _host_path(_root()),   # the project folder, for messages
            "LABPIPE_PORT": cfg["port"], "LABPIPE_PAGE_TOKEN": cfg.get("page_token") or ""}
     bus_dir = runtime_dir if runtime_dir is not None else bus_runtime_dir()
     popups = bool(cfg.get("popups")) and bool(bus_dir)
@@ -243,7 +315,9 @@ def run_args(config: dict, engine: str, *, image_id: str = "", engine_text: str 
         env["TZ"] = zone
     for key, value in env.items():
         args += ["-e", f"{key}={value}"]
-    args += ["-v", f"{_root()}:{REPO_MOUNT}"]
+    args += ["-v", f"{_root()}:{PROJECT_MOUNT}", "-w", PROJECT_MOUNT]
+    if dev:
+        args += ["-v", f"{_code()}:{CODE_MOUNT}", "--label", f"{DEV_LABEL}=1"]
     if popups:
         args += ["-v", f"{bus_dir}/{BUS_DIR}:{BUS_MOUNT}"]
     for root_id, folder in mounts:
@@ -272,17 +346,17 @@ def _exec_prefix(engine: str, name: str, uid: int, gid: int, tty: bool,
 
 
 def _inside(path: Path, repo: Path) -> str | None:
-    """`/labpipe/<relative>` for a path inside the repository, else None."""
+    """`/project/<relative>` for a path inside the project, else None."""
     try:
         relative = path.resolve().relative_to(repo.resolve())
     except ValueError:
         return None
-    return str(PurePosixPath(REPO_MOUNT, *relative.parts))
+    return str(PurePosixPath(PROJECT_MOUNT, *relative.parts))
 
 
 def _map_arg(arg: str, cwd: Path, repo: Path) -> str:
     """Rewrite an argument that is a path (also `--opt=PATH`) to its place in the container.
-    Existing paths and absolute paths must be inside the repository."""
+    Existing paths and absolute paths must be inside the project."""
     prefix, value = "", arg
     if arg.startswith("-"):
         if not arg.startswith("--") or "=" not in arg:
@@ -297,14 +371,15 @@ def _map_arg(arg: str, cwd: Path, repo: Path) -> str:
         return arg  # not a path (an entry id, a number, a word)
     mapped = _inside(full, repo)
     if mapped is None:
-        raise ForwardError("paths outside the repository can't be used with the container: "
+        raise ForwardError("paths outside the project can't be used with the container: "
                            + value)
     return prefix + mapped
 
 
 def forward_argv(argv: list[str], cwd: Path | str, repo_root: Path | str, engine: str,
                  name: str, uid: int, gid: int, tty: bool) -> list[str] | None:
-    """The engine command that runs `labpipe argv` in the container; None = run locally."""
+    """The engine command that runs `labpipe argv` in the container; None = run locally.
+    `repo_root` is the project folder: the working folder is mapped under /project."""
     words = [a for a in argv if not a.startswith("-")]
     command = words[0] if words else None
     if command is None or command in LOCAL_COMMANDS or "--help" in argv or "-h" in argv:
@@ -314,7 +389,7 @@ def forward_argv(argv: list[str], cwd: Path | str, repo_root: Path | str, engine
                            "nightly pass. Stop the native services: systemctl --user disable "
                            "--now labpipe-watch.service labpipe-nightly.timer")
     cwd, repo = Path(cwd), Path(repo_root)
-    workdir = _inside(cwd, repo) or REPO_MOUNT
+    workdir = _inside(cwd, repo) or PROJECT_MOUNT
     mapped = [_map_arg(arg, cwd, repo) for arg in argv]
     return [*_exec_prefix(engine, name, uid, gid, tty, workdir), "labpipe", *mapped]
 
@@ -363,7 +438,7 @@ def forward(argv: list[str]) -> int | None:
 
 def pipeline_container_block() -> dict:
     try:
-        text = (_root() / "config" / "pipeline.yaml").read_text(encoding="utf-8")
+        text = (_code() / "config" / "pipeline.yaml").read_text(encoding="utf-8")
         return (yaml.safe_load(text) or {}).get("container") or {}
     except (OSError, yaml.YAMLError):
         return {}
@@ -387,10 +462,12 @@ def image_exists(engine: str, tag: str) -> bool:
 def build(engine: str, cfg: dict) -> str:
     """Build the image (the engine's output goes to stderr); return its tag."""
     tag, digest = image_tag(cfg), container_hash()
-    command = [engine, "build", "-f", "container/Dockerfile", "-t", tag,
-               "--label", f"{HASH_LABEL}={digest}", str(_root())]
-    if subprocess.run(command, cwd=_root(), stdout=sys.stderr).returncode != 0:
-        raise ContainerError(f"build failed: {' '.join(command)}")
+    with tempfile.TemporaryDirectory(prefix="labpipe-build-") as folder:
+        context = stage_context(Path(folder))     # exactly the files the hash covers
+        command = [engine, "build", "-f", "container/Dockerfile", "-t", tag,
+                   "--label", f"{HASH_LABEL}={digest}", str(context)]
+        if subprocess.run(command, cwd=context, stdout=sys.stderr).returncode != 0:
+            raise ContainerError(f"build failed: {' '.join(command)}")
     return tag
 
 
@@ -416,8 +493,35 @@ def ensure_page_token() -> bool:
     return True
 
 
+def free_port(first: int = FIRST_PORT, last: int = FIRST_PORT + 200) -> int:
+    """The first port from `first` up that nothing listens on (checked on 127.0.0.1)."""
+    import socket
+    for port in range(first, last + 1):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            try:
+                probe.bind(("127.0.0.1", port))
+            except OSError:
+                continue
+            return port
+    raise ContainerError(f"no free port between {first} and {last}: set `container: {{port: N}}` "
+                         "in config/local.yaml")
+
+
+def ensure_port() -> bool:
+    """Give this project its own port: the first free one from 8765 up, saved in the project's
+    local.yaml `container:` block (other keys kept). True if one was added."""
+    block = dict(local_container_block() or {})
+    if block.get("port"):
+        return False
+    block["port"] = free_port()
+    safety.set_local_block("container", block)
+    return True
+
+
 def cmd_start(args) -> int:
-    ensure_page_token()
+    if local_container_block() is not None:
+        ensure_page_token()
+        ensure_port()
     config, cfg, engine = _prepare()
     name, tag, current = cfg["name"], image_tag(cfg), container_hash()
     existing = inspect(engine, name)
@@ -437,12 +541,15 @@ def cmd_start(args) -> int:
         build(engine, cfg)
     command = run_args(config, engine, image_id=_image_id(engine, tag),
                        engine_text=engine_version(engine),
-                       claude_login=claude_login_present(engine), tag=tag)
+                       claude_login=claude_login_present(engine), tag=tag,
+                       dev=True if args.dev else None)
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
         _say({"error": "start failed", "detail": result.stderr.strip()})
         return 1
-    _say({"started": name, "image": tag, "port": cfg["port"],
+    _say({"started": name, "project": str(_root()), "image": tag, "port": cfg["port"],
+          "code": "mounted from " + str(_code()) if args.dev or safety.is_dev(_root())
+          else "baked into the image",
           "page": page_url(cfg["port"], cfg.get("page_token", "")),
           "popups": bool(cfg.get("popups")) and bool(bus_runtime_dir())})
     return 0
@@ -472,6 +579,7 @@ def status_record() -> dict:
             "running": bool(state.get("Running")), "started_at": state.get("StartedAt"),
             "image_hash": have, "current_hash": current,
             "image_up_to_date": have == current if record else None,
+            "dev": labels.get(DEV_LABEL) == "1", "project": str(_root()),
             "claude_login": claude_login_present(engine),
             "page": page_url(cfg["port"], cfg.get("page_token", "")),
             "next": None if (record and have == current) else
@@ -517,8 +625,8 @@ def store_claude_token(engine: str, token: str) -> str:
 
 
 TRUST_SCRIPT = ('f=/home/labpipe/.codex/config.toml; mkdir -p "$(dirname "$f")"; '
-                'grep -qsF \'[projects."/labpipe"]\' "$f" || '
-                'printf \'\\n[projects."/labpipe"]\\ntrust_level = "trusted"\\n\' >> "$f"')
+                'grep -qsF \'[projects."/project"]\' "$f" || '
+                'printf \'\\n[projects."/project"]\\ntrust_level = "trusted"\\n\' >> "$f"')
 
 
 def cmd_login(args) -> int:
@@ -555,7 +663,7 @@ def cmd_shell(args) -> int:
         _say({"error": "container not running: labpipe container start"})
         return 2
     uid, gid = host_ids()
-    command = [*_exec_prefix(engine, cfg["name"], uid, gid, True, REPO_MOUNT), program]
+    command = [*_exec_prefix(engine, cfg["name"], uid, gid, True, PROJECT_MOUNT), program]
     if os.name != "nt":
         os.execvp(command[0], command)  # replaces this process
     return subprocess.run(command).returncode
@@ -570,6 +678,7 @@ def cmd_setup(args) -> int:
                                         "config/local.yaml to choose another"})
         return 1
     safety.set_local_block("container", {**(local_container_block() or {}), "engine": engine})
+    ensure_port()
     config = load_config()
     tag = build(engine, config["container"])
     _say({"engine": engine, "image": tag, "next": [
@@ -690,6 +799,8 @@ def register(sub) -> None:
     start = group.add_parser("start", help="start the container (builds the image if needed)")
     start.add_argument("--replace", action="store_true",
                        help="replace a running container (new image or new login)")
+    start.add_argument("--dev", action="store_true",
+                       help="mount the code folder (code edits take effect without a rebuild)")
     group.add_parser("stop")
     group.add_parser("status")
     logs = group.add_parser("logs")

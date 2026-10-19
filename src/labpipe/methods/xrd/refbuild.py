@@ -27,9 +27,9 @@ from pathlib import Path
 
 import yaml
 
-from labpipe.safety import PROJECT_ROOT, atomic_write_text
+from labpipe.safety import CODE_ROOT, atomic_write_text
 
-REFERENCES = PROJECT_ROOT / "references" / "xrd"
+REFERENCES = CODE_ROOT / "references" / "xrd"
 CATALOGUE = REFERENCES / "phases.yaml"
 WAVELENGTH = 1.540598
 TWO_THETA_RANGE = (0.0, 150.0)
@@ -144,7 +144,7 @@ def add(cif: Path, *, phase_id: str, structure_type: str, role: str, cod_id: int
         raise SystemExit(f"a reference with id {phase_id!r} already exists")
     target = REFERENCES / "cif" / f"{phase_id}.cif"
     if target.exists():
-        raise SystemExit(f"{target.relative_to(PROJECT_ROOT)} already exists")
+        raise SystemExit(f"{target.relative_to(CODE_ROOT)} already exists")
     text = cif.read_text(encoding="utf-8", errors="replace")
     if "_cell_length_a" not in text:
         raise SystemExit(f"{cif} does not look like a CIF (no _cell_length_a)")

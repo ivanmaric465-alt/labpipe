@@ -30,7 +30,7 @@ from typing import Any
 from labpipe import agents, automation
 from labpipe.doctor import _read_only
 from labpipe.roview import commands as readonly_view_commands
-from labpipe.safety import PROJECT_ROOT, SetupError, load_pipeline_config, set_local_block
+from labpipe.safety import CODE_ROOT, PROJECT_ROOT, SetupError, load_pipeline_config, set_local_block
 
 STEPS = ("raw-data", "files", "sandbox", "agents", "automation")
 
@@ -251,7 +251,7 @@ def recommended(harness: str) -> dict[str, dict[str, str]]:
     """Per role {model, reasoning?} from config/pipeline.yaml → agents.recommended."""
     import yaml
     try:
-        policy = yaml.safe_load((PROJECT_ROOT / "config" / "pipeline.yaml").read_text(
+        policy = yaml.safe_load((CODE_ROOT / "config" / "pipeline.yaml").read_text(
             encoding="utf-8")) or {}
     except OSError:
         return {}

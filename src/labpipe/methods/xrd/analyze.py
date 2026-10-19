@@ -36,12 +36,12 @@ from labpipe.methods.xrd.io_xy import read_xy
 from labpipe.methods.xrd.references import load_references, match_reference
 from labpipe.naming import sample_ids_agree
 from labpipe.plotting import acs
-from labpipe.safety import (PROJECT_ROOT, assert_not_protected, assert_pipeline_writable,
+from labpipe.safety import (CODE_ROOT, PROJECT_ROOT, assert_not_protected, assert_pipeline_writable,
                             atomic_write_bytes)
 
 METHOD = "xrd"
 RESULTS_SCHEMA = "labpipe.xrd.results/2"
-REFERENCE_DIR = PROJECT_ROOT / "references" / "xrd" / "patterns"
+REFERENCE_DIR = CODE_ROOT / "references" / "xrd" / "patterns"
 CUBIC_F = ("fcc", "rocksalt")  # face-centred cubic lattices: same reflection conditions
 
 
@@ -703,7 +703,7 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
         method=METHOD, entry_point="labpipe.methods.xrd.analyze.run", input_path=input_path,
         input_sha256=input_sha, context=context, settings=config,
         settings_sources=settings_sources, outputs=outputs, out_dir=out_dir, extra={
-            "references": [{"id": r.id, "file": f"references/xrd/patterns/{r.file}",
+            "references": [{"id": r.id, "file": f"references/xrd/patterns/{r.file}", "root": "code",
                             "sha256": r.file_sha256, "cod_id": r.source.get("cod_id"),
                             "cif_sha256": r.source["cif_sha256"]} for r in references],
             "calibration": ({"file": config["sizing"]["calibration_file"],

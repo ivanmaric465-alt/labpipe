@@ -19,6 +19,9 @@ areas:
     code: [src/labpipe/manifest.py, src/labpipe/scanner.py, src/labpipe/registry.py,
            src/labpipe/naming.py, src/labpipe/inventory.py, src/labpipe/pipeline.py, config/pipeline.yaml]
     docs: [AGENTS.md, docs/settings/data.md, docs/ARCHITECTURE.md]
+  project:          # code and projects: roots, project new | sync, the generated files
+    code: [src/labpipe/project.py, "templates/project/*"]
+    docs: [docs/settings/project.md, docs/ARCHITECTURE.md, README.md, AGENTS.md]
   settings:
     code: [src/labpipe/settings.py, config/lab.example.yaml, config/samples.example.yaml,
            config/local.example.yaml]

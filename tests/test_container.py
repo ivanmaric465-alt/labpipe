@@ -28,15 +28,65 @@ def _run(config, engine, **kw):
                        engine_text=f"{engine} 5.8.7", **kw)
 
 
-def test_container_hash_changes_with_container_files(tmp_path, monkeypatch):
-    (tmp_path / "container").mkdir()
-    (tmp_path / "container" / "Dockerfile").write_text("FROM x\n")
-    (tmp_path / "pyproject.toml").write_text("[project]\n")
-    monkeypatch.setattr(ct.safety, "PROJECT_ROOT", tmp_path)
+def _fake_code(tmp_path) -> Path:
+    """A small code folder: what the image copies, and the lab's files it must not."""
+    code = tmp_path / "code"
+    files = {"container/Dockerfile": "FROM x\n", "pyproject.toml": "[project]\n",
+             "src/labpipe/a.py": "x = 1\n", "src/labpipe/__pycache__/a.pyc": "junk",
+             "config/xrd.yaml": "a: 1\n", "config/plots.yaml": "b: 1\n",
+             "config/pipeline.yaml": "c: 1\n", "config/lab.example.yaml": "# example\n",
+             "config/local.yaml": "raw_roots: []\n", "config/lab.yaml": "xrd: {}\n",
+             "config/samples.yaml": "samples: {}\n", "config/sample_ids.yaml": "{}\n",
+             "config/measurements/xrd/S-1_a.yaml": "x: 1\n",
+             "methods.yaml": "methods: {}\n", "AGENTS.md": "# a\n", "CLAUDE.md": "@AGENTS.md\n",
+             "agents/supervisor.md": "---\nname: supervisor\n---\n", "docs/SAFETY.md": "# s\n",
+             "references/xrd/phases.yaml": "phases: []\n", "templates/context/context.md": "#\n",
+             "hooks/guard.py": "pass\n", ".claude/settings.json": "{}\n",
+             ".codex/config.toml": "a = 1\n", ".codex/agents/x.toml": "generated\n",
+             "analysis/S-1/results.json": "{}\n", "manifest.json": "{}\n", "context/c.md": "#\n"}
+    for name, text in files.items():
+        (code / name).parent.mkdir(parents=True, exist_ok=True)
+        (code / name).write_text(text)
+    return code
+
+
+def test_image_holds_the_code_and_not_the_labs_files(tmp_path):
+    files = set(ct.image_files(_fake_code(tmp_path)))
+    assert {"container/Dockerfile", "pyproject.toml", "src/labpipe/a.py", "config/xrd.yaml",
+            "config/plots.yaml", "config/pipeline.yaml", "config/lab.example.yaml",
+            "methods.yaml", "AGENTS.md", "CLAUDE.md", "agents/supervisor.md", "docs/SAFETY.md",
+            "references/xrd/phases.yaml", "templates/context/context.md", "hooks/guard.py",
+            ".claude/settings.json", ".codex/config.toml"} <= files
+    for lab in ("config/local.yaml", "config/lab.yaml", "config/samples.yaml",
+                "config/sample_ids.yaml", "config/measurements/xrd/S-1_a.yaml", "manifest.json",
+                "analysis/S-1/results.json", "context/c.md", ".codex/agents/x.toml",
+                "src/labpipe/__pycache__/a.pyc"):
+        assert lab not in files
+
+
+def test_container_hash_covers_every_file_copied_into_the_image(tmp_path, monkeypatch):
+    code = _fake_code(tmp_path)
+    monkeypatch.setattr(ct.safety, "CODE_ROOT", code)
     first = ct.container_hash()
     assert len(first) == 12 and first == ct.container_hash()
-    (tmp_path / "container" / "Dockerfile").write_text("FROM y\n")
-    assert ct.container_hash() != first
+    for name in ("container/Dockerfile", "src/labpipe/a.py", "docs/SAFETY.md", "methods.yaml",
+                 "config/xrd.yaml", "AGENTS.md", "references/xrd/phases.yaml",
+                 "hooks/guard.py", ".claude/settings.json", ".codex/config.toml"):
+        original = (code / name).read_text()
+        (code / name).write_text(original + "changed\n")
+        assert ct.container_hash() != first, name
+        (code / name).write_text(original)
+    (code / "config" / "lab.yaml").write_text("changed: true\n")   # the lab's own: not in the image
+    (code / "manifest.json").write_text("changed")
+    assert ct.container_hash() == first
+
+
+def test_build_context_has_exactly_the_image_files(tmp_path, monkeypatch):
+    code = _fake_code(tmp_path)
+    monkeypatch.setattr(ct.safety, "CODE_ROOT", code)
+    staged = ct.stage_context(tmp_path / "ctx")
+    found = {p.relative_to(staged).as_posix() for p in staged.rglob("*") if p.is_file()}
+    assert found == set(ct.image_files(code))
 
 
 def test_run_args_podman(tmp_path):
@@ -90,11 +140,11 @@ def test_forward_cwd_and_paths(tmp_path):
     (tmp_path / "sub" / "m.yaml").write_text("x")
     inside = _fwd(["scan"], tmp_path / "sub", tmp_path, tty=True)
     assert inside == ["podman", "exec", "-i", "-t", "--user", "1000:1001", "-w",
-                      "/labpipe/sub", "labpipe", "labpipe", "scan"]
+                      "/project/sub", "labpipe", "labpipe", "scan"]
     outside_cwd = _fwd(["status"], tmp_path.parent, tmp_path)
-    assert "-t" not in outside_cwd and outside_cwd[outside_cwd.index("-w") + 1] == "/labpipe"
+    assert "-t" not in outside_cwd and outside_cwd[outside_cwd.index("-w") + 1] == "/project"
     cmd = _fwd(["replay", "m.yaml", f"--out={tmp_path}/a", "S-1"], tmp_path / "sub", tmp_path)
-    assert cmd[-3:] == ["/labpipe/sub/m.yaml", "--out=/labpipe/a", "S-1"]
+    assert cmd[-3:] == ["/project/sub/m.yaml", "--out=/project/a", "S-1"]
 
 
 def test_native_watcher_refused_in_container_mode(tmp_path):
@@ -108,7 +158,7 @@ def test_forward_refuses_outside_paths(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
     outside = tmp_path / "elsewhere.json"   # absolute on every OS (Windows: with a drive)
-    with pytest.raises(ct.ForwardError, match="outside the repository"):
+    with pytest.raises(ct.ForwardError, match="outside the project"):
         _fwd(["replay", str(outside)], repo, repo)
     with pytest.raises(ct.ForwardError):
         _fwd(["replay", "../"], repo, repo)
@@ -215,3 +265,93 @@ def test_commands_refuse_without_container_block(monkeypatch):
     monkeypatch.setattr(ct, "local_container_block", lambda: None)
     with pytest.raises(ct.ContainerError, match="labpipe container setup"):
         ct._prepare()
+
+
+# ---- one container per project ----------------------------------------------------------
+
+def _project_root(tmp_path, monkeypatch, name="Pd films", local="raw_roots: []\n"):
+    """A project folder that is not the code folder (the repository is the code)."""
+    project = tmp_path / "proj"
+    (project / "config").mkdir(parents=True)
+    (project / "labpipe.yaml").write_text(f"schema: labpipe.project/1\nname: {name}\n")
+    (project / "config" / "local.yaml").write_text(local)
+    monkeypatch.setattr(ct.safety, "PROJECT_ROOT", project)
+    monkeypatch.setattr(ct.safety, "CODE_ROOT", REPO)
+    return project
+
+
+def test_project_is_mounted_read_write_and_the_code_is_baked(tmp_path, monkeypatch):
+    project = _project_root(tmp_path, monkeypatch)
+    joined = " ".join(_run(_config(tmp_path), "podman"))
+    assert f"-v {project}:/project " in joined + " " and "-w /project" in joined
+    assert "LABPIPE_PROJECT=/project" in joined and "LABPIPE_CODE=/opt/labpipe" in joined
+    assert ":/opt/labpipe" not in joined          # baked into the image, not mounted
+    assert "/project:ro" not in joined and ":z" not in joined.lower()
+    assert "label=disable" in joined and "labpipe.container_dev" not in joined
+    assert f"-v {tmp_path / 'data'}:/data/lab:ro" in joined          # data stays read-only
+
+
+def test_dev_mounts_the_code_folder_too(tmp_path, monkeypatch):
+    project = _project_root(tmp_path, monkeypatch)
+    joined = " ".join(_run(_config(tmp_path), "podman", dev=True))
+    assert f"-v {project}:/project" in joined and f"-v {REPO}:/opt/labpipe" in joined
+    assert "labpipe.container_dev=1" in joined
+
+
+def test_a_repository_that_is_its_own_project_mounts_the_code_without_a_flag(tmp_path, monkeypatch):
+    monkeypatch.setattr(ct.safety, "PROJECT_ROOT", REPO)
+    monkeypatch.setattr(ct.safety, "CODE_ROOT", REPO)
+    joined = " ".join(_run(_config(tmp_path), "podman"))
+    assert f"-v {REPO}:/project" in joined and f"-v {REPO}:/opt/labpipe" in joined
+
+
+def test_each_project_has_its_own_name_volume_and_host_folder(tmp_path, monkeypatch):
+    project = _project_root(tmp_path, monkeypatch, name="Pd films")
+    cfg = ct.container_config({"container": {"name": "labpipe", "port": 8765}})
+    assert cfg["name"] == "labpipe-pd-films"
+    args = _run({**_config(tmp_path), "container": cfg}, "podman")
+    joined = " ".join(args)
+    assert "--name labpipe-pd-films" in joined and "-v labpipe-pd-films-home:/home/labpipe" in joined
+    assert f"LABPIPE_HOST_ROOT={ct._host_path(project)}" in joined
+    (project / "config" / "local.yaml").write_text("container: {name: mine}\n")
+    assert ct.container_config({})["name"] == "mine"          # the project's own choice wins
+    monkeypatch.setattr(ct.safety, "PROJECT_ROOT", REPO)       # the repository: as before
+    assert ct.container_config({"container": {"name": "labpipe"}})["name"] == "labpipe"
+
+
+def test_the_port_is_the_first_free_one_and_is_saved_in_the_projects_local_yaml(tmp_path, monkeypatch):
+    project = _project_root(tmp_path, monkeypatch,
+                            local="raw_roots: []\ncontainer:\n  engine: podman\n  popups: true\n")
+    busy = []
+    monkeypatch.setattr(ct, "free_port", lambda *a, **k: 8767)
+    assert ct.ensure_port() is True
+    block = ct.local_container_block()
+    assert block["port"] == 8767 and block["engine"] == "podman" and block["popups"] is True
+    assert "raw_roots" in (project / "config" / "local.yaml").read_text()
+    monkeypatch.setattr(ct, "free_port", lambda *a, **k: busy.append(1) or 9000)
+    assert ct.ensure_port() is False and busy == []            # already chosen: kept
+
+
+def test_free_port_skips_ports_in_use():
+    import socket
+    with socket.socket() as taken:
+        taken.bind(("127.0.0.1", 0))
+        port = taken.getsockname()[1]
+        assert ct.free_port(port, port + 50) != port
+
+
+def test_forward_from_a_subfolder_of_the_project(tmp_path, monkeypatch):
+    project = _project_root(tmp_path, monkeypatch,
+                            local="container:\n  engine: podman\n")
+    (project / "analysis" / "S-1").mkdir(parents=True)
+    monkeypatch.chdir(project / "analysis" / "S-1")
+    assert ct.safety.find_project() == project.resolve()
+    monkeypatch.setattr(ct.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(ct, "running", lambda engine, name: True)
+    calls = []
+    monkeypatch.setattr(ct.subprocess, "run",
+                        lambda cmd, **kw: calls.append(cmd) or subprocess.CompletedProcess(cmd, 0))
+    assert ct.forward(["status"]) == 0
+    command = calls[0]
+    assert command[command.index("-w") + 1] == "/project/analysis/S-1"
+    assert command[-2:] == ["labpipe", "status"] and "labpipe-pd-films" in command  # its container

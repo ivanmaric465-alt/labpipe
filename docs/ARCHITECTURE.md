@@ -14,8 +14,8 @@ docs belong to which code: `docs/docmap.yaml` (`scripts/check_docs.py` checks it
 2. **Numbers come from code.** Analyses are deterministic Python. Agent text is checked by code
    (`notes verify`, `postdoc verify`): every number must be found in the outputs.
 3. **Every output can be regenerated from its `provenance.json`**: input hash, resolved
-   settings, the settings files used and their hashes, code version, environment, output hashes
-   (`replay`).
+   settings, the settings files used and their hashes (each with its root, `code` or
+   `project`), code version, environment, output hashes (`replay`).
 4. **Nothing is deleted.** Reruns go to `_superseded/`, failures to `_failed/`.
 5. **Failures are recorded and skipped**: one bad file never stops a run.
 
@@ -38,19 +38,44 @@ data folder (read-only)
 3. If there is AI work, it starts the supervisor agent, which hands entries to the analysts.
 4. It rebuilds the report and notifies (`logs/notifications.jsonl`, page, pop-ups).
 
-## Repository layout
+## Code and projects
+
+Two roots (`safety.py`). The code is replaced by updates and never holds anyone's data; a
+project is one lab folder and is never written by an update.
+
+| Root | Is | Found by |
+|---|---|---|
+| `CODE_ROOT` | the code: defaults, `methods.yaml`, references, agent roles, templates, docs, container | `LABPIPE_CODE`, else the package's repository |
+| `PROJECT_ROOT` | one project: settings, context, results, the lab's additions | `LABPIPE_PROJECT` (`LABPIPE_ROOT` is the old name), else the nearest folder from the current one upwards that holds `labpipe.yaml` |
+
+- **Dev mode**: with no project around, `PROJECT_ROOT` is `CODE_ROOT` itself: the repository is
+  its own project, as it was before projects existed. Only there are `AGENTS.md`, `docs/` and
+  `.claude/*.json` both the sources and what the agents read.
+- **An installation** (marked by `.labpipe-installed`, or the default install folder) is never
+  its own project: commands there say *"not in a labpipe project; create one with
+  `labpipe project new <folder>`"*.
+- **Read from the code**: `config/<method>.yaml`, `plots.yaml`, `report.yaml`, `pipeline.yaml`,
+  `*.example.yaml`; `methods.yaml`; `references/`; `agents/`; `templates/`; `docs/`; the sources
+  of `AGENTS.md`, `CLAUDE.md`, `.claude/*.json`, `.codex/`, `.agents/`; `hooks/guard.py`; `container/`.
+- **Read from the project**: `labpipe.yaml`, `config/local.yaml`, `lab.yaml`, `samples.yaml`,
+  `sample_ids.yaml`, `ignore.yaml`, `config/measurements/`, `context/`, `lab/`; written: `analysis/`,
+  `logs/`, `manifest.json`.
+
+## Repository layout (the code)
 
 ```
 src/labpipe/            the package (module map below)
   methods/<m>/          one package per analysis method (xrd, eds, sem; template)
   plotting/             shared plot style (ACS)
 agents/                 agent roles, harness-neutral (→ `labpipe agents sync`)
-config/                 defaults (tracked) and the lab's files (git-ignored, docs/settings/)
+config/                 defaults (`<method>.yaml`, plots, report, pipeline) and `*.example.yaml`
 methods.yaml            registry: file patterns → method → agent → module
 references/<m>/         reference data (XRD phases: open COD data only)
-templates/              files copied into a project (context/)
+templates/              context/ and project/ (LAB.md, lab/agents README): files copied into a project
 container/              image: Dockerfile, entrypoint (firewall, proxy, drop privileges), locks
 hooks/guard.py          launcher of `labpipe guard` for agent tools
+.claude/ .codex/ .agents/   sources of the harness settings, rules, hook and skills
+AGENTS.md, CLAUDE.md    sources of the agent instructions
 docs/                   methods/, settings/, design/ (approved design notes), SAFETY, SETUP, …
   docmap.yaml           which docs belong to which code, and which docs repeat each other
 scripts/check_docs.py   fails when code changed without its docs (CI)
@@ -58,8 +83,33 @@ tests/                  pytest; CI on Linux and Windows
 install.sh, install.ps1 installers
 ```
 
-Generated and git-ignored: `analysis/`, `manifest.json`, `logs/`, `context/`,
-`.claude/agents/`, `.codex/agents/`, `.opencode/agents/`, the lab's settings files.
+## A project (the lab's folder)
+
+```
+labpipe.yaml            marks the folder; name, created, labpipe version
+config/                 local.yaml (this machine), lab.yaml, samples.yaml, sample_ids.yaml, ignore.yaml, measurements/
+context/                the user's project context and documents
+lab/LAB.md              the lab's conventions for all agents
+lab/agents/<role>.md    appended to that role; <new>.md with frontmatter = an extra role
+analysis/  manifest.json  logs/       results and state
+AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's additions" (LAB.md)
+.labpipe/                             generated: docs/, config/ (defaults), methods.yaml, references/,
+                                      agents/, hooks/guard.py, generated.json
+.claude/*.json  .codex/  .agents/     generated: permissions, hook, rules, skills
+.claude/agents/  .codex/agents/  .opencode/agents/   generated: the harness's agent files
+```
+
+- **Generated files** come from `labpipe project sync` (`project.py`; `agents sync` calls it in a
+  project). Each starts with "Generated by labpipe <version> from <source>. Do not edit; your
+  additions go in lab/LAB.md (or lab/agents/)" (JSON has no comments).
+- `.labpipe/generated.json` records every generated file with its hash and a hash of their
+  sources: `doctor` says "run `labpipe project sync`" when the code or `LAB.md` changed, a file is
+  missing or was edited by hand; the guard and the harness permissions refuse agent writes to them.
+- Backticked code-side paths in the generated texts (`docs/…`, `methods.yaml`, default
+  `config/<method>.yaml`, `references/`, `agents/`) point to the copies in `.labpipe/`.
+- In dev mode `project sync` writes only the harness's agent files (as `agents sync` always did).
+- `labpipe project new` creates a project (not in a synced folder, never over a non-empty
+  folder) and runs the first sync.
 
 ## Module map
 
@@ -83,16 +133,17 @@ Generated and git-ignored: `analysis/`, `manifest.json`, `logs/`, `context/`,
 | | `notes.py` | `notes verify` (numbers vs results), `todo`, `retire` |
 | | `postdoc.py` | postdoc runs: start, verify, freshness, list, headless run |
 | | `context.py` | `context/` init and text index of documents |
-| Agents | `agents.py` | `agents/*.md` → harness files, models per role |
-| | `guard.py` | hook: refuses writes outside the allowed paths, raw-data access, disallowed commands |
+| Agents | `agents.py` | `agents/*.md` (+ the lab's overlays and extra roles) → harness files, models per role |
+| | `project.py` | `project new`; `project sync`: the generated files of a project, `generated.json`, status for doctor |
+| | `guard.py` | hook: refuses writes outside the allowed paths, to generated files, raw-data access, disallowed commands |
 | Automation | `automation.py` | watcher, one pass, nightly run, notifications, headless agent commands |
 | | `inbox.py` | notifications page (local, token, read-only) |
-| | `container.py` | build, start, stop, login, shell, pop-up proxy; forwarding of host commands |
+| | `container.py` | build (staged context), start (name, port, mounts per project), stop, login, shell, pop-up proxy; forwarding of host commands |
 | Setup | `doctor.py` | setup state and next step (read-only) |
 | | `wizard.py` | `labpipe setup` (asks in the terminal) |
 | | `roview.py` | commands for a read-only view (native mode) |
 | | `methods_kit.py` | `methods new | check`: scaffold and check a method |
-| Support | `safety.py` | project root, write checks, atomic writes, container path mapping |
+| Support | `safety.py` | code and project roots, dev mode, write checks, atomic writes, container path mapping |
 | | `locking.py` | cross-platform file lock |
 
 ## The method contract
@@ -120,28 +171,44 @@ Details: `docs/ADDING_A_METHOD.md`, template: `methods/template/`.
 ## Agents and the harness
 
 - **Roles**: `agents/*.md` hold the roles, harness-neutral: supervisor, `<m>`-analyst, postdoc.
+  The lab's `lab/agents/<role>.md` is appended to the role; `lab/agents/<new>.md` with full
+  frontmatter is an extra role. An overlay that names no role is reported (`problems`), never dropped.
 - **Generated files**: `labpipe agents sync` writes the harness files, with the models from
-  `config/local.yaml` → `agents`.
+  `config/local.yaml` → `agents`; in a project it runs the whole `project sync`.
 - **Unattended runs** use the project-only settings (`.claude/unattended*.json`; Codex:
   `-c` flags). `guard.py` is the hook in both tools.
 - **Postdoc mode**: `LABPIPE_AGENT_MODE=postdoc` narrows what the postdoc may run and write.
 
 ## Container mode
 
+One container per project.
+
 - **Image**:
-  - Python with the locked dependencies, the agent tools at pinned versions, the labpipe code;
-  - the image tag is a hash of `container/**` and `pyproject.toml`.
-- **Run**: the repository is mounted read-write and the data folders read-only. A home volume
-  holds the logins.
+  - Python with the locked dependencies, the agent tools at pinned versions, and the labpipe
+    **code at `/opt/labpipe`** (`PYTHONPATH=/opt/labpipe/src`, `LABPIPE_CODE`);
+  - `container.py` stages the build context: exactly the files the image hash covers (the code
+    listed under "Read from the code", the default settings but never the lab's files, and the
+    commit of the code as `.labpipe-code.json`, because the image has no `.git`);
+  - the image tag is the hash of those files.
+- **Run**:
+  - the project is mounted read-write at `/project` (the working folder, `LABPIPE_PROJECT`), the
+    data folders read-only at `/data/<id>`;
+  - dev mode (the repository is its own project) and `labpipe container start --dev` also mount
+    the code folder at `/opt/labpipe`, so code edits need no rebuild;
+  - the container is named `labpipe-<project name>` with the volume `<name>-home` (logins), and
+    its port is the first free one from 8765, saved in the project's `config/local.yaml`.
 - **Network**: an iptables firewall allows only the local tinyproxy, and the proxy allows only
   the listed hosts. The entrypoint drops privileges.
-- **Host side**: `labpipe` on the host forwards commands into the container (`exec`). Local-only
-  commands: container, shell, setup, init, doctor, agents, guard, methods, readonly-view.
+- **Host side**: `labpipe` on the host, anywhere inside a project, forwards commands into that
+  project's container (`exec`, the working folder mapped under `/project`). Local-only
+  commands: container, shell, setup, init, doctor, agents, project, guard, methods, readonly-view.
 
 ## Where things are written
 
 | Path | Written by |
 |---|---|
+| `labpipe.yaml`, `lab/`, `config/` lab files | `project new` creates them; then the user, or an agent with the user's OK |
+| `AGENTS.md`, `CLAUDE.md`, `.labpipe/`, `.claude/*.json`, `.codex/`, `.agents/` | `project sync` (generated; agents never write them) |
 | `manifest.json` | scanner, pipeline (locked) |
 | `analysis/<sample>/<method>/<m>/` | pipeline (code); `notes.md` by the analyst agent |
 | `analysis/_postdoc/<run>/` | postdoc (code), `analysis.md` by the postdoc agent |
@@ -149,7 +216,7 @@ Details: `docs/ADDING_A_METHOD.md`, template: `methods/template/`.
 | `logs/` | automation, review, supervisor run summaries, notifications |
 | `config/` lab files | the user, or an agent with the user's OK |
 | `context/` | the user; `context.md` / `instructions.md` by an agent with the user's OK; `.text/` by `context index` |
-| harness agent files | `agents sync` |
+| harness agent files | `agents sync` / `project sync` |
 
 ## Tests
 
@@ -157,7 +224,11 @@ Details: `docs/ADDING_A_METHOD.md`, template: `methods/template/`.
 - CI runs on Linux and Windows.
 - Numerics are tested against hand-checked values, and outputs must be byte-identical where
   promised (default figures, replay).
-- Container tests are pure: they test the command lines, not a running engine.
+- Container tests are pure: they test the command lines, the staged files and the image hash,
+  not a running engine.
+- `tests/test_project.py`: finding the project, `project new` and its refusals, the two roots in
+  settings, the generated files and overlays, dev mode, the guard, and a scan, analysis, report
+  and replay in a project made by `project new`.
 - `tests/test_docs.py` checks the docs against the code where it can be done mechanically:
   every command documented, this module map complete, links resolve, settings keys and method
   plot keys on their pages, every agent role in `AGENTS.md`.

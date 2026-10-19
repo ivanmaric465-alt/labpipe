@@ -32,6 +32,7 @@ def project(tmp_path, monkeypatch):
     (tmp_path / "config").mkdir()
     shutil.copy(REPO / "config" / "report.yaml", tmp_path / "config" / "report.yaml")
     monkeypatch.setattr(settings_mod, "CONFIG", tmp_path / "config")
+    monkeypatch.setattr(settings_mod, "DEFAULTS", tmp_path / "config")
     monkeypatch.setattr(report, "load_methods", lambda: METHODS)
     gallery = types.ModuleType("fake_gallery")
     gallery.select = lambda items, settings: items

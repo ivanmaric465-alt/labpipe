@@ -44,6 +44,7 @@ labpipe xrd refs add path/to/file.cif --id NAME --structure-type fcc|rocksalt|hc
 labpipe xrd refs list | build
 ```
 
+- References come with the code and are recorded in every `provenance.json` with `root: code`, the file and its hash.
 - Check the CIF first: cell edges in Å, not kX; ambient conditions; not a theoretical or hydrogen-loaded structure. `references/xrd/phases.yaml` → `excluded` lists examples of what to reject.
 - COD is open data. ICSD/ICDD CIFs are licensed and must not be committed.
 - `fcc` and `rocksalt` references also take part in the lattice-parameter comparison.

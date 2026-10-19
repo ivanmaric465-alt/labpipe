@@ -32,9 +32,12 @@ def main() -> int:
     if python is None:
         return 0  # labpipe not installed yet: no raw roots configured to protect
     env = dict(os.environ)
-    # The project is the repository this launcher lives in (hooks/guard.py), whatever
-    # the harness's working directory.
-    env.setdefault("LABPIPE_ROOT", str(Path(__file__).resolve().parents[1]))
+    # The project is the folder this launcher lives in (hooks/guard.py in the repository,
+    # .labpipe/hooks/guard.py in a project), whatever the harness's working directory.
+    here = Path(__file__).resolve()
+    folder = here.parents[2] if here.parents[1].name == ".labpipe" else here.parents[1]
+    if not (env.get("LABPIPE_PROJECT") or env.get("LABPIPE_ROOT")):
+        env["LABPIPE_PROJECT"] = str(folder)
     try:
         completed = subprocess.run([str(python), "-m", "labpipe.cli", "guard"], input=event,
                                    capture_output=True, env=env, timeout=60)

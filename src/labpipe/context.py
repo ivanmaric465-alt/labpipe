@@ -24,9 +24,9 @@ from typing import Any
 from xml.etree import ElementTree
 
 from labpipe.provenance import sha256_file, utc_now
-from labpipe.safety import PROJECT_ROOT, atomic_write_text
+from labpipe.safety import CODE_ROOT, PROJECT_ROOT, atomic_write_text
 
-TEMPLATES = Path(__file__).resolve().parents[2] / "templates" / "context"
+TEMPLATES = CODE_ROOT / "templates" / "context"
 FILES = ("context.md", "instructions.md")
 INDEX_SCHEMA = "labpipe.context.index/1"
 _W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"

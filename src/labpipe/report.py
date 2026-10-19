@@ -431,7 +431,7 @@ def report_settings(methods: dict | None = None) -> dict[str, dict]:
     ("report-<name>"). config/report.yaml, then config/lab.yaml → report; an extra report
     starts from the main report's resolved settings and applies its own keys on top.
     Unknown keys and bad values raise SettingsError."""
-    path = settings_mod.CONFIG / REPORT_DEFAULTS
+    path = settings_mod.DEFAULTS / REPORT_DEFAULTS
     defaults = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}) if path.exists() else {}
     defaults.setdefault("extra", {})
     base = {k: v for k, v in defaults.items() if k != "extra"}

@@ -53,7 +53,8 @@ All commands print JSON.
 | `labpipe context init \| index` | Create `context/` from the templates / extract the text of `context/documents/` |
 | `labpipe postdoc start "Q" \| verify RUN \| list \| run "Q"` | A run for the postdoc / check its `analysis.md` / past runs / the whole thing without a conversation |
 | `labpipe replay PROVENANCE.json` | Regenerate outputs and compare hashes |
-| `labpipe agents sync` | Generate the harness's agent files from `agents/` |
+| `labpipe project new FOLDER [--data PATH]... [--name NAME]` / `project sync` | Create a project folder (the user runs it) / regenerate its generated files (`AGENTS.md`, `CLAUDE.md`, `.labpipe/`, harness files) after `lab/LAB.md`, `lab/agents/` or a labpipe update changed |
+| `labpipe agents sync` | Generate the harness's agent files from `agents/` and `lab/agents/` (in a project: the whole `project sync`) |
 | `labpipe automation run \| status` | One automatic pass / state of the watcher and nightly run |
 | `labpipe methods new \| check` | New method (only in a method-design task with the user) |
 | `labpipe container setup \| start [--replace] \| stop \| status \| logs \| login \| popups` | Container mode (`docs/settings/container.md`); the user runs `setup`, `login` and `popups` (they ask questions or install a service) |
@@ -65,7 +66,7 @@ Method-specific commands (e.g. `labpipe xrd refs`) are in the method's doc.
 
 ## Agents
 
-Roles are defined once, harness-neutral, in `agents/`. `labpipe agents sync` turns them into the files the chosen harness reads (Claude Code `.claude/agents/`, Codex `.codex/agents/*.toml`, OpenCode `.opencode/agents/`; generated, git-ignored), with the models from `config/local.yaml` → `agents`. Edit `agents/*.md`, never the generated files.
+Roles are defined once, harness-neutral, in `agents/` (in a project they are read-only copies in `.labpipe/agents/`). `labpipe agents sync` turns them into the files the chosen harness reads (Claude Code `.claude/agents/`, Codex `.codex/agents/*.toml`, OpenCode `.opencode/agents/`; generated, git-ignored), with the models from `config/local.yaml` → `agents`. Never edit the generated files. The lab's own instructions go in `lab/LAB.md` (all agents) and `lab/agents/<role>.md` (appended to that role; a file with full frontmatter is an extra role); then `labpipe project sync`. Edit `agents/*.md` only in a code task.
 
 | Agent | Role | Writes |
 |---|---|---|
@@ -103,15 +104,18 @@ The postdoc answers the user's questions about the whole project, with its conte
 
 ## Layout
 
+A project is a folder with `labpipe.yaml`; labpipe finds it from the folder you are in. The code (defaults, `docs/`, agent roles, `methods.yaml`) is elsewhere: in a project, what you may read of it is copied to `.labpipe/` (`.labpipe/docs/`, `.labpipe/config/<method>.yaml`, `.labpipe/methods.yaml`), and `AGENTS.md`, `CLAUDE.md`, `.labpipe/` and the harness files are **generated: never edit them**, add to `lab/LAB.md` or `lab/agents/` and run `labpipe project sync`. In the labpipe repository itself (dev mode) the sources are the files themselves.
+
 ```
 analysis/<sample_id>/<method>/<measurement_id>/   results.json, plot.png, plot.pdf, provenance.json, notes.md
 analysis/<sample_id>/<method>/_superseded|_failed/ older or failed outputs (never deleted)
 analysis/_postdoc/<run>/                           the postdoc's runs: request.md, inputs.json, dataset.json, compare-N.json, analysis.md, verify.json
 context/                                           the user's project context and documents (git-ignored)
+lab/                                               the lab's own additions: LAB.md (all agents), agents/<role>.md
 manifest.json                                      one entry per raw file: hash, status, output, versions; unrecognised files
 logs/                                              automation.log, runs/, review_queue.md
 config/                                            settings (docs/settings/): local.yaml = this machine; lab.yaml = the lab's preferences; ignore.yaml = files to leave alone
-methods.yaml                                       file patterns → method → analyst → CLI
+methods.yaml                                       file patterns → method → analyst → CLI (from the code)
 docs/methods/<method>.md                           per method: design, settings, interpretation, conventions
 ```
 

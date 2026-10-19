@@ -1,6 +1,6 @@
 # Container mode for automatic processing
 
-Status: DRAFT, for approval. No code until approved.
+Status: DRAFT, for approval. No code until approved. (Implemented; since superseded in one respect by `docs/design/install.md`: the code is baked into the image at `/opt/labpipe`, and the project folder, not the repository, is mounted at `/project`. `labpipe container start --dev` mounts the code folder as described here.)
 
 ## Goal
 Run labpipe's automatic processing (watcher, nightly pass, AI runs) in a container (Podman or Docker), the same way on Linux, macOS and Windows, and offer interactive agent sessions in the same container. The container replaces the OS-specific parts: the read-only view (`sudo mount` / SMB share), the agent tool's own sandbox, and systemd / Task Scheduler.

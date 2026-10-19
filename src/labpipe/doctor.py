@@ -21,10 +21,9 @@ import yaml
 from labpipe import manifest as mf
 from labpipe.registry import load_methods
 from labpipe.container import container_mode
-from labpipe.safety import PROJECT_ROOT, SetupError, in_container, load_pipeline_config
-
-SYNC_MARKERS = ("koofr", "onedrive", "dropbox", "google drive", "googledrive", "icloud",
-                "nextcloud", "owncloud", "syncthing", "mega")
+from labpipe import safety
+from labpipe.safety import (CODE_ROOT, PROJECT_ROOT, SetupError, in_container,
+                            load_pipeline_config, synced_marker)
 
 
 def _item(check: str, status: str, message: str, next_step: str | None = None,
@@ -32,13 +31,7 @@ def _item(check: str, status: str, message: str, next_step: str | None = None,
     return {"check": check, "status": status, "message": message, "next": next_step, **details}
 
 
-def _synced(path: Path) -> str | None:
-    """A path segment named like a sync client's folder (e.g. 'OneDrive - Lab', 'Dropbox')."""
-    for part in (p.lower() for p in Path(path).parts):
-        for marker in SYNC_MARKERS:
-            if part.startswith(marker) and (marker != "mega" or part in ("mega", "megasync")):
-                return marker
-    return None
+_synced = synced_marker
 
 
 def _read_only(path: Path) -> tuple[bool | None, str]:
@@ -82,7 +75,7 @@ def _environment() -> list[dict[str, Any]]:
         items.append(_item("venv_location", "warn", f"virtual environment {sys.prefix} is inside a "
                            "synced folder", "recreate it outside synced folders (README → Install)"))
     # inside the container the image's own lock applies (container/requirements.lock)
-    lock = PROJECT_ROOT / ("container" if in_container() else "") / "requirements.lock"
+    lock = CODE_ROOT / ("container" if in_container() else "") / "requirements.lock"
     if lock.exists():
         mismatched = []
         for line in lock.read_text(encoding="utf-8").splitlines():
@@ -101,10 +94,33 @@ def _environment() -> list[dict[str, Any]]:
                                mismatched[:8]) if mismatched else "matches requirements.lock",
                            "pip install -r requirements.lock" if mismatched else None))
     if _synced(PROJECT_ROOT):
-        items.append(_item("project_location", "warn", f"repository {PROJECT_ROOT} is inside a "
+        items.append(_item("project_location", "warn", f"project {PROJECT_ROOT} is inside a "
                            "synced folder; analysis/ and manifest.json should not be synced",
-                           "clone the repository to a local, unsynced folder"))
+                           "create the project in a local, unsynced folder "
+                           "(`labpipe project new <folder>`) and move your files there"))
     return items
+
+
+def _project() -> list[dict[str, Any]]:
+    """Which project this is, its mode, and whether the generated files are current."""
+    from labpipe import project
+    state = project.status()
+    where = f"project {state['name']} ({state['path']})"
+    if state["mode"] == "dev":
+        return [_item("project", "ok", f"{where}: dev mode (the repository is its own project; "
+                      "AGENTS.md, docs/ and .claude/ are the tracked sources)", mode="dev")]
+    generated = state["generated"]
+    if generated["current"]:
+        return [_item("project", "ok", f"{where}: generated files current", mode="project")]
+    detail = []
+    if generated["missing"]:
+        detail.append("missing: " + ", ".join(generated["missing"][:5]))
+    if generated["edited"]:
+        detail.append("edited by hand (sync overwrites): " + ", ".join(generated["edited"][:5]))
+    if generated["sources_changed"]:
+        detail.append("the code or lab/LAB.md changed since the last sync")
+    return [_item("project", "todo", f"{where}: generated files out of date ("
+                  + "; ".join(detail) + ")", "run `labpipe project sync`", mode="project")]
 
 
 def _container() -> list[dict[str, Any]]:
@@ -232,21 +248,21 @@ def _automation(config: dict) -> list[dict[str, Any]]:
 
 def _method_setup() -> list[dict[str, Any]]:
     items = []
-    roles = {p.stem for p in (PROJECT_ROOT / "agents").glob("*.md")}
+    roles = {p.stem for p in (CODE_ROOT / "agents").glob("*.md")}
     for name in [spec.get("subagent") for spec in load_methods().values()]:
         if name and name not in roles:
             items.append(_item(f"agent:{name}", "todo", f"methods.yaml names agent {name}, but "
                                f"agents/{name}.md does not exist", "see docs/ADDING_A_METHOD.md"))
-    catalogue = PROJECT_ROOT / "references" / "xrd" / "phases.yaml"
+    catalogue = CODE_ROOT / "references" / "xrd" / "phases.yaml"
     if catalogue.exists():
         phases = (yaml.safe_load(catalogue.read_text(encoding="utf-8")) or {}).get("phases") or []
-        patterns = PROJECT_ROOT / "references" / "xrd" / "patterns"
+        patterns = CODE_ROOT / "references" / "xrd" / "patterns"
         unbuilt = [p["id"] for p in phases if not (patterns / f"{p['id']}.json").exists()]
         items.append(_item("xrd_references", "todo" if unbuilt else "ok",
                            f"{len(phases)} reference phase(s)" + (
                                f"; not built: {', '.join(unbuilt)}" if unbuilt else ""),
                            "labpipe xrd refs build (needs the refbuild extra)" if unbuilt else None))
-    xrd = PROJECT_ROOT / "config" / "xrd.yaml"
+    xrd = CODE_ROOT / "config" / "xrd.yaml"
     if xrd.exists():
         standard = (yaml.safe_load(xrd.read_text(encoding="utf-8")) or {}).get(
             "internal_standard") or {}
@@ -260,7 +276,14 @@ def _method_setup() -> list[dict[str, Any]]:
 
 
 def run() -> dict[str, Any]:
+    if safety.NO_PROJECT:
+        message = safety.NO_PROJECT_MESSAGE
+        return {"project_root": None, "platform": platform.platform(), "ready": False,
+                "next": {"check": "project", "do": "labpipe project new <folder>"},
+                "checks": [*_environment(), _item("project", "todo", message,
+                                                  "labpipe project new <folder>")]}
     items = _environment()
+    items += _project()
     local = PROJECT_ROOT / "config" / "local.yaml"
     try:
         config = load_pipeline_config()
@@ -288,6 +311,9 @@ def run() -> dict[str, Any]:
         else:
             items.append(_item("agents", "ok", f"{agents['harness']} agents current; models: "
                                + ", ".join(f"{k} {v}" for k, v in agents["models"].items())))
+        for problem in agents.get("problems") or []:
+            items.append(_item("lab_agents", "warn", problem, "fix the file in lab/agents/, "
+                               "then `labpipe project sync`"))
         if agents.get("harness") == "codex":
             from labpipe.agents import codex_trust
             if not shutil.which("codex"):

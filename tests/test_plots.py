@@ -34,7 +34,7 @@ def _config(tmp_path, monkeypatch, **files) -> Path:
     for name, text in files.items():
         (config / name.replace("__", "/")).write_text(text, encoding="utf-8")
     monkeypatch.setattr(settings, "CONFIG", config)
-    monkeypatch.setattr(settings, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(settings, "DEFAULTS", config)
     return config
 
 
@@ -213,8 +213,6 @@ def test_sem_scale_bar_false_cuts_the_info_bar_and_eds_panels_choose(tmp_path):
 
 def _analysed(tmp_path, names=("S-1",)):
     project, raw, env = _project(tmp_path)
-    with open(project / "config" / "local.yaml", "a") as stream:
-        stream.write("automation: {notify: {desktop: false}}\n")
     for number, name in enumerate(names):
         _xrd_input(raw / "XRD", seed=7 + number).rename(raw / "XRD" / f"{name}_test.xrdml")
     _labpipe(env, "scan")

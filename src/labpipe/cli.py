@@ -14,7 +14,9 @@
   labpipe <method> check --entry ID         print the deterministic checks of an entry
   labpipe <method> summary --entry ID       compact human-readable summary (if the method has one)
   labpipe report                            write analysis/report.html (overview for people)
-  labpipe agents sync|status                generate the harness's agent files from agents/*.md
+  labpipe project new FOLDER [--data PATH]... [--name NAME]   create a project (a folder with labpipe.yaml)
+  labpipe project sync                      regenerate AGENTS.md, CLAUDE.md, .labpipe/, harness files
+  labpipe agents sync|status                generate the harness's agent files from agents/*.md (+ lab/agents/)
   labpipe roots rename OLD NEW              keep manifest entries when a raw root's id changes
   labpipe automation setup|watch|run|status automatic processing (setup asks you; needs a terminal)
   labpipe analyze --pending [--limit N]     analyse all pending entries (deterministic loop)
@@ -50,7 +52,12 @@ from pathlib import Path
 from labpipe import manifest as mf
 from labpipe import container, pipeline, scanner
 from labpipe.registry import load_methods
-from labpipe.safety import PROJECT_ROOT, SetupError, load_pipeline_config
+from labpipe import safety
+from labpipe.safety import CODE_ROOT, PROJECT_ROOT, SetupError, load_pipeline_config
+
+
+# Commands that work outside a project (the others explain how to create one).
+NO_PROJECT_COMMANDS = {"doctor", "guard", "readonly-view", "methods"}
 
 
 def _refresh_report(config) -> str | None:
@@ -74,7 +81,8 @@ def cmd_init(args, config) -> int:
         if target.exists():
             existing.append(str(target))
             continue
-        shutil.copyfile(PROJECT_ROOT / "config" / f"{name}.example.yaml", target)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(CODE_ROOT / "config" / f"{name}.example.yaml", target)
         created.append(str(target))
     _print({"created": created, "exists": existing,
             "next": ["`labpipe setup`, or edit config/local.yaml by hand (docs/SAFETY.md)",
@@ -146,14 +154,29 @@ def cmd_readonly_view(args, config) -> int:
 
 
 def cmd_agents(args, config) -> int:
-    from labpipe import agents
+    from labpipe import agents, project
     try:
-        result = agents.sync(config) if args.action == "sync" else agents.status(config)
+        if args.action == "sync":
+            result = project.sync(config=config)     # in a project: everything generated
+        else:
+            result = agents.status(config)
     except agents.AgentConfigError as exc:
         _print({"error": str(exc)})
         return 1
     _print(result)
-    return 0
+    return 1 if result.get("problems") or result.get("error") else 0
+
+
+def cmd_project(args, config) -> int:
+    from labpipe import project
+    try:
+        result = (project.new(args.folder, args.data, args.name) if args.action == "new"
+                  else project.sync(config=config))
+    except (project.ProjectError, SetupError) as exc:
+        _print({"error": str(exc)})
+        return 1
+    _print(result)
+    return 1 if result.get("problems") or result.get("error") else 0
 
 
 def cmd_roots_rename(args, config) -> int:
@@ -537,6 +560,18 @@ def build_parser() -> argparse.ArgumentParser:
     rename.add_argument("old")
     rename.add_argument("new")
     rename.set_defaults(func=cmd_roots_rename)
+    project_parser = sub.add_parser("project", help="create a project folder; regenerate its "
+                                    "generated files").add_subparsers(dest="action", required=True)
+    project_new = project_parser.add_parser(
+        "new", help="create a project folder (suggestion: ~/labpipe-projects/<name>; not in a "
+        "synced folder)")
+    project_new.add_argument("folder")
+    project_new.add_argument("--data", action="append", default=[], metavar="PATH",
+                             help="a data folder (read-only for labpipe); repeat for several")
+    project_new.add_argument("--name", default=None, help="the project's name (default: the folder's)")
+    project_new.set_defaults(func=cmd_project, needs_config=False)
+    project_parser.add_parser("sync", help="regenerate AGENTS.md, CLAUDE.md, .labpipe/ and the "
+                              "harness files").set_defaults(func=cmd_project)
     agents_parser = sub.add_parser("agents").add_subparsers(dest="action", required=True)
     agents_parser.add_parser("sync").set_defaults(func=cmd_agents)
     agents_parser.add_parser("status").set_defaults(func=cmd_agents)
@@ -593,6 +628,10 @@ def main(argv: list[str] | None = None) -> int:
     if forwarded is not None:  # container mode: the command ran inside the container
         return forwarded
     args = build_parser().parse_args(argv)
+    if safety.NO_PROJECT and args.command not in NO_PROJECT_COMMANDS and not (
+            args.command == "project" and args.action == "new"):
+        _print({"error": safety.NO_PROJECT_MESSAGE})
+        return 2
     try:
         config = load_pipeline_config() if getattr(args, "needs_config", True) else {}
     except SetupError as exc:

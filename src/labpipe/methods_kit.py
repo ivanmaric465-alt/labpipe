@@ -25,9 +25,9 @@ from typing import Any
 from labpipe.naming import measurement_id
 from labpipe.provenance import sha256_file, utc_now
 from labpipe.registry import classify, load_methods
-from labpipe.safety import PROJECT_ROOT, atomic_write_text
+from labpipe.safety import CODE_ROOT, PROJECT_ROOT, atomic_write_text
 
-TEMPLATE = PROJECT_ROOT / "src" / "labpipe" / "methods" / "template"
+TEMPLATE = CODE_ROOT / "src" / "labpipe" / "methods" / "template"
 NAME = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
 REQUIRED_OUTPUTS = ("results.json", "plot.png", "plot.pdf", "provenance.json")
 SEVERITIES = {"info", "warning", "review"}
@@ -51,7 +51,7 @@ def new(name: str, example: Path, description: str, analyst: bool = True) -> dic
     extension = example.suffix.lower()
     if not extension:
         raise MethodKitError("the example file needs an extension (it becomes the pattern)")
-    package = PROJECT_ROOT / "src" / "labpipe" / "methods" / name
+    package = CODE_ROOT / "src" / "labpipe" / "methods" / name
     agent = f"{name}-analyst" if analyst else None
     targets = {
         package / "__init__.py": f'"""{description}"""\n',
@@ -63,21 +63,21 @@ def new(name: str, example: Path, description: str, analyst: bool = True) -> dic
                      f'"""{description}: method `{name}` (design: docs/methods/{name}.md).\n\n'
                      "Scaffolded from the template; replace the reading and numerics sections.\n"
                      "Original template text follows."),
-        PROJECT_ROOT / "config" / f"{name}.yaml": (TEMPLATE / "config.example.yaml")
+        CODE_ROOT / "config" / f"{name}.yaml": (TEMPLATE / "config.example.yaml")
             .read_text(encoding="utf-8").replace("labpipe.template.config/1",
                                                  f"labpipe.{name}.config/1"),
-        PROJECT_ROOT / "tests" / f"test_{name}.py": _fill(
+        CODE_ROOT / "tests" / f"test_{name}.py": _fill(
             (TEMPLATE / "test_method.py.txt").read_text(encoding="utf-8"), name, description,
             extension),
     }
     if agent:
-        targets[PROJECT_ROOT / "agents" / f"{agent}.md"] = _fill(
+        targets[CODE_ROOT / "agents" / f"{agent}.md"] = _fill(
             (TEMPLATE / "analyst.md").read_text(encoding="utf-8"), name, description, extension)
-    design = PROJECT_ROOT / "docs" / "methods" / f"{name}.md"
+    design = CODE_ROOT / "docs" / "methods" / f"{name}.md"
     if not design.exists():
         targets[design] = _fill((TEMPLATE / "design.md").read_text(encoding="utf-8"), name,
                                 description, extension)
-    existing = [p.relative_to(PROJECT_ROOT).as_posix() for p in targets if p.exists()]
+    existing = [p.relative_to(CODE_ROOT).as_posix() for p in targets if p.exists()]
     if existing:
         raise MethodKitError(f"would overwrite {existing}; nothing created")
     for path, text in targets.items():
@@ -94,10 +94,10 @@ def new(name: str, example: Path, description: str, analyst: bool = True) -> dic
              f"    module: labpipe.methods.{name}.analyze\n"
              f"    config: config/{name}.yaml\n"
              f"    outputs: [results.json, plot.png, plot.pdf, provenance.json, notes.md]\n")
-    registry = PROJECT_ROOT / "methods.yaml"
+    registry = CODE_ROOT / "methods.yaml"
     atomic_write_text(registry, registry.read_text(encoding="utf-8").rstrip() + "\n" + entry,
                       pipeline=False)
-    return {"created": [p.relative_to(PROJECT_ROOT).as_posix() for p in targets] + ["methods.yaml (entry)"],
+    return {"created": [p.relative_to(CODE_ROOT).as_posix() for p in targets] + ["methods.yaml (entry)"],
             "next": [f"agree the design with the user in docs/methods/{name}.md first",
                      f"implement reading and numerics in src/labpipe/methods/{name}/analyze.py",
                      f"put every tunable number in config/{name}.yaml",
@@ -129,12 +129,12 @@ def check(name: str, example: Path, config: dict | None = None,
         return {"method": name, "ok": False, "checks": results}
     for key in ("patterns", "module", "config"):
         _check(results, f"registry: {key}", spec.get(key), str(spec.get(key)))
-    _check(results, "settings file", (PROJECT_ROOT / str(spec.get("config"))).exists(),
+    _check(results, "settings file", (CODE_ROOT / str(spec.get("config"))).exists(),
            str(spec.get("config")))
     if spec.get("subagent"):
-        role = PROJECT_ROOT / "agents" / f"{spec['subagent']}.md"
+        role = CODE_ROOT / "agents" / f"{spec['subagent']}.md"
         _check(results, "analyst role file", role.exists() and "labpipe notes verify" in
-               role.read_text(encoding="utf-8"), f"{role.relative_to(PROJECT_ROOT).as_posix()} "
+               role.read_text(encoding="utf-8"), f"{role.relative_to(CODE_ROOT).as_posix()} "
                "must exist and keep the `labpipe notes verify` step")
     else:
         _check(results, "no analyst: notes switched off", spec.get("notes") is False,
