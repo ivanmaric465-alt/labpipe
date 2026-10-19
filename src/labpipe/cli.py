@@ -28,6 +28,8 @@
   labpipe container setup|build|start|stop|status|logs|login   the container (Podman or Docker)
   labpipe shell [claude|codex]              agent session inside the container
   labpipe guard                             Claude Code PreToolUse hook (event JSON on stdin)
+  labpipe context init|index                create context/ from templates / extract the text of context/documents/
+  labpipe postdoc start "Q"|verify RUN|list|run "Q" [--budget-usd N]   overall analysis on request
 
 Every command prints JSON (or a short table without --json) and never writes
 outside analysis/, logs/ and manifest.json.
@@ -376,6 +378,58 @@ def _register_dataset(sub) -> None:
                          help="every measurement of a sample is its own point")
     compare.add_argument("--run", help="postdoc run folder (analysis/_postdoc/<time>): also "
                                        "save the result there as compare-N.json")
+# ---- context and postdoc (kept together: one block to merge) ----------------------------
+
+def cmd_context(args, config) -> int:
+    from labpipe import context
+    result = context.init(config) if args.action == "init" else context.index(config)
+    _print(result)
+    return 1 if "error" in result else 0
+
+
+def cmd_postdoc(args, config) -> int:
+    from labpipe import postdoc
+    try:
+        if args.action == "start":
+            result = postdoc.start(config, args.question, harness=args.harness, model=args.model)
+        elif args.action == "verify":
+            result = postdoc.verify(config, args.run)
+            if result.get("ok"):
+                result["report"] = _refresh_report(config)
+        elif args.action == "list":
+            result = {"runs": postdoc.list_runs(config)}
+        else:
+            result = postdoc.run_headless(config, args.question, args.budget_usd)
+    except postdoc.PostdocError as exc:
+        _print({"error": str(exc)})
+        return 1
+    _print(result)
+    return 0 if result.get("ok", result.get("status") != "failed") else 1
+
+
+def register_context_postdoc(sub) -> None:
+    context = sub.add_parser("context", help="the project's context folder (aims, documents)"
+                             ).add_subparsers(dest="action", required=True)
+    context.add_parser("init", help="create context/ and its two files from templates (never overwrites)"
+                       ).set_defaults(func=cmd_context, needs_config=False)
+    context.add_parser("index", help="extract the text of context/documents/ into context/.text/"
+                       ).set_defaults(func=cmd_context, needs_config=False)
+    postdoc = sub.add_parser("postdoc", help="overall analysis of the whole dataset, on request"
+                             ).add_subparsers(dest="action", required=True)
+    start = postdoc.add_parser("start", help="create a run (request, inputs, dataset)")
+    start.add_argument("question")
+    start.add_argument("--harness")
+    start.add_argument("--model")
+    start.set_defaults(func=cmd_postdoc)
+    check = postdoc.add_parser("verify", help="check a run's analysis.md (numbers, review checks, parts)")
+    check.add_argument("run")
+    check.set_defaults(func=cmd_postdoc)
+    postdoc.add_parser("list", help="past runs: state and whether they are up to date"
+                       ).set_defaults(func=cmd_postdoc)
+    headless = postdoc.add_parser("run", help="start a run and let the agent write it, without a conversation")
+    headless.add_argument("question")
+    headless.add_argument("--budget-usd", type=float, default=None)
+    headless.set_defaults(func=cmd_postdoc)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -387,6 +441,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("init").set_defaults(func=cmd_init, needs_config=False)
     container.register(sub)
     _register_dataset(sub)
+    register_context_postdoc(sub)
     setup = sub.add_parser("setup", help="guided setup in your terminal: raw data, sandbox, "
                                          "agents, automation")
     setup.add_argument("--only", choices=["raw-data", "files", "sandbox", "agents", "automation"])

@@ -42,3 +42,17 @@ container:
     common: [github.com]     # each entry also allows its subdomains. The agent tools use
     claude-code: [anthropic.com, claude.com, claude.ai]   # several of their vendor's hosts
     codex: [openai.com, chatgpt.com]                      # (login, API, telemetry), so whole domains
+
+# Models `labpipe setup` recommends per harness and role (Enter takes them). Change them here
+# when models change; the code stays as it is. Codex: model `inherit` = the model Codex
+# chooses by default; reasoning is the effort (low, medium, high, xhigh).
+agents:
+  recommended:
+    claude-code:
+      supervisor: {model: haiku}
+      analyst: {model: sonnet}
+      postdoc: {model: opus}
+    codex:
+      supervisor: {model: inherit, reasoning: low}
+      analyst: {model: inherit, reasoning: medium}
+      postdoc: {model: inherit, reasoning: high}

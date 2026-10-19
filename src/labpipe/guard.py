@@ -10,13 +10,18 @@ One safety layer among several (OS read-only mount, labpipe's own path checks,
 Claude Code permissions and sandbox). It blocks, whatever the permission
 settings say:
 * any file write or edit inside a raw root or a protected path;
-* agent edits of pipeline-made files: analysis/** (except notes.md) and the manifest;
+* agent edits of pipeline-made files: analysis/** (except notes.md and the postdoc's
+  analysis/_postdoc/<run>/analysis.md) and the manifest;
+* any write to context/documents/** (the project's documents are read-only, like raw data)
+  and context/.text/** (made by `labpipe context index`);
 * shell commands that name a raw root or protected path.
 In unattended mode (LABPIPE_AGENT_MODE=unattended, set by the scheduled-run
 wrapper) it additionally allows only notes.md and logs/ writes, and only plain
 `labpipe ...` commands without shell operators, plus read-only file viewing
 (cat, head, tail, sed -n, ls, wc, grep, rg, nl) of paths inside the project:
 Codex has no separate read tool and reads files through the shell.
+Mode "postdoc" (`labpipe postdoc run`) is the same, but writes only the run's analysis.md and
+runs only read-only labpipe commands plus `labpipe postdoc verify|list`.
 """
 
 from __future__ import annotations
@@ -40,6 +45,10 @@ SHELL_OPERATORS = re.compile(r"[;&|<>`]|\$\(|\n")
 UNATTENDED_COMMANDS = {"doctor", "scan", "pending", "status", "notes", "review", "report"}
 UNATTENDED_METHOD_ACTIONS = {"analyze", "check", "summary"}
 READ_ONLY_COMMANDS = {"cat", "head", "tail", "sed", "ls", "wc", "grep", "rg", "nl"}
+# The postdoc's headless run: reads and compares, writes only its analysis.md.
+POSTDOC_COMMANDS = {"doctor", "status", "dataset"}
+POSTDOC_ACTIONS = {"notes": {"todo", "verify"}, "postdoc": {"verify", "list"}}
+UNATTENDED_MODES = {"unattended", "postdoc"}
 
 
 def _real(path: str | Path, cwd: str | None = None) -> Path:
@@ -95,11 +104,18 @@ def _file_decision(target: Path, config: dict | None, mode: str, protected: list
     logs = project / ((config or {}).get("logs_dir") or "logs")
     manifest = project / ((config or {}).get("manifest") or "manifest.json")
     is_notes = _inside(target, analysis) and target.name == "notes.md"
+    is_postdoc = (target.name == "analysis.md" and target.parent.parent == analysis / "_postdoc")
+    context = project / "context"
+    if _inside(target, context / "documents") or _inside(target, context / ".text"):
+        return ("context/documents/ is read-only for agents (the user's files); "
+                "context/.text/ is made by `labpipe context index`")
     if target in (manifest, manifest.with_suffix(".lock")):
         return "manifest.json is written only by labpipe commands"
-    if _inside(target, analysis) and not is_notes:
+    if _inside(target, analysis) and not (is_notes or is_postdoc):
         return ("files under analysis/ are produced by labpipe; agents write only notes.md "
-                "(change settings and rerun instead)")
+                "and the postdoc's analysis.md (change settings and rerun instead)")
+    if mode == "postdoc" and not is_postdoc:
+        return "the postdoc's headless run may write only its analysis.md"
     if mode == "unattended" and not (is_notes or _inside(target, logs)):
         return "unattended runs may write only notes.md and logs/"
     if config is None and not _inside(target, project):
@@ -148,7 +164,7 @@ def _shell_decision(command: Any, config: dict | None, mode: str,
             if written and written in expanded:
                 return (f"command names protected/raw path {written}; read raw data only "
                         "through labpipe commands")
-    if mode == "unattended":
+    if mode in UNATTENDED_MODES:
         stripped = _unwrap_shell(command.strip())
         if SHELL_OPERATORS.search(stripped):
             return "unattended runs may only run plain commands (no ; & | < > ` $( or newlines)"
@@ -161,6 +177,14 @@ def _shell_decision(command: Any, config: dict | None, mode: str,
             return "unattended runs may not retire notes (a user decision)"
         if "--baseline" in words:
             return "unattended runs may not mark files as baseline (a user decision)"
+        if mode == "postdoc":
+            if not words or not (words[0] in POSTDOC_COMMANDS or (len(words) > 1 and (
+                    words[1] in POSTDOC_ACTIONS[words[0]] if words[0] in POSTDOC_ACTIONS
+                    else words[1] in {"summary", "check"}))):
+                return ("the postdoc's headless run may only run: "
+                        + ", ".join(sorted(POSTDOC_COMMANDS)) + ", <method> summary|check, "
+                        "notes verify, postdoc verify|list")
+            return None
         if not words or not (words[0] in UNATTENDED_COMMANDS or (
                 len(words) > 1 and words[1] in UNATTENDED_METHOD_ACTIONS)):
             return ("unattended runs may only run pipeline commands: "

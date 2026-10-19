@@ -11,9 +11,10 @@ agents chooses the harness and a model per role:
       models:                        # provider/model, or inherit (the session's model)
         supervisor: anthropic/claude-haiku-5-5
         analyst: anthropic/claude-sonnet-5-5
+        postdoc: anthropic/claude-opus-5-5   # runs only when asked (labpipe postdoc)
 
 A model can also be set for one agent by name (models.xrd-analyst). Codex also takes a
-reasoning effort per role (`reasoning: {supervisor: low, analyst: high}`). Codex
+reasoning effort per role (`reasoning: {supervisor: low, analyst: high, postdoc: high}`). Codex
 agents are TOML files (.codex/agents/<name>.toml: name, description, model,
 model_reasoning_effort, developer_instructions). The
 generated files are git-ignored; each carries a fingerprint so `labpipe doctor`

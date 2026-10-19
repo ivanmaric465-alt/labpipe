@@ -5,6 +5,7 @@
     "allow": [
       "Bash(labpipe *)",
       "Edit(**/analysis/**/notes.md)",
+      "Edit(**/analysis/_postdoc/**/analysis.md)",
       "Edit(**/logs/**)"
     ],
     "deny": [
@@ -14,6 +15,7 @@
       "Edit(**/.claude/**)",
       "Edit(**/src/**)",
       "Edit(**/references/**)",
+      "Edit(**/context/**)",
       "Bash(git *)",
       "Bash(python *)",
       "Bash(python3 *)",

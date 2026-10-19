@@ -8,6 +8,7 @@
       "Edit(/config/sample_ids.yaml)",
       "Edit(/config/ignore.yaml)",
       "Edit(/analysis/**/notes.md)",
+      "Edit(/analysis/_postdoc/**/analysis.md)",
       "Edit(/logs/**)"
     ],
     "deny": [
@@ -28,11 +29,15 @@
       "Bash(git reset --hard *)",
       "Bash(git clean *)",
       "Bash(git checkout -- *)",
-      "Bash(git restore *)"
+      "Bash(git restore *)",
+      "Edit(/context/documents/**)",
+      "Edit(/context/.text/**)"
     ],
     "ask": [
       "Edit(/config/local.yaml)",
       "Edit(/config/pipeline.yaml)",
+      "Edit(/context/context.md)",
+      "Edit(/context/instructions.md)",
       "Edit(/.claude/**)"
     ]
   },

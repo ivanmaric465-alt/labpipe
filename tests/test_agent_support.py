@@ -190,7 +190,7 @@ def test_setup_raw_data_accepts_a_read_only_folder(local_project, tmp_path_facto
 def test_setup_agents_rejects_a_foreign_model_without_saving(local_project, monkeypatch):
     from labpipe import wizard
     before = (local_project / "config" / "local.yaml").read_text(encoding="utf-8")
-    answers = iter(["claude-code", "openai/gpt-5", "sonnet"])
+    answers = iter(["claude-code", "openai/gpt-5", "sonnet", "opus"])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
     wizard.agent_models(wizard.load_pipeline_config())
     assert (local_project / "config" / "local.yaml").read_text(encoding="utf-8") == before

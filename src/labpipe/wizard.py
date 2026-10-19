@@ -233,12 +233,38 @@ def _codex_models() -> list[str]:
             and m.get("slug")]
 
 
+ROLE_ORDER = ("supervisor", "analyst", "postdoc")
+ROLE_TEXT = {
+    "supervisor": "runs the pipeline commands, hands each measurement to its analyst and keeps "
+                  "the books; no science. It runs on every new measurement, so a small, fast "
+                  "model is enough.",
+    "analyst": "the method analysts look at one measurement's plot and results and write short "
+               "notes. They also run on every new measurement; a stronger model writes better "
+               "notes.",
+    "postdoc": "reads the whole dataset, your context and literature, and answers the "
+               "question you ask. It runs only when you ask, but one run can cost more than a "
+               "whole batch of notes; this is where a strong model pays off.",
+}
+
+
+def recommended(harness: str) -> dict[str, dict[str, str]]:
+    """Per role {model, reasoning?} from config/pipeline.yaml → agents.recommended."""
+    import yaml
+    try:
+        policy = yaml.safe_load((PROJECT_ROOT / "config" / "pipeline.yaml").read_text(
+            encoding="utf-8")) or {}
+    except OSError:
+        return {}
+    return ((policy.get("agents") or {}).get("recommended") or {}).get(harness) or {}
+
+
 def agent_models(config: dict) -> None:
     current = config.get("agents") or {}
-    print("Agents run labpipe commands and write notes; they never compute numbers. Two "
-          "roles: the supervisor runs commands and keeps the books (a small, fast model is "
-          "enough); the analyst looks at plots and writes notes for people (a stronger model "
-          "writes better notes). `labpipe notes verify` rejects invented numbers either way.")
+    print("Agents run labpipe commands and write notes; they never compute numbers "
+          "(`labpipe notes verify` and `labpipe postdoc verify` reject invented ones). "
+          "Three roles, each with its own model:")
+    for role in ROLE_ORDER:
+        print(f"  {role}: {ROLE_TEXT[role]}")
     harness = _ask("Agent harness: claude-code, codex, opencode, or none",
                    current.get("harness") or "claude-code")
     if harness == "none":
@@ -246,18 +272,21 @@ def agent_models(config: dict) -> None:
     hint = {"claude-code": "haiku, sonnet, opus, inherit (= the session's model) or anthropic/<model>",
             "codex": "a Codex model (" + ", ".join(_codex_models()[:6]) + ") or inherit",
             }.get(harness, "provider/model or inherit")
-    print(f"Models: {hint}.")
-    defaults = {"supervisor": "haiku", "analyst": "sonnet"} if harness == "claude-code" else {}
+    print(f"Models: {hint}. Enter takes the default in brackets (your current choice, else the recommendation).")
+    advice = recommended(harness)
     models = dict(current.get("models") or {})
-    roles = sorted({role["role"] for role in agents.load_roles()}, reverse=True)
-    for role in roles:
-        models[role] = _ask(f"Model for the {role}", str(models.get(role) or
-                                                          defaults.get(role, "inherit")))
     reasoning = dict(current.get("reasoning") or {})
-    if harness == "codex":
-        for role, default in zip(roles, ("low", "high")):
-            reasoning[role] = _ask(f"Reasoning effort for the {role} (low, medium, high, xhigh)",
-                                   reasoning.get(role) or default)
+    loaded = {role["role"] for role in agents.load_roles()}
+    for role in [r for r in ROLE_ORDER if r in loaded] + sorted(loaded - set(ROLE_ORDER)):
+        wish = advice.get(role) or {}
+        suggested = str(wish.get("model") or "inherit")
+        models[role] = _ask(f"Model for the {role} (recommended: {suggested}; inherit = "
+                            "the harness default)", str(models.get(role) or suggested))
+        if harness == "codex":
+            suggested = str(wish.get("reasoning") or "medium")
+            reasoning[role] = _ask(f"Reasoning effort for the {role} (recommended: {suggested}; "
+                                   "low, medium, high, xhigh)",
+                                   str(reasoning.get(role) or suggested))
     block = {"harness": harness, "models": models, **({"reasoning": reasoning} if reasoning else {})}
     try:
         chosen = agents.settings({"agents": block})
