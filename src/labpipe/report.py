@@ -9,9 +9,12 @@ one gallery per sample instead of a card per measurement; their `gallery` module
 chooses the images (`select(items, settings["gallery"])`). A method that lists
 `figures` in results.json ([{"file", "caption"}], files in its output folder) gets
 those, one at a time, instead of plot.png; galleries are shown the same way
-(arrows, keys or side scrolling). The page is grouped by sample. It opens with the
-postdoc's latest verified analysis (analysis/_postdoc/), or says that there is none, that
-it is out of date or that the newest one failed its checks.
+(arrows, keys or side scrolling). By default the page is grouped by sample. It opens with
+the postdoc's latest verified analysis (analysis/_postdoc/), or says that there is none,
+that it is out of date or that the newest one failed its checks.
+Layout and content come from config/report.yaml (the defaults) and config/lab.yaml →
+`report` (the lab's own): grouping, sections, card size, method and sample filters, and
+`extra` reports written beside the main one as analysis/report-<name>.html.
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ import html
 import importlib
 import json
 import re
+from fnmatch import fnmatchcase
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -214,7 +218,8 @@ def _embedded(png: Path, alt: str = "plot") -> str:
 
 
 def _card(entry: dict, results: dict, summary: dict, notes_text: str | None,
-          notes_ok: bool | None) -> str:
+          notes_ok: bool | None) -> tuple[str, str]:
+    """(full card, compact card: plot, key numbers and checks only)"""
     out = PROJECT_ROOT / entry["output_dir"]
     figures = [_figure(out / f["file"], f.get("caption")) for f in results.get("figures") or []
                if (out / f["file"]).exists()]
@@ -248,13 +253,16 @@ def _card(entry: dict, results: dict, summary: dict, notes_text: str | None,
     full_notes = (f'<details><summary>Full notes</summary><div class=notes>'
                   f'{_markdown(notes_path.read_text(encoding="utf-8"))}</div></details>'
                   if notes_path.exists() else "")
+    compact = (f'<section class=card id="{anchor}"><div>{_carousel(figures[:1]) if figures else ""}'
+               f'</div><div><h2>{html.escape(_title(entry))}</h2><dl>{rows}</dl>{check_html}'
+               f'</div></section>')
     return (f'<section class=card id="{anchor}"><div>{image}</div><div>'
             f'<h2>{html.escape(_title(entry))}</h2>'
             f'<div class=meta>Raw file: {html.escape(entry["relative_path"])}<br>'
             f'Outputs (results.json, plot.pdf, provenance.json): '
             f'<code>{html.escape(entry["output_dir"])}/</code></div>'
             f'<h3>In plain words</h3>{plain}<h3>Key results</h3><dl>{rows}</dl>'
-            f'{check_html}{know_html}{steer_html}{full_notes}</div></section>')
+            f'{check_html}{know_html}{steer_html}{full_notes}</div></section>', compact)
 
 
 def _sample_order(sample: str) -> tuple:
@@ -266,8 +274,8 @@ def _sample_key(entry: dict) -> tuple:
     return (*_sample_order(entry.get("sample_id") or ""), entry["measurement_id"])
 
 
-def _gallery(method: str, spec: dict, sample: str, items: list[dict]) -> tuple[str, dict]:
-    """One card with the chosen images of a sample, and its overview-table row."""
+def _gallery(method: str, spec: dict, sample: str, items: list[dict]) -> tuple[str, str, dict]:
+    """One card (full, compact) with the chosen images of a sample, and its overview-table row."""
     chosen_settings = settings_mod.resolve(method, sample, None)[0]
     chosen = importlib.import_module(spec["gallery"]).select(items, chosen_settings["gallery"])
     figures = []
@@ -293,12 +301,15 @@ def _gallery(method: str, spec: dict, sample: str, items: list[dict]) -> tuple[s
             f" (both series compete); change in config/{method}.yaml → gallery, per sample in "
             f"config/samples.yaml. All outputs: <code>analysis/{html.escape(sample)}/{method}/</code>"
             f"</div>{_carousel(figures) if figures else ''}</div></section>")
-    row = {"Sample": f'<a href="#{html.escape(sample)}-{method}">{html.escape(sample)}</a>',
+    compact = (f'<section class="card wide" id="{html.escape(sample)}-{method}"><div>'
+               f"<h2>{html.escape(sample)} · {method.upper()}</h2>"
+               f"{_carousel(figures[:1]) if figures else ''}</div></section>")
+    row = {"Sample": (f"{html.escape(sample)}-{method}", html.escape(sample)),
            "Images": str(len(items)),
            "Magnifications": (f"×{magnifications[0]:,} – ×{magnifications[-1]:,}"
                               if magnifications and magnifications[-1] else "?"),
            "Shown": str(len(chosen))}
-    return card, row
+    return card, compact, row
 
 
 def _date(run: dict) -> str:
@@ -384,16 +395,170 @@ def _postdoc_section(config: dict, anchors: dict[str, str]) -> str:
     return "<section class=postdoc id=postdoc>" + "".join(parts) + "</section>"
 
 
+REPORT_DEFAULTS = "report.yaml"
+GROUPS, SECTIONS, CARDS = ("sample", "method", "none"), ("postdoc", "overview", "measurements"), (
+    "full", "compact")
+
+
+def _check_values(settings: dict, where: str, known_methods: set[str]) -> None:
+    def fail(message: str):
+        raise settings_mod.SettingsError(f"{where}: {message}")
+
+    for key, allowed in (("group_by", GROUPS), ("cards", CARDS)):
+        if settings[key] not in allowed:
+            fail(f"{key} must be one of {', '.join(allowed)}, not {settings[key]!r}")
+    sections = settings["sections"]
+    if not isinstance(sections, list) or any(x not in SECTIONS for x in sections) \
+            or len(set(sections)) != len(sections):
+        fail(f"sections must be a list made of {', '.join(SECTIONS)}, each at most once; "
+             f"got {sections!r}")
+    for key in ("methods", "samples"):
+        value = settings[key]
+        if value != "all" and not (isinstance(value, list) and all(isinstance(x, str) for x in value)):
+            fail(f"{key} must be 'all' or a list of names, not {value!r}")
+    unknown = [m for m in (settings["methods"] if settings["methods"] != "all" else [])
+               if m not in known_methods]
+    if unknown:
+        fail(f"unknown method(s) {', '.join(unknown)}; known: {', '.join(sorted(known_methods))}")
+
+
+def extra_name(name: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_-]+", "-", str(name)).strip("-")
+
+
+def report_settings(methods: dict | None = None) -> dict[str, dict]:
+    """{file stem: settings} for the main report ("report") and each `extra` one
+    ("report-<name>"). config/report.yaml, then config/lab.yaml → report; an extra report
+    starts from the main report's resolved settings and applies its own keys on top.
+    Unknown keys and bad values raise SettingsError."""
+    path = settings_mod.CONFIG / REPORT_DEFAULTS
+    defaults = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}) if path.exists() else {}
+    defaults.setdefault("extra", {})
+    base = {k: v for k, v in defaults.items() if k != "extra"}
+    lab = (settings_mod.load_lab()[0].get("report")) or {}
+    if not isinstance(lab, dict):
+        raise settings_mod.SettingsError("config/lab.yaml: report: must be a mapping of settings")
+    where = "config/lab.yaml → report"
+    settings_mod._check_keys({k: v for k, v in lab.items() if k != "extra"}, base, where)
+    if not isinstance(lab.get("extra") or {}, dict):
+        raise settings_mod.SettingsError(f"{where}: extra: must be a mapping of report name to settings")
+    known = set(methods if methods is not None else load_methods())
+    main = settings_mod._merge(base, {k: v for k, v in lab.items() if k != "extra"})
+    _check_values(main, where, known)
+    result = {"report": main}
+    extras = settings_mod._merge(defaults["extra"] or {}, lab.get("extra") or {})
+    for name, own in extras.items():
+        stem, here = "report-" + extra_name(name), f"{where} → extra.{name}"
+        if stem == "report-" or stem in result:
+            raise settings_mod.SettingsError(f"{where}: extra report name {name!r} is empty or "
+                                             f"repeats another one once made safe for a file name")
+        own = own or {}
+        if not isinstance(own, dict):
+            raise settings_mod.SettingsError(f"{here}: expected settings (group_by, methods, ...)")
+        if "extra" in own:
+            raise settings_mod.SettingsError(f"{here}: 'extra' is not allowed inside an extra report")
+        settings_mod._check_keys(own, base, here)
+        merged = settings_mod._merge(main, own)
+        _check_values(merged, here, known)
+        result[stem] = merged
+    return result
+
+
+def _wanted(sample: str, method: str, settings: dict) -> bool:
+    return (settings["methods"] == "all" or method in settings["methods"]) and (
+        settings["samples"] == "all" or any(fnmatchcase(sample, p) for p in settings["samples"]))
+
+
+def _filter_note(settings: dict) -> str:
+    parts = []
+    if settings["methods"] != "all":
+        parts.append("showing " + ", ".join(settings["methods"]))
+    if settings["samples"] != "all":
+        parts.append("samples " + ", ".join(settings["samples"]))
+    return "; ".join(parts)
+
+
+def _table(method: str, rows: list[dict], linked: bool) -> str:
+    headers = list(rows[0])
+
+    def cell(h, r):
+        value = r.get(h, "")
+        if isinstance(value, tuple):
+            value = f'<a href="#{value[0]}">{value[1]}</a>' if linked else value[1]
+        return f'<td class={"num" if h not in ("Measurement", "Sample") else ""}>{value}</td>'
+
+    return (f"<h3>{html.escape(method.upper())}</h3><div class=tw><table><thead><tr>"
+            + "".join(f"<th>{h}</th>" for h in headers) + "</tr></thead><tbody>"
+            + "".join("<tr>" + "".join(cell(h, r) for h in headers) + "</tr>" for r in rows)
+            + "</tbody></table></div>")
+
+
+def _render(config: dict, settings: dict, name: str | None, entries: list[dict],
+            records: list[dict], banner: str) -> str:
+    """One report page from the collected records (cards and rows are already built)."""
+    shown = [r for r in records if _wanted(r["sample"], r["method"], settings)]
+    count = sum(1 for e in entries if _wanted(e.get("sample_id") or "?", e["method"], settings))
+    note = _filter_note(settings)
+    with_cards = "measurements" in settings["sections"]
+    compact = settings["cards"] == "compact"
+    key = "compact" if compact else "card"
+    tables: dict[str, list[dict]] = {}
+    for rec in shown:
+        tables.setdefault(rec["method"], []).append(rec["row"])
+    by_sample: dict[str, list[dict]] = {}
+    for rec in shown:
+        by_sample.setdefault(rec["sample"], []).append(rec)
+    group = settings["group_by"]
+    body = ""
+    if group == "sample":
+        for sample in sorted(by_sample, key=_sample_order):
+            body += (f'<h2 class=sample id="sample-{html.escape(sample)}">{html.escape(sample)}</h2>'
+                     + "".join(r[key] for r in by_sample[sample]))
+    else:
+        order = (lambda r: (_sample_order(r["sample"]), r["method"], r["mid"])) if group == "none" \
+            else (lambda r: (_sample_order(r["sample"]), r["mid"]))
+        done: set[str] = set()
+
+        def put(rec: dict) -> str:   # a sample anchor at the sample's first card
+            anchor = "" if rec["sample"] in done else f'<a id="sample-{html.escape(rec["sample"])}"></a>'
+            done.add(rec["sample"])
+            return anchor + rec[key]
+        if group == "none":
+            body = "".join(put(r) for r in sorted(shown, key=order))
+        else:
+            for method in tables:
+                body += (f'<h2 class=sample id="method-{html.escape(method)}">'
+                         f"{html.escape(method.upper())}</h2>"
+                         + "".join(put(r) for r in sorted((x for x in shown if x["method"] == method),
+                                                          key=order)))
+    anchors = {}
+    if with_cards:
+        anchors = {**{r["mid"]: r["mid"] for r in shown if r["mid"]},
+                   **{sample: f"sample-{sample}" for sample in by_sample}}
+    parts = {"postdoc": lambda: _postdoc_section(config, anchors),
+             "overview": lambda: "".join(_table(m, rows, with_cards) for m, rows in tables.items()),
+             "measurements": lambda: body}
+    title = "Analysis report" + (f" · {html.escape(name)}" if name else "")
+    return (f'<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+            f"<title>labpipe {html.escape(name or 'report')}</title><style>{CSS}</style><main>"
+            f"<h1>{title}</h1><p class=sub>{count} analysed measurement(s)"
+            + (f" · {html.escape(note)}" if note else "")
+            + f" · generated {utc_now()} · code {html.escape(code_version())}{banner}</p>"
+            + "".join(parts[s]() for s in settings["sections"])
+            + f"</main><script>{SCRIPT}</script>")
+
+
 def build(config: dict) -> dict[str, Any]:
+    """Write analysis/report.html and one analysis/report-<name>.html per `extra` report."""
     methods = load_methods()
+    configured = report_settings(methods)
     data = mf.load(config)
     entries = sorted((e for e in data["entries"].values()
                       if e.get("status") in ("done", "stale") and e.get("output_dir")),
                      key=_sample_key)
     statuses = Counter(e["status"] for e in data["entries"].values())
     gallery_methods = {name for name, spec in methods.items() if spec.get("report") == "gallery"}
-    by_sample: dict[str, list[str]] = {}
-    tables: dict[str, list[dict]] = {}
+    records: list[dict] = []
     gallery_items: dict[tuple[str, str], list[dict]] = {}
     for entry in entries:
         out = PROJECT_ROOT / entry["output_dir"]
@@ -411,51 +576,33 @@ def build(config: dict) -> dict[str, Any]:
                                    for c in results.get("checks", []) if c["severity"] == "review"]}
         notes_text = _notes_summary(out / "notes.md")
         notes_ok = verify_entry(config, entry["entry_id"])["ok"] if notes_text is not None else None
-        by_sample.setdefault(entry.get("sample_id") or "?", []).append(
-            _card(entry, results, summary, notes_text, notes_ok))
+        card, compact = _card(entry, results, summary, notes_text, notes_ok)
         n_checks = len(summary.get("check_before_using") or [])
         flag = (f'<span class="flag r">{n_checks} to check</span>' if n_checks
                 else '<span class="flag o">ok</span>')
         stale = ' <span class="flag">stale</span>' if entry["status"] == "stale" else ""
-        row = {"Measurement": f'<a href="#{html.escape(entry["measurement_id"])}">'
-                              f'{html.escape(_title(entry))}</a>'}
+        row = {"Measurement": (html.escape(entry["measurement_id"]), html.escape(_title(entry)))}
         row |= {k: html.escape(str(v)) for k, v in summary.get("overview", {}).items()}
         row["Review"] = flag + stale
-        tables.setdefault(entry["method"], []).append(row)
-
+        records.append({"sample": entry.get("sample_id") or "?", "method": entry["method"],
+                        "mid": entry["measurement_id"], "card": card, "compact": compact,
+                        "row": row})
     for (sample, method), items in sorted(gallery_items.items(),
                                           key=lambda kv: (_sample_order(kv[0][0]), kv[0][1])):
-        card, row = _gallery(method, methods[method], sample, items)
-        by_sample.setdefault(sample, []).append(card)
-        tables.setdefault(method, []).append(row)
-    sections = []
-    for sample in sorted(by_sample, key=_sample_order):
-        sections.append(f'<h2 class=sample id="sample-{html.escape(sample)}">'
-                        f"{html.escape(sample)}</h2>" + "".join(by_sample[sample]))
-    table_html = ""
-    for method, rows in tables.items():
-        headers = list(rows[0])
-        table_html += (f"<h3>{html.escape(method.upper())}</h3><div class=tw><table><thead><tr>"
-                       + "".join(f"<th>{h}</th>" for h in headers) + "</tr></thead><tbody>"
-                       + "".join("<tr>" + "".join(
-                           f'<td class={"num" if h not in ("Measurement", "Sample") else ""}>'
-                           f"{r.get(h, '')}</td>" for h in headers) + "</tr>" for r in rows)
-                       + "</tbody></table></div>")
+        card, compact, row = _gallery(method, methods[method], sample, items)
+        records.append({"sample": sample, "method": method, "mid": "", "card": card,
+                        "compact": compact, "row": row})
     pending = statuses.get("pending", 0) + statuses.get("needs_review", 0) + statuses.get("failed", 0)
     unrecognised = len(data.get("unrecognised", {}))
-    page = (f'<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-            f"<title>labpipe report</title><style>{CSS}</style><main>"
-            f"<h1>Analysis report</h1><p class=sub>{len(entries)} analysed measurement(s) · "
-            f"generated {utc_now()} · code {html.escape(code_version())}"
-            + (f" · {pending} waiting, failed or needing a decision (logs/review_queue.md)"
+    banner = ((f" · {pending} waiting, failed or needing a decision (logs/review_queue.md)"
                if pending else "")
-            + (f" · {unrecognised} file(s) not recognised (logs/review_queue.md)"
-               if unrecognised else "")
-            + "</p>" + _postdoc_section(config, {  # a sample name links to the sample, not to a card of that name
-                **{e["measurement_id"]: e["measurement_id"] for e in entries
-                   if e["method"] not in gallery_methods},
-                **{sample: f"sample-{sample}" for sample in by_sample}})
-            + table_html + "".join(sections) + f"</main><script>{SCRIPT}</script>")
-    target = PROJECT_ROOT / config["analysis_dir"] / "report.html"
-    atomic_write_text(target, page, config)
-    return {"report": str(target.relative_to(PROJECT_ROOT)), "measurements": len(entries)}
+              + (f" · {unrecognised} file(s) not recognised (logs/review_queue.md)"
+                 if unrecognised else ""))
+    written = []
+    for stem, settings in configured.items():
+        page = _render(config, settings, stem[len("report-"):] if stem != "report" else None,
+                       entries, records, banner)
+        target = PROJECT_ROOT / config["analysis_dir"] / f"{stem}.html"
+        atomic_write_text(target, page, config)
+        written.append(str(target.relative_to(PROJECT_ROOT)))
+    return {"report": written[0], "measurements": len(entries), "reports": written}

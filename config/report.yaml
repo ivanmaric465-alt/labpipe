@@ -1,0 +1,7 @@
+# The report, analysis/report.html (labpipe's defaults; change them in config/lab.yaml → report).
+group_by: sample             # sample | method | none
+sections: [postdoc, overview, measurements]   # order; leave one out to hide it
+cards: full                  # full | compact (plot and key numbers only)
+methods: all                 # or [xrd, eds]
+samples: all                 # or a list of IDs / glob patterns, e.g. ["S-1*"]
+extra: {}                    # more reports, same keys: {xrd-only: {methods: [xrd], group_by: none}}

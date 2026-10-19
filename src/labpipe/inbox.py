@@ -2,13 +2,15 @@
 
 Served by the watcher inside the container (`automation.watch`) on LABPIPE_PORT; the host
 publishes the port on 127.0.0.1 only. Needs the token from `labpipe container status`.
-Serves exactly four things: the page, /api/notifications, /report and /review.
+Serves exactly these: the page, /api/notifications, /report, /report/<name> (the extra
+reports, analysis/report-<name>.html) and /review.
 """
 
 from __future__ import annotations
 
 import hmac
 import json
+import re
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, urlsplit
@@ -17,6 +19,7 @@ from labpipe import automation
 
 COOKIE = "labpipe_token"
 MAX_ITEMS = 200
+REPORT_NAME = re.compile(r"[A-Za-z0-9_-]+")
 CSP = ("default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; "
        "script-src 'unsafe-inline'")
 
@@ -42,6 +45,22 @@ def read_notifications(config: dict, after: int = 0) -> dict:
         if number > after:
             items.append(item)
     return {"items": items[-MAX_ITEMS:], "last_id": last}
+
+
+def extra_reports(config: dict) -> list[str]:
+    """Names of the extra reports written so far (analysis/report-<name>.html)."""
+    folder = automation.PROJECT_ROOT / config["analysis_dir"]
+    try:
+        names = [p.name[len("report-"):-len(".html")] for p in folder.glob("report-*.html")]
+    except OSError:
+        return []
+    return sorted(n for n in names if REPORT_NAME.fullmatch(n))
+
+
+def page(config: dict) -> str:
+    links = "".join(f' · <a href="/report/{name}">Report: {name}</a>'
+                    for name in extra_reports(config))
+    return PAGE.replace("<!--reports-->", links)
 
 
 def make_server(config: dict, host: str = "0.0.0.0", port: int = 8765,
@@ -95,7 +114,7 @@ def make_server(config: dict, host: str = "0.0.0.0", port: int = 8765,
                      if fresh else None)
             root = automation.PROJECT_ROOT
             if parts.path == "/":
-                return self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8", extra)
+                return self._send(200, page(config).encode("utf-8"), "text/html; charset=utf-8", extra)
             if parts.path == "/api/notifications":
                 try:
                     after = int((query.get("after") or ["0"])[0])
@@ -107,6 +126,9 @@ def make_server(config: dict, host: str = "0.0.0.0", port: int = 8765,
                 path = root / config["analysis_dir"] / "report.html"
                 kind, missing = "text/html; charset=utf-8", \
                     "The report is not built yet (it appears after the first analysis).\n"
+            elif parts.path.startswith("/report/") and REPORT_NAME.fullmatch(parts.path[8:]):
+                path = root / config["analysis_dir"] / f"report-{parts.path[8:]}.html"
+                kind, missing = "text/html; charset=utf-8", "No such report.\n"
             elif parts.path == "/review":
                 path = root / config["logs_dir"] / "review_queue.md"
                 kind, missing = "text/plain; charset=utf-8", "No review queue yet.\n"
@@ -158,7 +180,7 @@ border-radius:6px;padding:.3rem .7rem;cursor:pointer}
 .dismiss{margin-left:.6rem;font-size:.8rem;color:var(--mut);cursor:pointer}
 </style></head><body><main>
 <h1>labpipe</h1>
-<p class="sub"><a href="/report">Report</a> · <a href="/review">Review queue</a></p>
+<p class="sub"><a href="/report">Report</a><!--reports--> · <a href="/review">Review queue</a></p>
 <p><button id="perm" hidden>Show desktop notifications</button></p>
 <div id="err" class="err" hidden>container not reachable</div>
 <h2>Needs you</h2><ul id="need"></ul>
