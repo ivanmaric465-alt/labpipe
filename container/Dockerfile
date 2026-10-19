@@ -8,7 +8,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      ca-certificates git fonts-liberation iptables tinyproxy-bin util-linux ripgrep procps nodejs npm \
+      ca-certificates git fonts-liberation iptables tinyproxy-bin util-linux libnotify-bin ripgrep procps nodejs npm \
  && rm -rf /var/lib/apt/lists/* \
  && (getent passwd tinyproxy >/dev/null || useradd --system --no-create-home --shell /usr/sbin/nologin tinyproxy) \
  && git config --system --add safe.directory /labpipe

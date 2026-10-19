@@ -74,8 +74,46 @@ def _log(config: dict, event: dict[str, Any]) -> None:
         stream.write(json.dumps({"utc": utc_now(), **event}, ensure_ascii=False) + "\n")
 
 
-def notify(config: dict, message: str) -> list[str]:
-    """Send `message` through the configured channels; returns the channels that worked."""
+NEEDS_YOU = {"unrecognised", "needs_review", "failed", "run_error", "scan_failed"}
+
+
+def notifications_path(config: dict) -> Path:
+    return PROJECT_ROOT / config["logs_dir"] / "notifications.jsonl"
+
+
+def _last_notification_id(path: Path) -> int:
+    """Highest id in the file (0 if none); reads only the tail."""
+    try:
+        with open(path, "rb") as stream:
+            stream.seek(0, os.SEEK_END)
+            stream.seek(max(0, stream.tell() - 65536))
+            lines = stream.read().decode("utf-8", "replace").splitlines()
+    except OSError:
+        return 0
+    for line in reversed(lines):
+        try:
+            return int(json.loads(line)["id"])
+        except (ValueError, KeyError, TypeError):
+            continue
+    return 0
+
+
+def _record(config: dict, message: str, kind: str) -> None:
+    """Append the notification to logs/notifications.jsonl (read by the browser page)."""
+    path = notifications_path(config)
+    assert_pipeline_writable(path, config)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as stream:
+        stream.write(json.dumps({"id": _last_notification_id(path) + 1, "utc": utc_now(),
+                                 "kind": kind, "message": message,
+                                 "needs_you": kind in NEEDS_YOU}, ensure_ascii=False) + "\n")
+
+
+def notify(config: dict, message: str, kind: str = "info") -> list[str]:
+    """Send `message` through the configured channels; returns the channels that worked.
+
+    `kind` (unrecognised, needs_review, failed, stale, run_error, scan_failed, started,
+    finished, test) is kept in logs/notifications.jsonl for the browser page."""
     chosen = settings(config)["notify"]
     sent = []
     if chosen.get("desktop"):
@@ -102,6 +140,7 @@ def notify(config: dict, message: str) -> list[str]:
         except (OSError, subprocess.SubprocessError):
             pass
     _log(config, {"event": "notify", "message": message, "sent": sent})
+    _record(config, message, kind)
     return sent
 
 
@@ -150,17 +189,20 @@ def _notify_news(config: dict, before: dict[str, tuple],
         review_queue(config)
     if unrecognised:
         notify(config, f"labpipe: {len(unrecognised)} new file(s) not recognised: "
-                       f"{_listed(unrecognised)}. " + _ask_agent(config, "check the new files"))
+                       f"{_listed(unrecognised)}. " + _ask_agent(config, "check the new files"),
+               kind="unrecognised")
     if needs_review:
         notify(config, f"labpipe: {len(needs_review)} file(s) need a decision from you: "
                        + _listed([f"{e['relative_path']} ({e.get('status_reason')})"
                                   for e in needs_review], 3)
-                       + ". " + _ask_agent(config, "check the review queue"))
+                       + ". " + _ask_agent(config, "check the review queue"),
+               kind="needs_review")
     if failed:
         notify(config, f"labpipe: {len(failed)} analysis(es) failed: "
                        + _listed([f"{e['relative_path']} ({str(e.get('status_reason'))[:80]})"
                                   for e in failed], 3)
-                       + ". " + _ask_agent(config, "check the failed analyses"))
+                       + ". " + _ask_agent(config, "check the failed analyses"),
+               kind="failed")
     if stale:
         why = {"code updated": sum("current code is" in str(e.get("status_reason"))
                                    for e in stale)}
@@ -169,7 +211,7 @@ def _notify_news(config: dict, before: dict[str, tuple],
                        + ", ".join(f"{k}: {n}" for k, n in why.items() if n)
                        + f"; e.g. {_listed([e['relative_path'] for e in stale], 2)}). Their "
                        f"results are kept; to redo them run `labpipe requeue --stale` in "
-                       f"{_where()} (done in the next run).")
+                       f"{_where()} (done in the next run).", kind="stale")
     return {eid: (e.get("status"), e.get("status_reason")) for eid, e in entries.items()}
 
 
@@ -202,7 +244,8 @@ def _analyse_code_only(config: dict, reason: str) -> list[str]:
                   "failed": failed})
     if done:   # failures are told separately (_notify_news)
         notify(config, f"labpipe: analysed {len(done)} measurement(s) by code alone "
-                       f"({_describe(config, done)}); see analysis/report.html")
+                       f"({_describe(config, done)}); see analysis/report.html",
+               kind="finished")
     return done
 
 
@@ -280,7 +323,8 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
         try:
             scan = scanner.scan(config)
         except RuntimeError as exc:  # e.g. raw root not mounted
-            notify(config, f"labpipe: cannot scan the raw data ({exc}); nothing was analysed")
+            notify(config, f"labpipe: cannot scan the raw data ({exc}); nothing was analysed",
+                   kind="scan_failed")
             _log(config, {"event": "scan_failed", "reason": str(exc), "trigger": reason})
             return {"status": "scan_failed", "reason": str(exc)}
         code_only = _analyse_code_only(config, reason)
@@ -297,7 +341,8 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
         remaining = len(queued) - len(todo_ids)
         notify(config, f"labpipe: analysis started for {len(todo_ids)} measurement(s) "
                        f"({_describe(config, todo_ids)})"
-                       + (f"; {remaining} more queued for the next run" if remaining else ""))
+                       + (f"; {remaining} more queued for the next run" if remaining else ""),
+               kind="started")
         stamp = utc_now().replace(":", "").replace("-", "")
         transcript = PROJECT_ROOT / config["logs_dir"] / "runs" / f"auto-{stamp}.jsonl"
         assert_pipeline_writable(transcript, config)
@@ -313,7 +358,8 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
                                            stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                            timeout=3 * 3600)
         except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
-            notify(config, f"labpipe: the AI run could not start or finish ({exc})")
+            notify(config, f"labpipe: the AI run could not start or finish ({exc})",
+                   kind="run_error")
             _notify_news(config, before)
             _log(config, {"event": "run_failed", "reason": str(exc), "trigger": reason})
             return {"status": "run_failed", "reason": str(exc)}
@@ -350,7 +396,8 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
                           if still_missing & set(todo_ids) else "")
                        + "; see analysis/report.html"
                        + (f"; {remaining} left for the next run" if remaining else ""))
-        notify(config, message)
+        notify(config, message, kind="run_error" if completed.returncode != 0
+               or result.get("is_error") else "finished")
         _notify_news(config, before)
         summary = {"event": "run_finished", "trigger": reason, "exit_code": completed.returncode,
                    "transcript": str(transcript.relative_to(PROJECT_ROOT)),
@@ -396,11 +443,28 @@ def _last_nightly(config: dict) -> dt.date | None:
     return max(dates, default=None)
 
 
+def _start_page(config: dict) -> None:
+    """In the container: serve the notifications page in a daemon thread (never fatal)."""
+    port, token = os.environ.get("LABPIPE_PORT"), os.environ.get("LABPIPE_PAGE_TOKEN")
+    if not (in_container() and port and token):
+        return
+    import threading
+    from labpipe import inbox
+    try:
+        server = inbox.make_server(config, port=int(port), token=token)
+    except (OSError, ValueError) as exc:
+        _log(config, {"event": "page_failed", "port": port, "reason": str(exc)})
+        return
+    threading.Thread(target=server.serve_forever, daemon=True, name="labpipe-inbox").start()
+    _log(config, {"event": "page_started", "port": server.server_address[1]})
+
+
 def watch(config: dict) -> None:
     chosen = settings(config)
     interval, settle = chosen["check_every_seconds"], 60 * chosen["settle_minutes"]
     _log(config, {"event": "watch_started", "check_every_seconds": interval,
                   "settle_minutes": chosen["settle_minutes"]})
+    _start_page(config)
     more = _more_batches(run(config, reason="watch started"))
     last, changed_at = _snapshot(config), None
     started_with = code_version()

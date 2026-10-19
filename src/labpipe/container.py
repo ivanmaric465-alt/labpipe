@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -40,6 +41,9 @@ LOCAL_COMMANDS = {"guard", "container", "shell", "setup", "init", "doctor", "age
 CAPABILITIES = ("NET_ADMIN", "SETUID", "SETGID", "CHOWN", "DAC_OVERRIDE", "FOWNER", "KILL",
                 "SETPCAP")
 HARNESS_PROGRAM = {"claude-code": "claude", "codex": "codex"}
+UNIT_NAME = "labpipe-dbus-proxy.service"
+BUS_DIR = "labpipe-bus"           # under $XDG_RUNTIME_DIR on the host
+BUS_MOUNT = "/run/labpipe-bus"
 DEFAULTS = {"name": "labpipe", "image": "localhost/labpipe", "port": 8765, "allowed_hosts": {}}
 
 
@@ -192,8 +196,24 @@ def allowed_hosts(config: dict) -> list[str]:
     return list(dict.fromkeys(chosen))
 
 
+def bus_runtime_dir() -> str | None:
+    """Host folder that holds the pop-up bus proxy's socket folder (Linux only)."""
+    if not sys.platform.startswith("linux"):
+        return None
+    return os.environ.get("XDG_RUNTIME_DIR") or None
+
+
+def page_url(port, token: str) -> str:
+    try:
+        from labpipe import inbox
+        return inbox.url(port, token)
+    except Exception:  # the page module is optional here
+        return f"http://localhost:{port}/?token={token}"
+
+
 def run_args(config: dict, engine: str, *, image_id: str = "", engine_text: str = "",
-             claude_login: bool = False, tag: str | None = None) -> list[str]:
+             claude_login: bool = False, tag: str | None = None,
+             runtime_dir: str | None = None) -> list[str]:
     """The full `<engine> run` command line (pure: all machine facts come in as arguments)."""
     cfg = config.get("container") or DEFAULTS
     uid, gid = host_ids()
@@ -209,13 +229,20 @@ def run_args(config: dict, engine: str, *, image_id: str = "", engine_text: str 
            "LABPIPE_ROOT_PATHS": ",".join(f"{i}=/data/{i}" for i, _ in mounts),
            "LABPIPE_ALLOWED_HOSTS": ",".join(allowed_hosts(config)),
            "LABPIPE_IMAGE_ID": image_id, "LABPIPE_ENGINE": engine_text,
-           "LABPIPE_HOST_ROOT": _host_path(_root())}   # for messages that name the folder
+           "LABPIPE_HOST_ROOT": _host_path(_root()),   # for messages that name the folder
+           "LABPIPE_PORT": cfg["port"], "LABPIPE_PAGE_TOKEN": cfg.get("page_token") or ""}
+    bus_dir = runtime_dir if runtime_dir is not None else bus_runtime_dir()
+    popups = bool(cfg.get("popups")) and bool(bus_dir)
+    if popups:   # the proxy's socket folder: only the notification service is reachable
+        env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={BUS_MOUNT}/bus"
     zone = host_timezone()
     if zone:
         env["TZ"] = zone
     for key, value in env.items():
         args += ["-e", f"{key}={value}"]
     args += ["-v", f"{_root()}:{REPO_MOUNT}"]
+    if popups:
+        args += ["-v", f"{bus_dir}/{BUS_DIR}:{BUS_MOUNT}"]
     for root_id, folder in mounts:
         args += ["-v", f"{folder}:/data/{root_id}:ro"]
     args += ["-v", f"{cfg['name']}-home:{HOME_MOUNT}",
@@ -373,7 +400,18 @@ def _image_id(engine: str, tag: str) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
+def ensure_page_token() -> bool:
+    """Make sure local.yaml's `container:` block has a page_token. True if one was added."""
+    block = dict(local_container_block() or {})
+    if block.get("page_token"):
+        return False
+    block["page_token"] = secrets.token_urlsafe(16)
+    safety.set_local_block("container", block)
+    return True
+
+
 def cmd_start(args) -> int:
+    ensure_page_token()
     config, cfg, engine = _prepare()
     name, tag, current = cfg["name"], image_tag(cfg), container_hash()
     existing = inspect(engine, name)
@@ -398,7 +436,9 @@ def cmd_start(args) -> int:
     if result.returncode != 0:
         _say({"error": "start failed", "detail": result.stderr.strip()})
         return 1
-    _say({"started": name, "image": tag, "port": cfg["port"]})
+    _say({"started": name, "image": tag, "port": cfg["port"],
+          "page": page_url(cfg["port"], cfg.get("page_token", "")),
+          "popups": bool(cfg.get("popups")) and bool(bus_runtime_dir())})
     return 0
 
 
@@ -420,6 +460,7 @@ def cmd_status(args) -> int:
           "running": bool(state.get("Running")), "started_at": state.get("StartedAt"),
           "image_hash": have, "current_hash": current,
           "image_up_to_date": have == current if record else None,
+          "page": page_url(cfg["port"], cfg.get("page_token", "")),
           "next": None if (record and have == current) else
           "labpipe container start --replace" if record else "labpipe container start"})
     return 0
@@ -522,9 +563,99 @@ def cmd_setup(args) -> int:
     return 0
 
 
+# ---- desktop pop-ups (Linux): xdg-dbus-proxy user service ----------------------------
+
+def proxy_unit_text(proxy: str = "/usr/bin/xdg-dbus-proxy") -> str:
+    """The systemd user unit: a filtered copy of the session bus (notifications only)."""
+    return (
+        "[Unit]\n"
+        "Description=labpipe: desktop bus proxy (notifications only) for the container\n\n"
+        "[Service]\n"
+        f"ExecStartPre=/usr/bin/mkdir -p %t/{BUS_DIR}\n"
+        f"ExecStart={proxy} unix:path=%t/bus %t/{BUS_DIR}/bus --filter "
+        "--talk=org.freedesktop.Notifications\n"
+        "Restart=on-failure\n\n"
+        "[Install]\n"
+        "WantedBy=default.target\n")
+
+
+def unit_path() -> Path:
+    return Path.home() / ".config" / "systemd" / "user" / UNIT_NAME
+
+
+def _systemctl(*words: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["systemctl", "--user", *words], capture_output=True, text=True)
+
+
+def _set_popups(value: bool) -> None:
+    block = dict(local_container_block() or {})
+    block["popups"] = value
+    safety.set_local_block("container", block)
+
+
+def cmd_popups(args) -> int:
+    if not sys.platform.startswith("linux"):
+        _say({"error": "pop-ups are Linux only; use the notifications page"})
+        return 2
+    runtime = bus_runtime_dir()
+    socket = Path(runtime) / BUS_DIR / "bus" if runtime else None
+    path = unit_path()
+    if args.state == "status":
+        active = _systemctl("is-active", UNIT_NAME).stdout.strip()
+        enabled = _systemctl("is-enabled", UNIT_NAME).stdout.strip()
+        _say({"unit_file": str(path), "unit_installed": path.exists(), "active": active,
+              "enabled": enabled, "socket": str(socket), "socket_exists": bool(
+                  socket and socket.exists()),
+              "popups_in_local_yaml": bool((local_container_block() or {}).get("popups"))})
+        return 0
+    if args.state == "on":
+        proxy = shutil.which("xdg-dbus-proxy")
+        if not proxy:
+            _say({"error": "xdg-dbus-proxy is not installed (Fedora: it comes with flatpak, "
+                           "`sudo dnf install xdg-dbus-proxy`; Debian/Ubuntu: `sudo apt install "
+                           "xdg-dbus-proxy`)"})
+            return 2
+        if not runtime:
+            _say({"error": "XDG_RUNTIME_DIR is not set (not a desktop login session?)"})
+            return 2
+        text = proxy_unit_text(proxy)
+        print(f"Will write {path}:\n\n{text}\nand run:\n"
+              "  systemctl --user daemon-reload\n"
+              f"  systemctl --user enable --now {UNIT_NAME}\n"
+              "then set `popups: true` in config/local.yaml (container block).\n",
+              file=sys.stderr)
+        if input("Install the pop-up proxy service? [y/N] ").strip().lower() not in ("y", "yes"):
+            _say({"cancelled": True})
+            return 1
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        for words in (("daemon-reload",), ("enable", "--now", UNIT_NAME)):
+            result = _systemctl(*words)
+            if result.returncode != 0:
+                _say({"error": f"systemctl --user {' '.join(words)} failed",
+                      "detail": result.stderr.strip()})
+                return 1
+        _set_popups(True)
+        _say({"popups": True, "unit": str(path), "next": "labpipe container start --replace"})
+        return 0
+    print(f"Will run: systemctl --user disable --now {UNIT_NAME}, remove {path}, "
+          "systemctl --user daemon-reload, and set `popups: false` in config/local.yaml.",
+          file=sys.stderr)
+    if input("Remove the pop-up proxy service? [y/N] ").strip().lower() not in ("y", "yes"):
+        _say({"cancelled": True})
+        return 1
+    _systemctl("disable", "--now", UNIT_NAME)
+    path.unlink(missing_ok=True)
+    _systemctl("daemon-reload")
+    _set_popups(False)
+    _say({"popups": False, "next": "labpipe container start --replace"})
+    return 0
+
+
 def cmd_container(args) -> int:
     handlers = {"build": cmd_build, "start": cmd_start, "stop": cmd_stop, "status": cmd_status,
-                "logs": cmd_logs, "login": cmd_login, "setup": cmd_setup}
+                "logs": cmd_logs, "login": cmd_login, "setup": cmd_setup,
+                "popups": cmd_popups}
     try:
         return handlers[args.action](args)
     except (ContainerError, SetupError) as exc:
@@ -547,6 +678,8 @@ def register(sub) -> None:
     logs.add_argument("-n", type=int, default=100, help="last N lines (default 100)")
     login = group.add_parser("login", help="store the AI login for the container")
     login.add_argument("what", choices=["claude", "codex"])
+    popups = group.add_parser("popups", help="Linux desktop pop-ups through a filtered bus proxy")
+    popups.add_argument("state", choices=["on", "off", "status"])
     for leaf in group.choices.values():
         leaf.set_defaults(func=lambda args, config: cmd_container(args), needs_config=False)
     shell = sub.add_parser("shell", help="agent session inside the container")

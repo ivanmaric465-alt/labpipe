@@ -41,3 +41,5 @@ agents:
 # container:
 #   engine: podman              # podman | docker (default: podman if installed, else docker)
 #   # name, image, port, allowed_hosts: defaults are in config/pipeline.yaml
+#   # popups: true              # Linux desktop pop-ups: `labpipe container popups on` sets this
+#   # page_token: ...           # made by `labpipe container start`; part of the notifications page link

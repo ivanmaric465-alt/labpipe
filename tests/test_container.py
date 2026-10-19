@@ -141,3 +141,56 @@ def test_forward_runs_in_container_when_on(tmp_path, monkeypatch):
     assert ct.forward(["scan"]) == 7 and calls[0][:2] == ["podman", "exec"]
     monkeypatch.setenv("LABPIPE_IN_CONTAINER", "1")
     assert ct.forward(["scan"]) is None
+
+
+# ---- pop-ups, page token ----------------------------------------------------------------
+
+def _popup_config(tmp_path, **extra):
+    config = _config(tmp_path)
+    config["container"].update(extra)
+    return config
+
+
+def test_run_args_port_and_token_always_present(tmp_path):
+    joined = " ".join(_run(_popup_config(tmp_path, page_token="tok"), "podman", runtime_dir="/run/user/1"))
+    assert "LABPIPE_PORT=8765" in joined and "LABPIPE_PAGE_TOKEN=tok" in joined
+    assert "DBUS_SESSION_BUS_ADDRESS" not in joined and "labpipe-bus" not in joined
+
+
+def test_run_args_popups_on(tmp_path):
+    args = _run(_popup_config(tmp_path, popups=True), "docker", runtime_dir="/run/user/1000")
+    joined = " ".join(args)
+    assert "-v /run/user/1000/labpipe-bus:/run/labpipe-bus" in joined
+    assert "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/labpipe-bus/bus" in joined
+    assert ":z" not in joined.lower()
+
+
+def test_run_args_popups_off_and_non_linux(tmp_path, monkeypatch):
+    assert "labpipe-bus" not in " ".join(
+        _run(_popup_config(tmp_path, popups=False), "podman", runtime_dir="/run/user/1000"))
+    monkeypatch.setattr(ct.sys, "platform", "darwin")
+    joined = " ".join(_run(_popup_config(tmp_path, popups=True), "podman"))
+    assert "labpipe-bus" not in joined and "DBUS_SESSION_BUS_ADDRESS" not in joined
+
+
+def test_proxy_unit_text():
+    text = ct.proxy_unit_text()
+    assert ("ExecStart=/usr/bin/xdg-dbus-proxy unix:path=%t/bus %t/labpipe-bus/bus --filter "
+            "--talk=org.freedesktop.Notifications\n") in text
+    assert "ExecStartPre=/usr/bin/mkdir -p %t/labpipe-bus" in text
+    assert "Restart=on-failure" in text and "WantedBy=default.target" in text
+
+
+def test_ensure_page_token_keeps_other_keys(tmp_path, monkeypatch):
+    (tmp_path / "config").mkdir()
+    local = tmp_path / "config" / "local.yaml"
+    local.write_text("raw_roots: []\ncontainer:\n  engine: podman\n  popups: true\n")
+    shutil.copy(REPO / "config" / "pipeline.yaml", tmp_path / "config" / "pipeline.yaml")
+    monkeypatch.setattr(ct.safety, "PROJECT_ROOT", tmp_path)
+    assert ct.ensure_page_token() is True
+    block = ct.local_container_block()
+    assert block["engine"] == "podman" and block["popups"] is True and len(block["page_token"]) >= 16
+    assert "raw_roots" in local.read_text()
+    token = block["page_token"]
+    assert ct.ensure_page_token() is False
+    assert ct.local_container_block()["page_token"] == token
