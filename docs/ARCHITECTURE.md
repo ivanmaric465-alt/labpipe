@@ -62,7 +62,7 @@ Generated and git-ignored: `analysis/`, `manifest.json`, `logs/`, `context/`,
 
 | Area | Module | Role |
 |---|---|---|
-| Entry | `cli.py` | argparse commands; forwards to the container in container mode, before importing anything heavy |
+| Entry | `cli.py` | argparse commands; forwards host commands into the container in container mode |
 | State | `manifest.py` | load, save and lock `manifest.json`; status changes |
 | | `scanner.py` | raw roots → manifest; settle time, hashes, duplicates, stale (code or settings), plot out of date, unrecognised files |
 | | `registry.py` | `methods.yaml`: patterns, `recognise:` hooks, ignore rules |
