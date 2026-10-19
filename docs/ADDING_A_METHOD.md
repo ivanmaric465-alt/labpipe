@@ -36,6 +36,7 @@ The contract `run(...)` fulfils is in the docstring of `src/labpipe/methods/temp
 - every number someone may quote goes into `results.json`, with units;
 - checks `{code, severity: info|warning|review, message}`; status `review` if any check is `review`;
 - outputs via `atomic_write_bytes`, provenance via `labpipe.provenance.build_record`;
+- plots: draw with the user's style (`acs.apply_acs(acs.style_of(settings))`, save with `acs.save_figure`, so `config/lab.yaml` → `plots` applies); method plot options go under `plot:` in `config/<method>.yaml` and only change the figure, never `results.json` (they are left out of the analysis fingerprint, so changing them means `labpipe replot`, not a re-analysis). Document them in the method page and `docs/settings/plots.md`;
 - optional: `"figures": [{"file", "caption"}]` in `results.json` (files in the output folder, hashed in provenance) makes the report show those one at a time instead of `plot.png`, e.g. the panels of a multi-panel plot;
 - declare the numbers worth comparing across samples as `quantities(results)` in the method's summary module (name `<method>.<what>[.<id>]`, `{value, sigma, unit, key, note?}`, copied from `results.json`), and list them under "Quantities" in the design note; a method with none says so.
 - raise `AnalysisError` for unusable input.

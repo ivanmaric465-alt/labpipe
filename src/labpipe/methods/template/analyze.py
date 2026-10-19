@@ -13,7 +13,9 @@ The contract every method's ``run`` fulfils (the pipeline relies on it):
   unless they are passed in (replay passes the recorded ones);
 * open the raw file read-only, never modify it;
 * write results.json, plot.png, plot.pdf and provenance.json into out_dir with
-  ``atomic_write_bytes``; the plot uses ``labpipe.plotting.acs``;
+  ``atomic_write_bytes``; the plot uses ``labpipe.plotting.acs`` with the user's style
+  (``acs.apply_acs(acs.style_of(settings))``, ``acs.save_figure``); options under ``plot:``
+  change only the figure, never results.json;
 * put every number a human or agent may quote into results.json, with units;
 * add deterministic checks: {"code", "severity": info|warning|review, "message"};
   status is "review" if any check has severity "review", else "ok";

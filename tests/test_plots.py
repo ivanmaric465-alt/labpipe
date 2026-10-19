@@ -322,15 +322,17 @@ def test_replot_with_a_zoom_accepts_the_new_figures_list_only(tmp_path):
     project, env, (eid,) = _analysed(tmp_path)
     out = project / _entry(env, eid)["output_dir"]
     old = json.loads((out / "results.json").read_text())
+    _with_notes(project, env, eid)
+    assert _labpipe(env, "notes", "todo") == []
     _set_lab(project, "xrd: {plot: {zoom_deg: [35, 45]}}\n")
     _labpipe(env, "scan")
     assert _labpipe(env, "replot", "--method", "xrd")["replotted"] == [eid]
     new = json.loads((out / "results.json").read_text())
     assert [f["file"] for f in new.pop("figures")] == ["plot.png", "zoom.png"]
     assert new == old and (out / "zoom.png").exists()
-    # the notes of a results.json with another figures list name the new hash: flagged
-    assert _entry(env, eid)["results_sha256"] == sha256_file(
-        out / "results.json")
+    assert _entry(env, eid)["results_sha256"] == sha256_file(out / "results.json")
+    # same analysis, another list of figures: the notes stay valid (no AI rewrite)
+    assert _labpipe(env, "notes", "todo") == []
 
 
 def test_automation_pass_redraws_out_of_date_plots(tmp_path):

@@ -115,7 +115,8 @@ def _measurement_files(config: dict) -> dict[str, dict[str, Any]]:
         notes = out / "notes.md"
         found[eid] = {"sample_id": entry.get("sample_id"), "method": entry.get("method"),
                       "results_sha256": sha256_file(out / "results.json"),
-                      "notes_sha256": sha256_file(notes) if notes.exists() else None}
+                      "notes_sha256": sha256_file(notes) if notes.exists() else None,
+                      "same_analysis_sha256": entry.get("same_analysis_sha256", [])}
     return found
 
 
@@ -143,10 +144,12 @@ def _changed(old: dict[str, str], new: dict[str, str]) -> list[str]:
 
 def _compare(recorded: dict[str, Any], now: dict[str, Any]) -> dict[str, Any]:
     before, after = recorded.get("measurements", {}), now["measurements"]
-    changed = sorted(e for e in set(before) & set(after)
-                     if before[e]["results_sha256"] != after[e]["results_sha256"])
-    notes = sorted(e for e in set(before) & set(after)
-                   if before[e]["results_sha256"] == after[e]["results_sha256"]
+
+    def same(e: str) -> bool:   # equal, or differing only in the list of figures (replot)
+        return before[e]["results_sha256"] in (after[e]["results_sha256"],
+                                                *after[e].get("same_analysis_sha256", []))
+    changed = sorted(e for e in set(before) & set(after) if not same(e))
+    notes = sorted(e for e in set(before) & set(after) if same(e)
                    and before[e].get("notes_sha256") != after[e].get("notes_sha256"))
     new = [{"entry_id": e, "sample_id": after[e]["sample_id"], "method": after[e]["method"]}
            for e in sorted(set(after) - set(before))]

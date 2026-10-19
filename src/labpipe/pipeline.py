@@ -232,7 +232,9 @@ def replot_entry(config: dict, eid: str) -> dict[str, Any]:
         for key in ("plot_outdated_reason", "plot_sha256_wanted", "replot_problem"):
             stored.pop(key, None)
         stored["last_replot_utc"] = utc_now()
-        if not results_same:    # only the list of figures differs: notes name the new sha
+        if not results_same:    # only the list of figures differs: the notes stay valid
+            stored["same_analysis_sha256"] = sorted(
+                {*stored.get("same_analysis_sha256", []), stored["results_sha256"]})
             stored["results_sha256"] = summary["outputs"]["results.json"]
         write_index(config, data, stored["sample_id"], stored["method"])
     return {"entry_id": eid, "status": "done", "reason": None,

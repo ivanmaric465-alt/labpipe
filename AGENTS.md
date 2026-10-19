@@ -8,7 +8,7 @@ labpipe turns raw instrument files into reproducible analyses:
 
 The numerics are deterministic Python. **Agents run commands, read results, write notes and edit settings files. They never compute numbers themselves.** Human-facing overview: `README.md`. Read `docs/SAFETY.md` before changing anything that touches paths or permissions.
 
-Everything specific to one method (its settings, how to word its results, its conventions) is in `docs/methods/<method>.md`. Read it before steering or explaining that method's results.
+Everything specific to one method (its settings, how to word its results, its conventions) is in `docs/methods/<method>.md`. Read it before steering or explaining that method's results. Everything else the user can change (data, samples, plots, report, agents, automation, context, container) has a page in `docs/settings/`, with a "You say → setting" table: find the page there before changing anything.
 
 ## Start of every session: `labpipe doctor`
 
@@ -45,7 +45,8 @@ All commands print JSON.
 | `labpipe analyze --pending [--method M]` | Analyse every pending entry |
 | `labpipe requeue --stale \| --baseline \| --entry ID` | Put entries back to pending |
 | `labpipe review` | Write `logs/review_queue.md` (not recognised, needs a decision, failed, flagged, stale) |
-| `labpipe report` | Write `analysis/report.html`, the overview page for people |
+| `labpipe report` | Write `analysis/report.html` (and the extra reports in `lab.yaml` → `report.extra`), the overview pages for people |
+| `labpipe replot [--entry ID \| --method M \| --all]` | Redraw plots after a plot-settings change (no re-analysis, no AI) |
 | `labpipe notes todo` / `verify --entry ID` / `retire --entry ID` | Notes missing or outdated / check a `notes.md` / move it aside to be rewritten (only when the user asks) |
 | `labpipe inventory` | What labpipe recognises in the data folder(s) |
 | `labpipe dataset` / `dataset compare --quantity Q (--reference S \| --against P) [--run RUN]` | All samples with the named quantities of their measurements / differences and trends across samples, done by code |
@@ -106,7 +107,7 @@ analysis/_postdoc/<run>/                           the postdoc's runs: request.m
 context/                                           the user's project context and documents (git-ignored)
 manifest.json                                      one entry per raw file: hash, status, output, versions; unrecognised files
 logs/                                              automation.log, runs/, review_queue.md
-config/                                            settings; local.yaml = this machine; ignore.yaml = files to leave alone
+config/                                            settings (docs/settings/): local.yaml = this machine; lab.yaml = the lab's preferences; ignore.yaml = files to leave alone
 methods.yaml                                       file patterns → method → analyst → CLI
 docs/methods/<method>.md                           per method: design, settings, interpretation, conventions
 ```
@@ -140,15 +141,16 @@ Out-of-date (stale) analyses need nothing unless the user asks: `labpipe requeue
 
 ## Steering an analysis (how the user changes an analysis)
 
-The user describes a problem. You translate it into settings, rerun, and show the result. Each method's settings, with examples of what users say, are in `docs/methods/<method>.md` → Settings.
+The user describes a problem. You translate it into settings, rerun, and show the result. Each method's settings, with examples of what users say, are in `docs/methods/<method>.md` → Settings; plots, the report and the rest in `docs/settings/`. Each page says what a change costs (a report rebuild, a redraw, a re-analysis, new AI notes): tell the user before.
 
 1. Find the entry and its `measurement_id` with `labpipe status`. The current settings are in that measurement's `provenance.json` → `parameters.resolved`, and the files they came from in `parameters.sources`.
 2. **Surface, then wait.** Report problems; change an analysis only after the user explicitly asks for that change. The default scope is the single measurement:
    - one measurement → `config/measurements/<method>/<measurement_id>.yaml`;
    - one sample → `config/samples.yaml` → `samples.<id>.<method>`;
-   - a group (e.g. all samples on one support) → a preset in `config/samples.yaml`.
+   - a group (e.g. all samples on one support) → a preset in `config/samples.yaml`;
+   - the whole lab → `config/lab.yaml` → `<method>`, `plots`, `report`. Never edit labpipe's defaults (`config/<method>.yaml`, `plots.yaml`, `report.yaml`).
 3. Write only keys that exist in `config/<method>.yaml`; unknown keys are rejected. Start the file with a `note:` giving the date and the user's request in their words.
-4. Rerun with `labpipe <method> analyze --entry ID --rerun`, show the new plot, and quote the changed numbers from the new `results.json` next to the old ones from `_superseded/`.
+4. Rerun with `labpipe <method> analyze --entry ID --rerun` (plot-only changes: `labpipe replot --entry ID`), show the new plot, and quote the changed numbers from the new `results.json` next to the old ones from `_superseded/`.
 5. If several settings are plausible, show the alternatives and **let the user choose**. Don't keep iterating on your own.
 6. Settings files are part of the record (hashed in every `provenance.json`) and the lab's own (git-ignored): remind the user to back them up.
 

@@ -166,10 +166,14 @@ Stop it:
 systemctl --user disable --now labpipe-watch.service labpipe-nightly.timer
 ```
 
+## Settings
+
+Everything you can change (data, samples, analysis, plots, report, agents, automation, context) has a short page: [docs/settings/README.md](docs/settings/README.md). Or tell your agent in your own words ("bigger fonts", "group the report by method").
+
 ## Steer an analysis
 
 Tell the agent what looks wrong, or write a settings file yourself, e.g. `config/measurements/xrd/S-9_1.2.26.yaml`.
-These lab settings (`config/samples.yaml`, `config/sample_ids.yaml`, `config/measurements/`) are git-ignored: back them up or keep them in a private repo.
+These lab settings (`config/lab.yaml`, `config/samples.yaml`, `config/sample_ids.yaml`, `config/measurements/`) are git-ignored: back them up or keep them in a private repo.
 
 ```yaml
 note: "background too low above 60° (2026-10-16)"
@@ -189,8 +193,9 @@ labpipe xrd analyze --entry <entry-id> --rerun
 | one measurement | `config/measurements/<method>/<measurement_id>.yaml` |
 | one sample | `config/samples.yaml` → `samples.<id>.<method>` |
 | a group of samples | preset in `config/samples.yaml` |
+| the whole lab | `config/lab.yaml` → `<method>` |
 
-Defaults and all keys: `config/<method>.yaml`.
+Defaults and all keys: `config/<method>.yaml` (don't edit it: your changes go in `config/lab.yaml`).
 
 ## XRD references
 

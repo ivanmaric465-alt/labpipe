@@ -82,8 +82,16 @@ def numbers_in_notes(text: str) -> list[dict[str, Any]]:
     return found
 
 
+def described_shas(entry: dict[str, Any]) -> list[str]:
+    """The results.json sha256 values notes may name: the current one, and earlier ones that
+    differ only in the list of figures (`labpipe replot` after a zoom or panel change)."""
+    current = entry.get("results_sha256")
+    return [current, *entry.get("same_analysis_sha256", [])] if current else []
+
+
 def verify(notes_path: Path, results: dict[str, Any], provenance: dict[str, Any] | None,
-           results_sha256: str | None, summary: dict[str, Any] | None = None) -> dict[str, Any]:
+           results_sha256: str | list[str] | None,
+           summary: dict[str, Any] | None = None) -> dict[str, Any]:
     text = notes_path.read_text(encoding="utf-8")
     known: list[tuple[float, str]] = list(_walk_numbers(results))
     if summary:  # `labpipe <method> summary`: the same numbers, formatted by code
@@ -105,7 +113,8 @@ def verify(notes_path: Path, results: dict[str, Any], provenance: dict[str, Any]
         problems.append(f"{len(unmatched)} number(s) not found in results.json or the settings")
     if missing_codes:
         problems.append(f"review checks not mentioned: {', '.join(missing_codes)}")
-    if results_sha256 and results_sha256 not in text:
+    accepted = [results_sha256] if isinstance(results_sha256, str) else results_sha256 or []
+    if accepted and not any(sha in text for sha in accepted):
         problems.append("notes do not name the results.json sha256 they describe "
                         "(they may describe an older analysis)")
     return {"notes": str(notes_path.relative_to(PROJECT_ROOT)) if notes_path.is_relative_to(
@@ -131,7 +140,7 @@ def verify_entry(config: dict, eid: str) -> dict[str, Any]:
     summary = (importlib.import_module(spec["summary"]).summarize(results)
                if spec.get("summary") else None)
     return {"entry_id": eid, **verify(out / "notes.md", results, provenance,
-                                      entry.get("results_sha256"), summary)}
+                                      described_shas(entry), summary)}
 
 
 def todo(config: dict) -> list[dict[str, Any]]:
@@ -147,8 +156,8 @@ def todo(config: dict) -> list[dict[str, Any]]:
         notes = PROJECT_ROOT / entry["output_dir"] / "notes.md"
         if not notes.exists():
             reason = "no notes.md"
-        elif entry.get("results_sha256") and entry["results_sha256"] not in notes.read_text(
-                encoding="utf-8"):
+        elif described_shas(entry) and not any(
+                sha in notes.read_text(encoding="utf-8") for sha in described_shas(entry)):
             reason = "notes.md describes a different results.json"
         else:
             continue
