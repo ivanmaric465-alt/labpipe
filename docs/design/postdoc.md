@@ -130,26 +130,37 @@ All files of one request go in `analysis/_postdoc/<UTC time>/`, which is never d
 | `analysis.md` | the postdoc | the analysis |
 | `verify.json` | `labpipe postdoc verify` | result of the checks |
 
-`analysis.md` has fixed sections:
-1. **Question**: copied from the request.
-2. **Summary**: three to five sentences.
-3. **What the data show**: findings, each citing where its numbers come from
-   (`S-9 xrd S-9_long_scan: xrd.a.Pt` or `compare-1.json`).
-4. **Interpretation**: kept apart from the findings. Each point says how certain it is
-   (high, medium or low, and why) and which context or literature it leans on
-   (`documents/paper.pdf p. 6`).
-5. **Against the context**: where the data agree or disagree with the hypotheses in
-   `context.md`, and what the data cannot answer.
-6. **Check before using**: every `review` flag of the measurements used, plus failed, stale
-   or missing measurements that matter for the question.
-7. **Suggested next steps**: measurements or reruns, each with its reason.
+`analysis.md` is the postdoc's own text. Comparisons are a tool it may use, not the job:
+it writes freely about what it sees. That includes insights the user may not have looked
+for:
+- patterns across samples and methods;
+- contradictions between measurements, or with the context;
+- suspicious or surprising results;
+- alternative explanations;
+- what would settle an open question.
 
-**`labpipe postdoc verify RUN`** passes only if all of these hold:
-- every number in `analysis.md` is in `dataset.json`, a `compare-N.json` or a cited
-  `results.json`;
+Three parts are required, so every analysis can be read and trusted the same way:
+- **Question**, copied from the request, at the top;
+- **Summary**: a few sentences;
+- **Check before using**: every `review` flag of the measurements it cites, plus failed,
+  stale or missing measurements that matter for the question.
+
+Everything else (headings, length, order) is the postdoc's choice. Two kinds of statements
+must look different:
+- **observation**: what the data show;
+- **interpretation or idea**: says how certain it is (high, medium, low, speculative) and
+  which context or literature it leans on (`documents/paper.pdf p. 6`).
+
+`context/instructions.md` can ask for a structure or a focus; the template suggests one, e.g.
+"insights and ideas" and "suggested next steps".
+
+**`labpipe postdoc verify RUN`** checks only what keeps the text honest, not its content:
+- every number in `analysis.md` is in `dataset.json`, a `compare-N.json`, or the
+  `results.json` of a measurement the text names. Free text without numbers is never
+  restricted;
 - a number from the literature appears in that document's text, on a line that cites it;
-- every `review` check of a cited measurement is mentioned;
-- the seven sections are present.
+- every `review` check of a measurement the text names is mentioned;
+- the three required parts are present.
 
 It reuses the number matching of `labpipe notes verify`. The postdoc may fix `analysis.md`
 twice; after that the run is recorded as failed, with the reasons.
@@ -178,7 +189,8 @@ whether they are up to date. Several questions are separate runs.
   `agents.reasoning.postdoc` for Codex.
 - **Its instructions**:
   - the AGENTS.md rules;
-  - the sections and citation format above;
+  - the required parts and the citation format above; otherwise free, and expected to point
+    out what the user may not have noticed;
   - interpretation only from the results and the context, worded as each method's doc says
     ("consistent with", never "is");
   - "the data cannot answer this" rather than stretching;
