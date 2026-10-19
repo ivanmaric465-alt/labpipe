@@ -18,6 +18,18 @@ from labpipe.safety import PROJECT_ROOT
 COMPARED = ("results.json", "plot.png", "plot.pdf")
 
 
+def _input_path(recorded: dict, config: dict) -> Path:
+    """The recorded path, or (if it does not exist here, e.g. a host path inside the
+    container or the reverse) the same file under the current raw root of that id."""
+    path = Path(recorded["path"])
+    if path.exists():
+        return path
+    for root in config.get("raw_roots", []):
+        if root["id"] == recorded.get("raw_root") and recorded.get("relative_path"):
+            return Path(root["path"]) / recorded["relative_path"]
+    return path
+
+
 def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[str, Any]:
     record = json.loads(provenance_path.read_text(encoding="utf-8"))
     problems = []
@@ -29,7 +41,7 @@ def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[
         problems.append("working tree has uncommitted changes")
     if record["code"].get("dirty"):
         problems.append("the original run was made from a dirty working tree")
-    input_path = Path(record["input"]["path"])
+    input_path = _input_path(record["input"], config)
     if not input_path.exists():
         return {"error": f"input not found: {input_path}"}
     if sha256_file(input_path) != record["input"]["sha256"]:

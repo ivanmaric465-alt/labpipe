@@ -34,3 +34,10 @@ agents:
   #   analyst: high
 
 # Automatic processing is added here by `labpipe automation setup` (automation: ...).
+
+# Container mode: run labpipe commands and the automatic processing inside a Podman or
+# Docker container (docs/design/container.md). `labpipe container setup` writes this block;
+# without it, everything runs on this computer as before.
+# container:
+#   engine: podman              # podman | docker (default: podman if installed, else docker)
+#   # name, image, port, allowed_hosts: defaults are in config/pipeline.yaml

@@ -25,6 +25,8 @@
   labpipe notes todo                        analysed entries whose notes.md is missing or outdated
   labpipe notes verify --entry ID           check notes.md against results.json (numbers, review codes)
   labpipe notes retire --entry ID [...]     move notes.md to _superseded/ so the analyst rewrites it
+  labpipe container setup|build|start|stop|status|logs|login   the container (Podman or Docker)
+  labpipe shell [claude|codex]              agent session inside the container
   labpipe guard                             Claude Code PreToolUse hook (event JSON on stdin)
 
 Every command prints JSON (or a short table without --json) and never writes
@@ -43,7 +45,7 @@ from collections import Counter
 from pathlib import Path
 
 from labpipe import manifest as mf
-from labpipe import pipeline, scanner
+from labpipe import container, pipeline, scanner
 from labpipe.registry import load_methods
 from labpipe.safety import PROJECT_ROOT, SetupError, load_pipeline_config
 
@@ -335,6 +337,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("doctor").set_defaults(func=cmd_doctor, needs_config=False)
     sub.add_parser("guard").set_defaults(func=cmd_guard, needs_config=False)
     sub.add_parser("init").set_defaults(func=cmd_init, needs_config=False)
+    container.register(sub)
     setup = sub.add_parser("setup", help="guided setup in your terminal: raw data, sandbox, "
                                          "agents, automation")
     setup.add_argument("--only", choices=["raw-data", "files", "sandbox", "agents", "automation"])
@@ -459,6 +462,9 @@ def main(argv: list[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
+    forwarded = container.forward(sys.argv[1:] if argv is None else argv)
+    if forwarded is not None:  # container mode: the command ran inside the container
+        return forwarded
     args = build_parser().parse_args(argv)
     try:
         config = load_pipeline_config() if getattr(args, "needs_config", True) else {}

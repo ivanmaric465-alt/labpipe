@@ -34,6 +34,7 @@ Settings (config/local.yaml):
 from __future__ import annotations
 
 import calendar
+import datetime as dt
 import json
 import os
 import platform
@@ -50,7 +51,7 @@ from labpipe.locking import try_exclusive
 from labpipe.notes import todo as notes_todo
 from labpipe.provenance import code_version, utc_now
 from labpipe.registry import load_methods, skip_reason, user_ignore
-from labpipe.safety import PROJECT_ROOT, assert_pipeline_writable, set_local_block
+from labpipe.safety import PROJECT_ROOT, assert_pipeline_writable, in_container, set_local_block
 
 DEFAULTS = {"check_every_seconds": 60, "settle_minutes": 3, "nightly_at": "02:00",
             "max_measurements_per_run": 10, "max_budget_usd": 5, "claude": None, "codex": None,
@@ -207,12 +208,18 @@ def _codex_command(config: dict, chosen: dict, last_message: Path) -> list[str]:
     analysts are .codex/agents/*.toml. Sandbox workspace-write (raw data outside the repo
     cannot be written), no approvals. --dangerously-bypass-hook-trust makes sure the
     project's labpipe guard hook (.codex/hooks.json) runs even if it was never trusted
-    interactively; it also runs any hooks you enabled in ~/.codex yourself."""
+    interactively; it also runs any hooks you enabled in ~/.codex yourself.
+    Inside the container the container is the sandbox: danger-full-access, which OpenAI
+    documents for externally sandboxed environments."""
     from labpipe.agents import codex_trust, load_roles
-    codex = chosen.get("codex") or shutil.which("codex")
+    inside = in_container()
+    codex = "codex" if inside else chosen.get("codex") or shutil.which("codex")
     if not codex:
         raise RuntimeError("the `codex` command was not found; set automation.codex")
     if codex_trust() != "trusted":
+        if inside:
+            raise RuntimeError("Codex is not logged in or does not trust /labpipe inside the "
+                               "container: run `labpipe container login codex`")
         raise RuntimeError(f"Codex does not trust {PROJECT_ROOT} yet, so it would ignore the "
                            "project's rules, guard hook and agents: open the folder once in "
                            "Codex (`codex` there) and trust it")
@@ -221,7 +228,8 @@ def _codex_command(config: dict, chosen: dict, last_message: Path) -> list[str]:
     model = (agents.get("models") or {}).get(supervisor["name"]) or (
         agents.get("models") or {}).get("supervisor")
     effort = (agents.get("reasoning") or {}).get("supervisor")
-    command = [codex, "exec", "--json", "--ephemeral", "-s", "workspace-write",
+    command = [codex, "exec", "--json", "--ephemeral", "-s",
+               "danger-full-access" if inside else "workspace-write",
                "-c", 'approval_policy="never"', "--dangerously-bypass-hook-trust",
                "-o", str(last_message)]
     if model and model != "inherit":
@@ -239,12 +247,14 @@ def _harness_command(config: dict, chosen: dict, last_message: Path) -> list[str
     if harness != "claude-code":
         raise RuntimeError(f"unattended runs are supported with harness claude-code or codex "
                            f"(configured: {harness!r})")
-    claude = chosen.get("claude") or shutil.which("claude")
+    inside = in_container()   # the container is the sandbox: settings without the sandbox block
+    claude = "claude" if inside else chosen.get("claude") or shutil.which("claude")
     if not claude:
         raise RuntimeError("the `claude` command was not found; set automation.claude")
     return [claude, "-p", "Run one pipeline pass.", "--agent", "supervisor",
             "--setting-sources", "project", "--strict-mcp-config",
-            "--permission-mode", "dontAsk", "--settings", ".claude/unattended.json",
+            "--permission-mode", "dontAsk", "--settings",
+            ".claude/unattended-container.json" if inside else ".claude/unattended.json",
             "--output-format", "stream-json", "--verbose",
             "--max-budget-usd", str(chosen["max_budget_usd"])]
 
@@ -365,6 +375,23 @@ def _snapshot(config: dict) -> dict[str, tuple[int, float]]:
     return state
 
 
+def nightly_due(now: dt.datetime, nightly_at: str, last_nightly: dt.date | None) -> bool:
+    """Is the nightly pass due? True from `nightly_at` (HH:MM, local time) on, once per day."""
+    hour, minute = (int(part) for part in str(nightly_at).split(":")[:2])
+    return last_nightly != now.date() and (now.hour, now.minute) >= (hour, minute)
+
+
+def _last_nightly(config: dict) -> dt.date | None:
+    """Local date of the last nightly pass in logs/automation.log (None if never)."""
+    dates = []
+    for event in _events(config):
+        if event.get("event") == "nightly" or event.get("trigger") == "nightly":
+            moment = dt.datetime.strptime(event["utc"], "%Y-%m-%dT%H:%M:%SZ").replace(
+                tzinfo=dt.UTC)
+            dates.append(moment.astimezone().date())
+    return max(dates, default=None)
+
+
 def watch(config: dict) -> None:
     chosen = settings(config)
     interval, settle = chosen["check_every_seconds"], 60 * chosen["settle_minutes"]
@@ -373,6 +400,8 @@ def watch(config: dict) -> None:
     more = _more_batches(run(config, reason="watch started"))
     last, changed_at = _snapshot(config), None
     started_with = code_version()
+    inside = in_container()   # no systemd timer there: the watcher also does the nightly pass
+    last_nightly = _last_nightly(config) if inside else None
     while True:
         time.sleep(interval)
         if code_version() != started_with:
@@ -381,6 +410,12 @@ def watch(config: dict) -> None:
             _log(config, {"event": "watch_restart", "reason": "code changed",
                           "from": started_with, "to": code_version()})
             sys.exit(3)
+        if inside and nightly_due(dt.datetime.now(), chosen["nightly_at"], last_nightly):
+            last_nightly = dt.date.today()
+            _log(config, {"event": "nightly", "trigger": "nightly"})
+            more = _more_batches(run(config, reason="nightly"))
+            last = _snapshot(config)
+            continue
         current = _snapshot(config)
         if current != last:
             changed_at, last = time.time(), current
@@ -510,7 +545,7 @@ def health(config: dict, now: float | None = None) -> dict[str, Any]:
     """For doctor: services running, last run succeeded, nothing waiting too long. Reads only."""
     now = time.time() if now is None else now
     problems, fixes = [], []
-    services = _services()
+    services = {} if in_container() else _services()   # no systemd inside the container
     stopped = [unit for unit, state in services.items() if state != "active"]
     if stopped:
         problems.append(f"not running: {', '.join(stopped)}")
@@ -551,7 +586,8 @@ def health(config: dict, now: float | None = None) -> dict[str, Any]:
     others = [p for p in problems if p != state]
     return {"status": "warn" if problems else "ok",
             "message": "; ".join([state, *others]) if problems
-                       else f"automatic processing running; {state}",
+                       else (f"inside the container; {state}" if in_container()
+                             else f"automatic processing running; {state}"),
             "next": " · ".join(fixes) or None,
             "details": {"services": services, "last_run": last, "waiting_long": waiting[:8]}}
 

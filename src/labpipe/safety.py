@@ -28,6 +28,36 @@ class SetupError(RuntimeError):
     pass
 
 
+def in_container() -> bool:
+    return bool(os.environ.get("LABPIPE_IN_CONTAINER"))
+
+
+def _parse_root_paths(text: str) -> dict[str, str]:
+    """LABPIPE_ROOT_PATHS="lab=/data/lab,other=/data/other" -> {id: path}."""
+    mapping = {}
+    for part in filter(None, (item.strip() for item in text.split(","))):
+        root_id, separator, path = part.partition("=")
+        if not separator or not root_id.strip() or not path.strip():
+            raise SetupError(f"LABPIPE_ROOT_PATHS: cannot read {part!r} (expected id=path)")
+        mapping[root_id.strip()] = path.strip()
+    return mapping
+
+
+def _map_root_paths(roots: list[dict], mapping: dict[str, str]) -> list[dict]:
+    """Inside the container the raw roots are found by id (read-only mounts)."""
+    configured = {root["id"] for root in roots}
+    unknown = sorted(set(mapping) - configured)
+    missing = sorted(configured - set(mapping))
+    if unknown:
+        raise SetupError(f"LABPIPE_ROOT_PATHS names raw root(s) {', '.join(unknown)} that are "
+                         "not in config/local.yaml raw_roots")
+    if missing:
+        raise SetupError(f"raw root(s) {', '.join(missing)} in config/local.yaml have no mount "
+                         "in LABPIPE_ROOT_PATHS (the container was started without them): "
+                         "`labpipe container start` after fixing raw_roots")
+    return [{**root, "path": mapping[root["id"]]} for root in roots]
+
+
 def load_pipeline_config() -> dict:
     """config/pipeline.yaml (shared policy) + config/local.yaml (this machine's paths)."""
     with open(PROJECT_ROOT / "config" / "pipeline.yaml", encoding="utf-8") as stream:
@@ -44,6 +74,12 @@ def load_pipeline_config() -> dict:
     config["automation"] = machine.get("automation")
     if (config["automation"] or {}).get("settle_minutes") is not None:
         config["settle_minutes"] = config["automation"]["settle_minutes"]  # this machine's choice
+    mapping = os.environ.get("LABPIPE_ROOT_PATHS")
+    if mapping:
+        config["raw_roots"] = _map_root_paths(config["raw_roots"], _parse_root_paths(mapping))
+        # protected_paths in local.yaml are host paths; they do not exist in the container,
+        # whose raw data is mounted read-only (the kernel enforces it).
+        config["protected_paths"] = []
     override = os.environ.get("LABPIPE_RAW_ROOT")
     if override:
         # Same data, another path: keep the configured id (if there is exactly one root)

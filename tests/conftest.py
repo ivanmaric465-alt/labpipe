@@ -9,6 +9,17 @@ import pytest
 
 from labpipe.methods.xrd import fitting
 
+
+
+@pytest.fixture(autouse=True)
+def _not_in_container(monkeypatch):
+    """Tests start outside container mode even when they run in the image (CI); tests of
+    the in-container behaviour set these variables themselves."""
+    for name in ("LABPIPE_IN_CONTAINER", "LABPIPE_ROOT_PATHS", "LABPIPE_IMAGE_ID",
+                 "LABPIPE_ENGINE"):
+        monkeypatch.delenv(name, raising=False)
+
+
 LAMBDA1 = 1.540598
 LAMBDA2 = 1.544426
 RATIO = 0.5

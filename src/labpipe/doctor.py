@@ -20,7 +20,7 @@ import yaml
 
 from labpipe import manifest as mf
 from labpipe.registry import load_methods
-from labpipe.safety import PROJECT_ROOT, SetupError, load_pipeline_config
+from labpipe.safety import PROJECT_ROOT, SetupError, in_container, load_pipeline_config
 
 SYNC_MARKERS = ("koofr", "onedrive", "dropbox", "google drive", "googledrive", "icloud",
                 "nextcloud", "owncloud", "syncthing", "mega")
@@ -138,6 +138,10 @@ def _raw_roots(config: dict) -> tuple[list[dict[str, Any]], list[tuple[str, Path
             items.append(_item(f"protected:{root['id']}", "todo",
                                f"{path} is not listed in protected_paths",
                                "add it (and the writable original it mirrors) to protected_paths"))
+    if in_container():
+        items.append(_item("container", "ok", "inside the container: the raw data is the "
+                           "read-only mount, Claude Code's and Codex's own sandboxes and the "
+                           "systemd services are not used here"))
     if os.environ.get("LABPIPE_RAW_ROOT"):
         items.append(_item("raw_root_override", "warn", "LABPIPE_RAW_ROOT is set and replaces "
                            "raw_roots for this run", "unset it for normal use"))
@@ -179,6 +183,11 @@ def _files(config: dict, usable: list[tuple[str, Path]]) -> list[dict[str, Any]]
 
 def _automation(config: dict) -> list[dict[str, Any]]:
     """Is automatic processing (if set up) running, and did its last run succeed?"""
+    if in_container():
+        from labpipe.automation import health
+        report = health(config)
+        return [_item("automation", report["status"], report["message"], report["next"],
+                      **report["details"])]
     if not config.get("automation"):
         return [_item("automation", "ok", "automatic processing not set up (optional: "
                       "`labpipe automation setup` in your terminal)")]
@@ -254,7 +263,8 @@ def run() -> dict[str, Any]:
             elif codex_trust() != "trusted":
                 items.append(_item("codex", "todo", f"Codex does not trust {PROJECT_ROOT} yet: "
                                    "until then it ignores the project's .codex/ (rules, guard "
-                                   "hook, agents)", "the user opens the folder once in Codex "
+                                   "hook, agents)", "run `labpipe container login codex`" if in_container()
+                                   else "the user opens the folder once in Codex "
                                    "(`codex` there) and chooses to trust it"))
             else:
                 items.append(_item("codex", "ok", "codex installed; project trusted (rules, "

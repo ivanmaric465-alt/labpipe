@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import platform
 import shlex
 import subprocess
@@ -92,6 +93,14 @@ def environment() -> dict[str, Any]:
     }
 
 
+def runtime() -> dict[str, Any]:
+    """Where the analysis ran: inside the labpipe container or natively."""
+    if os.environ.get("LABPIPE_IN_CONTAINER"):
+        return {"mode": "container", "engine": os.environ.get("LABPIPE_ENGINE") or None,
+                "image_id": os.environ.get("LABPIPE_IMAGE_ID") or None}
+    return {"mode": "native", "engine": None, "image_id": None}
+
+
 def utc_now() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -122,6 +131,7 @@ def build_record(*, method: str, entry_point: str, input_path: Path, input_sha25
         "parameters": {"sources": settings_sources or [], "resolved": settings,
                        "resolved_sha256": fingerprint(settings)},
         "environment": environment(),
+        "runtime": runtime(),
         "outputs": outputs,
         "command": " ".join(shlex.quote(arg) for arg in sys.argv),
         "output_dir": final_dir,

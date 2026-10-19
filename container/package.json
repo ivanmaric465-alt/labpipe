@@ -1,0 +1,9 @@
+{
+  "name": "labpipe-container-tools",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Agent CLIs installed in the labpipe container image (exact versions).",
+  "dependencies": {
+    "@openai/codex": "0.163.0"
+  }
+}

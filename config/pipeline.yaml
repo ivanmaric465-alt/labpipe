@@ -31,3 +31,14 @@ sample_id:
   # Adapt the pattern to your own naming convention.
   pattern: '^[A-Za-z][A-Za-z0-9]*-[0-9]+[A-Za-z]?$'
   overrides_file: config/sample_ids.yaml
+
+# Container mode (docs/design/container.md). It is switched on for a machine by a
+# `container:` block in config/local.yaml (`labpipe container setup` writes it).
+container:
+  name: labpipe              # container name
+  image: localhost/labpipe   # tag = image:<container hash>
+  port: 8765                 # notifications page, published on 127.0.0.1 only
+  allowed_hosts:             # outgoing connections from the container (via its proxy)
+    common: [github.com]
+    claude-code: [api.anthropic.com, claude.ai, console.anthropic.com, statsig.anthropic.com]
+    codex: [api.openai.com, chatgpt.com, auth.openai.com]
