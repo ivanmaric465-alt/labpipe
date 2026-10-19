@@ -47,6 +47,9 @@ Status: APPROVED 2026-10-17 (gallery picks across both series). Implemented.
 | "always show / never show that image" | `gallery.include: [<measurement_id>]` / `gallery.exclude: [...]` |
 | "our info bar is taller" | `info_bar_px: …` |
 
+## Quantities
+None: images only. The postdoc may look at them but makes no quantitative claims.
+
 ## Interpretation
 - No notes per image. Asked to describe an image, say it is a qualitative description by an AI, never a measurement; no particle sizes "by eye".
 

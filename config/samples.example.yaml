@@ -4,6 +4,9 @@
 # presets.<name>.<method>   settings shared by every sample that lists the preset
 # samples.<id>.presets      presets applied in order
 # samples.<id>.<method>     settings for this sample only (override the presets)
+# samples.<id>.properties   numbers about the sample (e.g. loading_wt: 20); `labpipe dataset`
+#                           lists them as quantities `sample.<name>`, with
+#                           eds.nominal_at_percent as `sample.nominal.<element>`
 # Keys must exist in config/<method>.yaml. Measurement-level files in
 # config/measurements/<method>/<measurement_id>.yaml override everything here.
 

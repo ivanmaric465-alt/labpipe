@@ -330,6 +330,54 @@ def cmd_replay(args, config) -> int:
     return 0 if result.get("all_outputs_identical") else 1
 
 
+# --- dataset (named quantities across samples) ---------------------------------------------
+
+def cmd_dataset(args, config) -> int:
+    from labpipe import dataset
+    if args.action != "compare":
+        _print(dataset.build(config))
+        return 0
+    try:
+        payload = dataset.compare(config, args.quantity, reference=args.reference,
+                                  against=args.against, measurements=args.measurement,
+                                  each=args.each)
+        run = None
+        if args.run:
+            run = Path(args.run)
+            run = (run if run.is_absolute() else PROJECT_ROOT / run).resolve()
+            if not run.is_dir() or run.parent != (PROJECT_ROOT / config["analysis_dir"]
+                                                   / "_postdoc").resolve():
+                raise ValueError(f"--run must be an existing folder in "
+                                 f"{config['analysis_dir']}/_postdoc/: {args.run}")
+    except ValueError as exc:
+        _print({"error": str(exc)})
+        return 1
+    if run:
+        payload["saved_as"] = dataset.save(run, payload, config).relative_to(PROJECT_ROOT).as_posix()
+    _print(payload)
+    return 0
+
+
+def _register_dataset(sub) -> None:
+    parser = sub.add_parser("dataset", help="all samples, their properties and the named "
+                            "quantities of their measurements; `dataset compare` does arithmetic")
+    parser.set_defaults(func=cmd_dataset, action=None)
+    parser.add_argument("--json", action="store_true", help="JSON output (the default)")
+    compare = parser.add_subparsers(dest="action").add_parser(
+        "compare", help="difference from a reference sample, or a trend against a quantity")
+    compare.add_argument("--quantity", required=True, help="e.g. xrd.a.fcc-1, eds.at.Pt")
+    group = compare.add_mutually_exclusive_group(required=True)
+    group.add_argument("--reference", help="sample to take differences from")
+    group.add_argument("--against", help="quantity (or sample.* property) for the x axis")
+    compare.add_argument("--measurement", action="append",
+                         help="entry_id or measurement_id to use where a sample has several "
+                              "(repeatable)")
+    compare.add_argument("--each", action="store_true",
+                         help="every measurement of a sample is its own point")
+    compare.add_argument("--run", help="postdoc run folder (analysis/_postdoc/<time>): also "
+                                       "save the result there as compare-N.json")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="labpipe", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -338,6 +386,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("guard").set_defaults(func=cmd_guard, needs_config=False)
     sub.add_parser("init").set_defaults(func=cmd_init, needs_config=False)
     container.register(sub)
+    _register_dataset(sub)
     setup = sub.add_parser("setup", help="guided setup in your terminal: raw data, sandbox, "
                                          "agents, automation")
     setup.add_argument("--only", choices=["raw-data", "files", "sandbox", "agents", "automation"])

@@ -34,3 +34,25 @@ def summarize(results: dict[str, Any]) -> dict[str, Any]:
                                for c in checks if c["severity"] == "review"],
         "worth_knowing": [c["message"] for c in checks if c["severity"] in ("warning", "info")],
     }
+
+
+def quantities(results: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Named numbers for comparing samples (`labpipe dataset`); copied from results.json.
+
+    - `eds.at.<element>`: metal-basis composition (no σ in the results).
+    - `eds.at_minus_nominal.<element>`: measured − nominal, when the sample has a nominal.
+    """
+    units = results.get("units") or {}
+    out: dict[str, dict[str, Any]] = {}
+    for element, value in results["metal_basis"]["at_percent"].items():
+        out[f"eds.at.{element}"] = {
+            "value": value, "sigma": None,
+            "unit": units.get("metal_basis.at_percent", "at%"),
+            "key": f"metal_basis.at_percent.{element}"}
+    for i, row in enumerate((results.get("nominal_comparison") or {}).get("rows") or []):
+        if row.get("difference_at_percent") is not None:
+            out[f"eds.at_minus_nominal.{row['element']}"] = {
+                "value": row["difference_at_percent"], "sigma": None,
+                "unit": units.get("difference_at_percent", "at% points"),
+                "key": f"nominal_comparison.rows[{i}].difference_at_percent"}
+    return out

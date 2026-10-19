@@ -189,3 +189,45 @@ def summarize(results: dict[str, Any]) -> dict[str, Any]:
                                  if c["severity"] == "warning"}),
         "steering": [f"{s['action']}: {s['two_theta_deg']}" for s in results.get("steering", [])],
     }
+
+
+def quantities(results: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Named numbers for comparing samples (`labpipe dataset`); copied from results.json.
+
+    - `xrd.a.<phase id>`: lattice parameter of each fcc-indexed phase, with its σ.
+    - `xrd.size.<phase id>`: Scherrer size of the phase's first reflection (as in the
+      overview), σ from the peak-width fit only; a lower bound without instrument calibration.
+    The internal standard is left out: its lattice parameter is a database or certificate
+    value, not a result. Phase ids (fcc-1, fcc-2) are numbered within one measurement.
+    """
+    units = results.get("units") or {}
+    out: dict[str, dict[str, Any]] = {}
+    sizes = {row["phase"]: (i, row) for i, row in enumerate(results.get("size_strain") or [])}
+    uncalibrated = any(c.get("code") == "no_instrument_correction"
+                       for c in results.get("checks") or [])
+    for i, phase in enumerate(results["phases"]["fcc_indexed"]):
+        notes = []
+        if phase.get("tentative"):
+            notes.append(f"tentative ({phase.get('n_reflections')} reflections)")
+        nearest = (phase.get("reference_comparison") or [None])[0]
+        if nearest:
+            notes.append(f"closest reference {nearest['phase']}")
+        entry = {"value": phase["a_angstrom"], "sigma": phase.get("a_sigma_angstrom"),
+                 "unit": "Å", "key": f"phases.fcc_indexed[{i}].a_angstrom"}
+        if notes:
+            entry["note"] = "; ".join(notes)
+        out[f"xrd.a.{phase['id']}"] = entry
+        if phase["id"] in sizes:
+            j, row = sizes[phase["id"]]
+            for k, scherrer in enumerate(row.get("scherrer") or []):
+                if scherrer.get("size_nm") is None:
+                    continue
+                note = f"Scherrer, {_hkl(scherrer['hkl'])} reflection"
+                if uncalibrated or str(row.get("instrument_correction", "")).startswith("none"):
+                    note += "; lower bound until an instrument calibration exists"
+                out[f"xrd.size.{phase['id']}"] = {
+                    "value": scherrer["size_nm"], "sigma": scherrer.get("size_sigma_nm_from_fwhm"),
+                    "unit": units.get("size", "nm"),
+                    "key": f"size_strain[{j}].scherrer[{k}].size_nm", "note": note}
+                break
+    return out

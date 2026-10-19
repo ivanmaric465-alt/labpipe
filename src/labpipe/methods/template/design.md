@@ -26,6 +26,9 @@ Status: DRAFT, not yet agreed with the user. No code beyond the scaffold until i
 | User says | Setting |
 |---|---|
 
+## Quantities
+- Named numbers worth comparing across samples, for `labpipe dataset` (`quantities(results)` in the summary module; each with value, σ, unit, key path in `results.json`), or "none":
+
 ## Interpretation
 - What may be named in notes, and how it is worded:
 

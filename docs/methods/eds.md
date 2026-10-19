@@ -51,6 +51,12 @@ Status: APPROVED 2026-10-17 with changes (below). Implemented.
 | "count Si as a metal" / "leave out Cu (grid)" | `non_metals: [...]` |
 | "the images of S-14 are s-140.jpg and s-141.jpg" (the report links the wrong ones) | `config/measurements/eds/S-14.yaml`: `images: [s-140.jpg, s-141.jpg]` plus a `note:` |
 
+## Quantities
+For `labpipe dataset` (`summary.quantities`), copied from `results.json`:
+- `eds.at.<element>`: metal-basis composition (at%) from `metal_basis.at_percent`; the results have no σ.
+- `eds.at_minus_nominal.<element>`: measured − nominal (at% points) from `nominal_comparison.rows`, only when the sample has a nominal composition.
+- Sample properties (from `config/samples.yaml`): `sample.nominal.<element>` from `samples.<id>.eds.nominal_at_percent`.
+
 ## Interpretation
 - Elements only from the table; never a phase, a stoichiometry or an element the table does not contain.
 - Compositions are of the analysed area only; normalised totals and the missing σ limit how far small differences can be trusted (say so).

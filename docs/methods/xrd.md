@@ -28,6 +28,12 @@ Status: implemented (before design notes existed; this page records how it works
 - A pure-element match on an alloy is not an identification; the `reference_match_isostructural` check says so.
 - Don't name a crystal phase that isn't in the results. σ: `a_sigma_angstrom`, `two_theta_sigma_deg`.
 
+## Quantities
+For `labpipe dataset` (`summary.quantities`), copied from `results.json`:
+- `xrd.a.<phase id>`: lattice parameter (Å, σ) of each fcc-indexed phase, e.g. `xrd.a.fcc-1` (`phases.fcc_indexed[i].a_angstrom`). The id is numbered within one measurement, so check the note (closest reference) before comparing across samples.
+- `xrd.size.<phase id>`: Scherrer size (nm) of the phase's first reflection, σ from the peak-width fit only (`size_strain[i].scherrer[j].size_nm`). A lower bound until an instrument calibration exists; its note says so.
+- The internal standard has no quantity: its lattice parameter is a database or certificate value, not a result.
+
 ## Reference phases
 
 ```

@@ -37,6 +37,7 @@ The contract `run(...)` fulfils is in the docstring of `src/labpipe/methods/temp
 - checks `{code, severity: info|warning|review, message}`; status `review` if any check is `review`;
 - outputs via `atomic_write_bytes`, provenance via `labpipe.provenance.build_record`;
 - optional: `"figures": [{"file", "caption"}]` in `results.json` (files in the output folder, hashed in provenance) makes the report show those one at a time instead of `plot.png`, e.g. the panels of a multi-panel plot;
+- declare the numbers worth comparing across samples as `quantities(results)` in the method's summary module (name `<method>.<what>[.<id>]`, `{value, sigma, unit, key, note?}`, copied from `results.json`), and list them under "Quantities" in the design note; a method with none says so.
 - raise `AnalysisError` for unusable input.
 
 If other methods use the same file type (`.txt`, `.jpg`), add a content check:
