@@ -109,6 +109,9 @@ HARNESS_NAMES = {"claude-code": "Claude Code", "codex": "Codex", "opencode": "Op
 
 
 def _where() -> str:
+    """The repository as the user knows it (in the container: its folder on the host)."""
+    if os.environ.get("LABPIPE_HOST_ROOT"):
+        return os.environ["LABPIPE_HOST_ROOT"]
     home = Path.home()
     return f"~/{PROJECT_ROOT.relative_to(home).as_posix()}" \
         if PROJECT_ROOT.is_relative_to(home) else str(PROJECT_ROOT)
@@ -334,7 +337,8 @@ def run(config: dict, *, reason: str = "manual") -> dict[str, Any]:
         finished = [i for i in done if i not in still_missing]
         review = [i for i in finished if entries[i].get("review")]
         if completed.returncode != 0 or result.get("is_error"):
-            why = str(result.get("result") or (errors[0] if errors else "no output"))[:150]
+            # the last stderr line is the one that stopped it (earlier ones are warnings)
+            why = str(result.get("result") or (errors[-1] if errors else "no output"))[:150]
             message = (f"labpipe: the AI run stopped with an error ({why}); "
                        f"{len(todo_ids) - len(finished)} of {len(todo_ids)} measurement(s) still "
                        "waiting. " + _ask_agent(config, "check the last automatic run"))

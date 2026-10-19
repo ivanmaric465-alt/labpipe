@@ -133,6 +133,14 @@ def image_tag(cfg: dict) -> str:
 
 # ---- the run command -----------------------------------------------------------------
 
+def _host_path(path: Path) -> str:
+    """`~/…` for a path under the home folder (as people know it), else the full path."""
+    try:
+        return "~/" + path.resolve().relative_to(Path.home().resolve()).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def host_ids() -> tuple[int, int]:
     """User and group id the container writes files as (Windows has none: 1000/1000)."""
     if hasattr(os, "getuid"):
@@ -200,7 +208,8 @@ def run_args(config: dict, engine: str, *, image_id: str = "", engine_text: str 
     env = {"LABPIPE_UID": uid, "LABPIPE_GID": gid,
            "LABPIPE_ROOT_PATHS": ",".join(f"{i}=/data/{i}" for i, _ in mounts),
            "LABPIPE_ALLOWED_HOSTS": ",".join(allowed_hosts(config)),
-           "LABPIPE_IMAGE_ID": image_id, "LABPIPE_ENGINE": engine_text}
+           "LABPIPE_IMAGE_ID": image_id, "LABPIPE_ENGINE": engine_text,
+           "LABPIPE_HOST_ROOT": _host_path(_root())}   # for messages that name the folder
     zone = host_timezone()
     if zone:
         env["TZ"] = zone

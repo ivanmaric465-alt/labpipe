@@ -505,7 +505,7 @@ def test_watcher_sees_unrecognised_files_but_not_system_files(tmp_path):
 def test_a_failed_ai_run_is_reported_as_an_error(tmp_path):
     project, raw, env = _project(tmp_path)
     fake = tmp_path / "claude"
-    fake.write_text("#!/bin/sh\necho 'Error: something broke' >&2\nexit 1\n")
+    fake.write_text("#!/bin/sh\necho 'Warning: only a warning' >&2\necho 'Error: something broke' >&2\nexit 1\n")
     fake.chmod(0o755)
     with open(project / "config" / "local.yaml", "a") as stream:
         stream.write(f"agents: {{harness: claude-code}}\nautomation: {{claude: '{fake}', "
