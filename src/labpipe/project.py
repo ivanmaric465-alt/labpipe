@@ -95,7 +95,9 @@ def _header(source: str) -> str:
 def _with_additions(source: str, project: Path) -> bytes:
     text = agents.readable_code_paths((CODE_ROOT / source).read_text(encoding="utf-8"))
     try:
-        lab = (project / LAB_FILE).read_text(encoding="utf-8").strip()
+        lab = agents.without_comments((project / LAB_FILE).read_text(encoding="utf-8"))
+        if all(line.startswith("#") for line in lab.splitlines() if line.strip()):
+            lab = ""         # only the template's heading: nothing written yet
     except OSError:
         lab = ""
     section = f"\n\n{ADDITIONS}\n\n{lab or '(nothing yet)'}\n"

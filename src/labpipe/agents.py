@@ -46,6 +46,11 @@ HARNESS_DIRS = {"claude-code": Path(".claude/agents"), "opencode": Path(".openco
                 "codex": Path(".codex/agents")}
 HARNESSES = {name: PROJECT_ROOT / folder for name, folder in HARNESS_DIRS.items()}
 LAB_ROLES = "lab/agents"           # in the project: overlays and extra roles
+
+
+def without_comments(text: str) -> str:
+    """The lab's text without <!-- comments --> (explanations and examples in the templates)."""
+    return re.sub(r"<!--.*?-->", "", text, flags=re.S).strip()
 CODE_COPY = ".labpipe"             # in the project: the code-side files agents may read
 REQUIRED_KEYS = ("name", "role", "description")
 _BACKTICKED = re.compile(r"`([^`\n]+)`")
@@ -134,8 +139,10 @@ def load_roles(problems: list[str] | None = None,
         name = (meta or {}).get("name") or path.stem
         if name in by_name:      # an overlay: appended to that role (its frontmatter is ignored)
             role = by_name[name]
+            if not without_comments(body):
+                continue         # only comments (e.g. examples): nothing to add
             role["body"] = (role["body"].rstrip("\n") + f"\n\n## This lab's additions ({label})"
-                            f"\n\n{body.strip()}\n")
+                            f"\n\n{without_comments(body)}\n")
             role["text"] += f"\n--- overlay {label}\n{text}"
             role["origin"] += f" + {label}"
         elif meta is None:

@@ -495,3 +495,24 @@ def test_scan_analyze_report_and_replay_in_a_project_made_by_project_new(tmp_pat
     assert {p: p.read_bytes() for p in data.rglob("*") if p.is_file()} == raw_before
     # nothing of the project was written into the code folder
     assert not (REPO / "manifest.json").exists() and not (REPO / "analysis").exists()
+
+
+def test_untouched_lab_template_adds_nothing_and_comments_are_left_out(tmp_path):
+    from labpipe import agents
+    template = (agents.CODE_ROOT / "templates" / "project" / "LAB.md").read_text(encoding="utf-8")
+    assert agents.without_comments(template) == "# Conventions of this lab"   # heading only
+    assert "Vulcan" not in agents.without_comments(template)
+    text = "<!-- example: call it Vulcan -->\nWe answer in Croatian.\n"
+    assert agents.without_comments(text) == "We answer in Croatian."
+
+
+def test_generated_agents_md_says_nothing_yet_for_the_untouched_template(tmp_path):
+    from labpipe import project
+    folder = tmp_path / "p"
+    (folder / "lab").mkdir(parents=True)
+    (folder / "lab" / "LAB.md").write_text(
+        (project.CODE_ROOT / "templates" / "project" / "LAB.md").read_text(encoding="utf-8"),
+        encoding="utf-8")
+    text = project._with_additions("AGENTS.md", folder).decode("utf-8")
+    assert text.rstrip().endswith("## This lab's additions (lab/LAB.md)\n\n(nothing yet)".rstrip())
+    assert "Vulcan" not in text

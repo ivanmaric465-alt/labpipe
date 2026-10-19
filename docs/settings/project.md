@@ -21,7 +21,7 @@ labpipe project sync          # after a labpipe update, or a change in lab/
 | "we need our own agent role" | `lab/agents/<name>.md` starting with frontmatter (`name`, `role`, `description`, `capabilities`); see `lab/agents/README.md` |
 | "a second project" | `labpipe project new <another folder>`: its own settings, results, container and port |
 
-A file in `lab/agents/` that names no role (a typo) is reported by `labpipe project sync` and `labpipe doctor`, never dropped silently.
+Text inside `<!-- … -->` in these files is left out (the templates keep their explanations and examples there). A file in `lab/agents/` that names no role (a typo) is reported by `labpipe project sync` and `labpipe doctor`, never dropped silently.
 
 ## After a change
 
