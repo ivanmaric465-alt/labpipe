@@ -71,7 +71,7 @@ def run_path(config: dict, run: str) -> Path:
 
 
 def _rel(path: Path) -> str:
-    return str(path.relative_to(PROJECT_ROOT))
+    return path.relative_to(PROJECT_ROOT).as_posix()
 
 
 def _write_json(config: dict, path: Path, data: Any) -> None:
@@ -466,4 +466,4 @@ def run_headless(config: dict, question: str, budget_usd: float | None = None) -
     return {"status": "finished" if state == "verified" else "failed", "run": run,
             "path": info["path"], "state": state, "reason": reason or None,
             "cost_usd": result.get("total_cost_usd"),
-            "transcript": str(transcript.relative_to(PROJECT_ROOT))}
+            "transcript": transcript.relative_to(PROJECT_ROOT).as_posix()}

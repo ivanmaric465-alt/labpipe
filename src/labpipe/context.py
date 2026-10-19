@@ -40,11 +40,11 @@ def init(config: dict | None = None) -> dict[str, Any]:
     base = folder()
     created, kept = [], []
     for directory in (base, base / "documents"):
-        (kept if directory.is_dir() else created).append(str(directory.relative_to(PROJECT_ROOT)))
+        (kept if directory.is_dir() else created).append(directory.relative_to(PROJECT_ROOT).as_posix())
         directory.mkdir(parents=True, exist_ok=True)
     for name in FILES:
         target = base / name
-        label = str(target.relative_to(PROJECT_ROOT))
+        label = target.relative_to(PROJECT_ROOT).as_posix()
         if target.exists():
             kept.append(label)
             continue
@@ -133,7 +133,7 @@ def index(config: dict | None = None) -> dict[str, Any]:
             text, pages = _extract(path)
             atomic_write_text(target, text, config or None, pipeline=False)
             found[relative] = {"sha256": sha, "status": "indexed", "pages": pages,
-                               "text": str(target.relative_to(PROJECT_ROOT))}
+                               "text": target.relative_to(PROJECT_ROOT).as_posix()}
         except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
             found[relative] = {"sha256": sha, "status": "not indexed", "reason": str(exc),
                                "pages": None, "text": None}
@@ -150,4 +150,4 @@ def index(config: dict | None = None) -> dict[str, Any]:
             "not_indexed": {k: v["reason"] for k, v in found.items()
                             if v["status"] != "indexed"},
             "no_longer_in_documents": removed,
-            "index": str((base / ".text" / "index.json").relative_to(PROJECT_ROOT))}
+            "index": (base / ".text" / "index.json").relative_to(PROJECT_ROOT).as_posix()}

@@ -412,7 +412,7 @@ def test_report_shows_the_verified_analysis_with_links(config, project, monkeypa
 def test_report_says_when_the_analysis_is_out_of_date(config, project, monkeypatch):
     run = _run(config, project, _text())
     assert postdoc.verify(config, run)["ok"]
-    (project / "analysis/S-9/xrd/S-9_1.2.26/results.json").write_text('{"changed": 1}')
+    (project / "analysis/S-9/xrd/S-9_1.2.26/results.json").write_text('{"changed": 1}', encoding="utf-8")
     section = _section(config, monkeypatch, project)
     assert "Out of date:</strong> 1 result(s) changed" in section
 
@@ -423,7 +423,7 @@ def test_report_shows_a_newer_failed_run_and_the_last_good_one(config, project, 
     bad = _run(config, project, _text("a = 3.9500 Å"), question="Which samples again?")
     analysis = project / "analysis" / "_postdoc" / bad / "analysis.md"
     for n in range(3):
-        analysis.write_text(_text(f"a = 3.95{n}0 Å", question="Which samples again?"))
+        analysis.write_text(_text(f"a = 3.95{n}0 Å", question="Which samples again?"), encoding="utf-8")
         postdoc.verify(config, bad)
     section = _section(config, monkeypatch, project)
     assert "<em>Which samples again?</em>) did not pass its checks: 1 number(s)" in section
