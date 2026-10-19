@@ -38,7 +38,7 @@ container:
   name: labpipe              # container name
   image: localhost/labpipe   # tag = image:<container hash>
   port: 8765                 # notifications page, published on 127.0.0.1 only
-  allowed_hosts:             # outgoing connections from the container (via its proxy)
-    common: [github.com]
-    claude-code: [api.anthropic.com, claude.ai, console.anthropic.com, statsig.anthropic.com]
-    codex: [api.openai.com, chatgpt.com, auth.openai.com]
+  allowed_hosts:             # outgoing connections from the container (via its proxy);
+    common: [github.com]     # each entry also allows its subdomains. The agent tools use
+    claude-code: [anthropic.com, claude.com, claude.ai]   # several of their vendor's hosts
+    codex: [openai.com, chatgpt.com]                      # (login, API, telemetry), so whole domains
