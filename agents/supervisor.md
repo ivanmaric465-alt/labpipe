@@ -49,4 +49,5 @@ exact refusal message and stop. A refusal means the setup needs a human.
   inside the project.
 - Edit settings, code, references, results or the manifest; requeue stale entries; or
   retry a failed entry beyond what `labpipe scan` decides.
+- Start the `postdoc` agent or run `labpipe postdoc ...`: only the user asks for it.
 - Answer a `needs_review` question yourself (e.g. guess a sample ID). List it for the human.

@@ -249,9 +249,11 @@ def _analyse_code_only(config: dict, reason: str) -> list[str]:
     return done
 
 
-def _codex_command(config: dict, chosen: dict, last_message: Path) -> list[str]:
+def _codex_command(config: dict, chosen: dict, last_message: Path, agent: str = "supervisor",
+                   task: str | None = None) -> list[str]:
     """Codex: the main session acts as the supervisor (its role text is the prompt); the
-    analysts are .codex/agents/*.toml. Sandbox workspace-write (raw data outside the repo
+    analysts are .codex/agents/*.toml. `agent`/`task`: another role and its task
+    (`labpipe postdoc run`). Sandbox workspace-write (raw data outside the repo
     cannot be written), no approvals. --dangerously-bypass-hook-trust makes sure the
     project's labpipe guard hook (.codex/hooks.json) runs even if it was never trusted
     interactively; it also runs any hooks you enabled in ~/.codex yourself.
@@ -270,10 +272,11 @@ def _codex_command(config: dict, chosen: dict, last_message: Path) -> list[str]:
                            "project's rules, guard hook and agents: open the folder once in "
                            "Codex (`codex` there) and trust it")
     agents = config.get("agents") or {}
-    supervisor = next(r for r in load_roles() if r["role"] == "supervisor")
+    supervisor = next(r for r in load_roles() if agent in (r["name"], r["role"]))
     model = (agents.get("models") or {}).get(supervisor["name"]) or (
-        agents.get("models") or {}).get("supervisor")
-    effort = (agents.get("reasoning") or {}).get("supervisor")
+        agents.get("models") or {}).get(supervisor["role"])
+    effort = (agents.get("reasoning") or {}).get(supervisor["name"]) or (
+        agents.get("reasoning") or {}).get(supervisor["role"])
     command = [codex, "exec", "--json", "--ephemeral", "-s",
                "danger-full-access" if inside else "workspace-write",
                "-c", 'approval_policy="never"', "--dangerously-bypass-hook-trust",
@@ -282,14 +285,16 @@ def _codex_command(config: dict, chosen: dict, last_message: Path) -> list[str]:
         command += ["-m", model.split("/", 1)[1] if model.startswith("openai/") else model]
     if effort:
         command += ["-c", f'model_reasoning_effort="{effort}"']
-    return command + ["You are the labpipe `supervisor` agent. Run one pipeline pass now, "
-                      "following these instructions exactly:\n\n" + supervisor["body"]]
+    return command + [f"You are the labpipe `{agent}` agent. "
+                      + (f"{task} Follow" if task else "Run one pipeline pass now, following")
+                      + " these instructions exactly:\n\n" + supervisor["body"]]
 
 
-def _harness_command(config: dict, chosen: dict, last_message: Path) -> list[str]:
+def _harness_command(config: dict, chosen: dict, last_message: Path, agent: str = "supervisor",
+                     task: str | None = None, budget_usd: float | None = None) -> list[str]:
     harness = (config.get("agents") or {}).get("harness")
     if harness == "codex":
-        return _codex_command(config, chosen, last_message)
+        return _codex_command(config, chosen, last_message, agent, task)
     if harness != "claude-code":
         raise RuntimeError(f"unattended runs are supported with harness claude-code or codex "
                            f"(configured: {harness!r})")
@@ -297,12 +302,12 @@ def _harness_command(config: dict, chosen: dict, last_message: Path) -> list[str
     claude = "claude" if inside else chosen.get("claude") or shutil.which("claude")
     if not claude:
         raise RuntimeError("the `claude` command was not found; set automation.claude")
-    return [claude, "-p", "Run one pipeline pass.", "--agent", "supervisor",
+    return [claude, "-p", task or "Run one pipeline pass.", "--agent", agent,
             "--setting-sources", "project", "--strict-mcp-config",
             "--permission-mode", "dontAsk", "--settings",
             ".claude/unattended-container.json" if inside else ".claude/unattended.json",
             "--output-format", "stream-json", "--verbose",
-            "--max-budget-usd", str(chosen["max_budget_usd"])]
+            "--max-budget-usd", str(budget_usd or chosen["max_budget_usd"])]
 
 
 def _describe(config: dict, ids: list[str]) -> str:
