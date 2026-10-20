@@ -104,7 +104,14 @@ def _code_copy(tmp_path) -> Path:
         shutil.copy(REPO / item, code / item)
     for lab in ("local", "lab", "samples", "sample_ids", "ignore"):
         (code / "config" / f"{lab}.yaml").unlink(missing_ok=True)
+    shutil.rmtree(code / ".claude" / "agents", ignore_errors=True)   # generated, git-ignored
     return code
+
+
+def _repo_state() -> dict:
+    """The repository's own project files (a developer's checkout may already have some)."""
+    files = [REPO / "manifest.json", *(REPO / "analysis").rglob("*")]
+    return {p: p.stat().st_mtime_ns for p in files if p.is_file()}
 
 
 def _run(args, cwd, **env):
@@ -463,6 +470,7 @@ def test_scan_analyze_report_and_replay_in_a_project_made_by_project_new(tmp_pat
     x, y = synthetic_pattern(peaks)
     (data / "XRD" / "S-9_scan.xrdml").write_text(xrdml_text(x, y, "S-9"), encoding="utf-8")
     raw_before = {p: p.read_bytes() for p in data.rglob("*") if p.is_file()}
+    repo_before = _repo_state()
     cwd = tmp_path / "work"
     cwd.mkdir()
     status, made = _run(["project", "new", str(cwd / "films"), "--data", str(data),
@@ -495,7 +503,7 @@ def test_scan_analyze_report_and_replay_in_a_project_made_by_project_new(tmp_pat
     assert replayed["replay_dir"].startswith("logs/replay/")
     assert {p: p.read_bytes() for p in data.rglob("*") if p.is_file()} == raw_before
     # nothing of the project was written into the code folder
-    assert not (REPO / "manifest.json").exists() and not (REPO / "analysis").exists()
+    assert _repo_state() == repo_before
 
 
 def test_untouched_lab_template_adds_nothing_and_comments_are_left_out(tmp_path):
