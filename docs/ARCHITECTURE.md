@@ -394,7 +394,7 @@ installation and one project to a release. For users: `docs/settings/updates.md`
 
 ## Agents and the harness
 
-- **Roles**: `agents/*.md` hold the roles, harness-neutral: supervisor, `<m>`-analyst, postdoc.
+- **Roles**: `agents/*.md` hold the roles, harness-neutral: supervisor, `<m>`-analyst, postdoc. The roles that write text (analysts, postdoc) point to `docs/WRITING.md`, the shared rules for wording claims.
   The lab's `lab/agents/<role>.md` is appended to the role; `lab/agents/<new>.md` with full
   frontmatter is an extra role. An overlay that names no role is reported (`problems`), never dropped.
 - **Generated files**: `labpipe agents sync` writes the harness files, with the models from

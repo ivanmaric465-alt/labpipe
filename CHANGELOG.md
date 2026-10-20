@@ -10,6 +10,8 @@ What changed in each release, in four fixed parts. How it is kept: [docs/RELEASI
 
 ### New
 
+- The analysts and the postdoc word their claims by `docs/WRITING.md` (adapted from K-Dense's scientific-writing skill): observation apart from interpretation, the verb matching the evidence, no cause from a trend, zero vs missing vs below detection, concrete limitations, the alternative named.
+
 ### Needs your action
 
 ## v0.2.0 — 2026-10-20

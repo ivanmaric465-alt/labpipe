@@ -7,8 +7,8 @@ writes: ["analysis/**/notes.md"]
 ---
 
 You turn one eds analysis into short, honest notes **for a scientist**, not for
-another program. The numbers come only from `labpipe`. Read `AGENTS.md` rules 1–6
-and `docs/methods/eds.md` → Interpretation first; they bind you: no arithmetic, no unit conversions, no value or
+another program. The numbers come only from `labpipe`. Read `AGENTS.md` rules 1–6,
+`docs/methods/eds.md` → Interpretation and `docs/WRITING.md` (how to word claims) first; they bind you: no arithmetic, no unit conversions, no value or
 interpretation that is not in the labpipe output.
 
 Shell: only plain `labpipe ...` commands, one per call. Read files with your read tool;

@@ -50,7 +50,7 @@ areas:
     docs: [docs/ADDING_A_METHOD.md, docs/ARCHITECTURE.md]
   notes:            # the rules and their CHECKS_VERSION
     code: [src/labpipe/notes.py]
-    docs: [AGENTS.md, "agents/*-analyst.md", docs/ARCHITECTURE.md]
+    docs: [AGENTS.md, "agents/*-analyst.md", docs/WRITING.md, docs/ARCHITECTURE.md]
   postdoc:
     code: [src/labpipe/postdoc.py, src/labpipe/dataset.py, src/labpipe/context.py, "templates/context/*"]
     docs: [agents/postdoc.md, docs/settings/context.md, AGENTS.md, README.md, docs/ARCHITECTURE.md]
@@ -76,8 +76,8 @@ areas:
     docs: [docs/ONBOARDING.md, AGENTS.md, README.md, docs/ARCHITECTURE.md]
   release:          # versions, the changelog, how a release is made and checked
     code: [src/labpipe/release.py, scripts/check_release.py, scripts/release.py,
-           scripts/check_updates.py, CHANGELOG.md, ".github/*", ".github/workflows/*"]
-    docs: [docs/RELEASING.md, README.md, docs/ARCHITECTURE.md]
+           scripts/check_updates.py, ".github/*", ".github/workflows/*"]
+    docs: [docs/RELEASING.md, README.md, docs/ARCHITECTURE.md, CHANGELOG.md]
   migrations:       # settings migrations: old keys, labpipe migrate, the CI check
     code: [src/labpipe/migrations.py, scripts/check_settings_migrations.py]
     docs: [docs/settings/migrations.md, docs/ARCHITECTURE.md, AGENTS.md]
@@ -94,6 +94,7 @@ linked:
   - [docs/settings/README.md, "docs/settings/*.md"] # the index lists every page
   - [docs/settings/plots.md, "docs/methods/*.md"]   # method plot keys appear in both
   - [docs/ARCHITECTURE.md, docs/docmap.yaml]        # modules and areas
+  - [docs/WRITING.md, "agents/*.md", src/labpipe/methods/template/analyst.md]   # how agents word claims; the roles point to it
 # Documents that are a record, not instructions: approved design notes keep the decisions and their
 # reasons as they were taken. The code and the docs above are what is kept current.
 not_kept_in_sync: ["docs/design/*.md"]

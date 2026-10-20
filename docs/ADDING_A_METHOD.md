@@ -39,7 +39,7 @@ Creates (never overwrites). In a project, only inside `lab/`, never in the code:
 | `lab/methods/sem/analyze.py` (dev: `src/labpipe/methods/sem/analyze.py`) | replace the reading and numerics sections |
 | `lab/methods/sem/config.yaml` (dev: `config/sem.yaml`) | every tunable number, with a comment |
 | `lab/methods.yaml` → `sem` (dev: `methods.yaml`) | patterns from the example's extension; narrow them if needed |
-| `lab/agents/sem-analyst.md` (dev: `agents/sem-analyst.md`) | what to look at in the plot, what the notes say |
+| `lab/agents/sem-analyst.md` (dev: `agents/sem-analyst.md`) | what to look at in the plot, what the notes say (worded by `docs/WRITING.md`, which the role already points to) |
 | `lab/methods/sem/README.md` (dev: `docs/methods/sem.md`) | the design note |
 | dev only: `tests/test_sem.py` | a synthetic example with a known answer |
 

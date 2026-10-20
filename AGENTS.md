@@ -29,7 +29,7 @@ Run `labpipe doctor` first (it only reads). If `ready` is true, go to what the u
    - Every number in `notes.md` or in a reply must be copied from a `results.json` (cite its key path), or come from a `labpipe` command's output.
    - No mental arithmetic, no unit conversions done by hand.
    - If a number you need isn't in `results.json`, say so. Don't compute it.
-3. **No invented interpretations.** Name only what the results contain (phases, elements, features), worded as the method's doc says (`docs/methods/<method>.md` → Interpretation): "consistent with", "closest reference", never "is".
+3. **No invented interpretations.** Name only what the results contain (phases, elements, features), worded as the method's doc says (`docs/methods/<method>.md` → Interpretation): "consistent with", "closest reference", never "is". How to word claims in notes, analyses and replies (observation vs interpretation, no cause from a trend, zero vs missing vs below detection): `docs/WRITING.md`.
 4. **Uncertainty is explicit.** Report σ where `results.json` has it. Every `review`-severity check is mentioned in the notes ("Check before using").
 5. **Code is not changed during analysis work.** To change how a sample is analysed, edit settings (below). Code changes are separate tasks, with tests and a commit.
 6. **Nothing is deleted.** Reruns move old outputs to `_superseded/`; failures go to `_failed/`.
