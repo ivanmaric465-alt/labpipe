@@ -17,6 +17,7 @@
   labpipe <method> check --entry ID         print the deterministic checks of an entry
   labpipe <method> summary --entry ID       compact human-readable summary (if the method has one)
   labpipe report                            write analysis/report.html (overview for people)
+  labpipe migrate [--apply [--yes]]         settings files that use old names: show the change, or apply it (backup first)
   labpipe project new FOLDER [--data PATH]... [--name NAME]   create a project (a folder with labpipe.yaml)
   labpipe project sync                      regenerate AGENTS.md, CLAUDE.md, .labpipe/, harness files
   labpipe agents sync|status                generate the harness's agent files from agents/*.md (+ lab/agents/)
@@ -146,6 +147,48 @@ def cmd_methods(args, config) -> int:
     return 0 if result["ok"] else 1
 
 
+def cmd_migrate(args, config) -> int:
+    """Settings migrations (labpipe.migrations): the plan, or with --apply the change."""
+    from datetime import datetime, timezone
+    from labpipe import migrations
+    planned = migrations.plan(PROJECT_ROOT)
+    shown = [{"file": item["file"], "migrations": item["migrations"],
+              "comments_kept": item["comments_kept"], "diff": item["diff"]} for item in planned]
+    if not planned:
+        _print({"pending": 0, "files": [], "message": "the settings files use the current names"})
+        return 0
+    if not args.apply:
+        _print({"pending": len(planned), "files": shown, "applied": False,
+                "next": ["show the user the diffs; `labpipe migrate --apply` changes the files "
+                         "(a backup is made first) and asks first"]})
+        return 0
+    if not args.yes:
+        if not sys.stdin.isatty():
+            _print({"error": "`labpipe migrate --apply` asks for confirmation: run it in a "
+                    "terminal, or add --yes (after the user agreed)"})
+            return 2
+        for item in shown:
+            print(f"{item['file']}: " + "; ".join(m["description"] for m in item["migrations"])
+                  + ("" if item["comments_kept"] else "   (comments in this file are not kept)")
+                  + f"\n{item['diff']}\n", file=sys.stderr)
+        if input(f"Change {len(planned)} file(s)? A backup is kept. [y/N] ").strip().lower() \
+                not in ("y", "yes"):
+            _print({"pending": len(planned), "applied": False, "message": "nothing changed"})
+            return 1
+    backup = PROJECT_ROOT / "backups" / f"migrate-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}"
+    try:
+        written = migrations.apply(PROJECT_ROOT, planned, backup)
+    except migrations.MigrationError as exc:
+        _print({"error": str(exc)})
+        return 1
+    _print({"applied": True, "files": written,
+            "backup": backup.relative_to(PROJECT_ROOT).as_posix(),
+            "comments_lost": [i["file"] for i in planned if not i["comments_kept"]],
+            "next": ["`labpipe doctor`", "results are not changed; settings that mean something "
+                     "else now may make entries out of date (`labpipe status`)"]})
+    return 0
+
+
 def cmd_inventory(args, config) -> int:
     from labpipe.inventory import inventory
     _print(inventory(config))
@@ -154,7 +197,10 @@ def cmd_inventory(args, config) -> int:
 
 def cmd_notes_verify(args, config) -> int:
     from labpipe.notes import verify_entry
+    from labpipe.notes import record_check
     result = verify_entry(config, args.entry)
+    if result["ok"] and not result.get("checked_with"):   # (those passed under older rules)
+        record_check(config, result)
     if result["ok"]:
         result["report"] = _refresh_report(config)
     _print(result)
@@ -535,6 +581,11 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--baseline", action="store_true",
                       help="record files seen for the first time as 'baseline' (not analysed)")
     scan.set_defaults(func=cmd_scan)
+    migrate = sub.add_parser("migrate", help="settings files that use old names: show what would "
+                             "change; --apply changes them (backup first)")
+    migrate.add_argument("--apply", action="store_true", help="make the change (asks first)")
+    migrate.add_argument("--yes", action="store_true", help="with --apply: do not ask")
+    migrate.set_defaults(func=cmd_migrate, needs_config=False)
     sub.add_parser("inventory", help="what labpipe recognises in the data folder(s)"
                    ).set_defaults(func=cmd_inventory)
     methods_parser = sub.add_parser("methods", help="scaffold a new analysis method, check one, show versions"

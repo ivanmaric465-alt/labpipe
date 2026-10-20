@@ -26,7 +26,7 @@ from typing import Any
 
 import yaml
 
-from labpipe import __version__, agents, labmethods
+from labpipe import __version__, agents, labmethods, migrations
 from labpipe.registry import shipped_methods
 from labpipe.provenance import utc_now
 from labpipe.safety import (CODE_ROOT, FIXED_GENERATED, GENERATED_DIR, GENERATED_RECORD, PROJECT_FILE, PROJECT_ROOT, atomic_write_bytes,
@@ -69,7 +69,8 @@ def read_project(project: Path | None = None) -> dict[str, Any]:
             encoding="utf-8"))
     except (OSError, yaml.YAMLError):
         return {}
-    return data if isinstance(data, dict) else {}
+    return migrations.upgraded(Path(project or PROJECT_ROOT) / PROJECT_FILE, data,
+                               Path(project or PROJECT_ROOT)) if isinstance(data, dict) else {}
 
 
 def project_name(project: Path | None = None) -> str:

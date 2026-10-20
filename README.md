@@ -282,9 +282,12 @@ git -C ~/.local/share/labpipe/app pull
 ~/.local/share/labpipe/app/install.sh --no-setup
 cd ~/labpipe-projects/<name>
 labpipe project sync
+labpipe migrate                      # settings an update renamed or moved: shows the change, changes nothing
 labpipe container start --replace    # rebuilds the image if the code changed
 labpipe doctor
 ```
+
+If `labpipe migrate` lists changes, `labpipe migrate --apply` makes them after asking, with a backup in `backups/migrate-<time>/` ([docs/settings/migrations.md](docs/settings/migrations.md)); old names keep working, with a warning, for one release. Notes and postdoc analyses that passed the checks stay valid when a release makes the checks stricter; the report then says "checked with the rules of labpipe <version>".
 
 An update marks `stale` only the analyses of methods whose calculation changed (`labpipe methods versions` shows each method's version); docs, report, agent or other-method changes leave them alone. Stale analyses stay valid. Redo them only if you want to:
 

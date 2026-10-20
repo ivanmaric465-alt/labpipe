@@ -170,6 +170,23 @@ def _project() -> list[dict[str, Any]]:
                   + "; ".join(detail) + ")", "run `labpipe project sync`", mode="project")]
 
 
+def _settings_migrations() -> list[dict[str, Any]]:
+    """Settings files that still use names an update has changed (not blocking: old names keep
+    working for one release)."""
+    from labpipe import migrations
+    try:
+        pending = migrations.plan(PROJECT_ROOT)
+    except Exception:       # doctor must not fail because of this check
+        return []
+    if not pending:
+        return []
+    return [_item("settings_migrations", "warn",
+                  f"{len(pending)} settings file(s) use old names: run labpipe migrate "
+                  f"({', '.join(item['file'] for item in pending[:4])})",
+                  "show the user `labpipe migrate` (what it would change); apply it with "
+                  "`labpipe migrate --apply` only with their OK", files=len(pending))]
+
+
 def _container() -> list[dict[str, Any]]:
     """Container mode on this computer: running, up to date, logged in."""
     from labpipe.container import ContainerError, status_record
@@ -345,6 +362,7 @@ def run() -> dict[str, Any]:
                 "ready": False, "next": {"check": "lab_methods", "do": items[-1]["next"]},
                 "checks": items}
     items += _project()
+    items += _settings_migrations()
     local = PROJECT_ROOT / "config" / "local.yaml"
     try:
         config = load_pipeline_config()

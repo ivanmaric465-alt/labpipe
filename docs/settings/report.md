@@ -36,6 +36,10 @@ labpipe report      # rebuild now; prints the reports written
 | "too long, only plots and numbers" | `cards: compact` |
 | "a separate page for the S-1x series" | `extra: {s1x: {samples: ["S-1*"]}}` |
 
+## Notes checked with older rules
+
+The checks on notes and on the postdoc's analyses get stricter with some releases. Text that passed before is not failed or rewritten because of that: the card (or the postdoc's section) stays as passed and shows a small line, "checked with the rules of labpipe <version>". Notes that really fail the rules they were checked with show the warning as before.
+
 ## After a change
 
 Only the report is rebuilt: no re-analysis, no AI. An extra you remove from the settings keeps its old file (nothing is deleted); delete it yourself if you like.

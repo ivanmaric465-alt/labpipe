@@ -33,7 +33,7 @@ from typing import Any
 
 import yaml
 
-from labpipe import labmethods
+from labpipe import labmethods, migrations
 from labpipe.registry import shipped_methods
 from labpipe.safety import CODE_ROOT, PROJECT_ROOT
 
@@ -64,7 +64,9 @@ def _source(path: Path, digest: str | None, layer: str, root: str = "project") -
 
 def _load(path: Path) -> tuple[dict[str, Any], str]:
     raw = path.read_bytes()
-    return (yaml.safe_load(raw) or {}), hashlib.sha256(raw).hexdigest()
+    # the digest is of the file as written; old key names are understood (migrations.py)
+    data = migrations.upgraded(path, yaml.safe_load(raw) or {}, CONFIG.parent)
+    return data, hashlib.sha256(raw).hexdigest()
 
 
 def _check_keys(override: dict[str, Any], base: dict[str, Any], where: str, prefix: str = ""):

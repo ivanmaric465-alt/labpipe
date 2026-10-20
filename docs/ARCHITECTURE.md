@@ -178,8 +178,8 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | | `plotting/acs.py` | style from settings, figure saving, margins |
 | Results for people | `report.py` | HTML report: layouts, cards, galleries, the postdoc section, extra reports |
 | | `dataset.py` | quantities of all samples; `compare` (differences, trends) |
-| | `notes.py` | `notes verify` (numbers vs results), `todo`, `retire` |
-| | `postdoc.py` | postdoc runs: start, verify, freshness, list, headless run |
+| | `notes.py` | `notes verify` (numbers vs results; `CHECKS_VERSION`, `notes_check` in the manifest), `todo`, `retire` |
+| | `postdoc.py` | postdoc runs: start, verify (`CHECKS_VERSION`), freshness, list, headless run |
 | | `context.py` | `context/` init and text index of documents |
 | Agents | `agents.py` | `agents/*.md` (+ the lab's overlays and extra roles) → harness files, models per role |
 | | `project.py` | `project new`; `project sync`: the generated files of a project, `generated.json`, status for doctor |
@@ -187,7 +187,8 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | Automation | `automation.py` | watcher, one pass, nightly run, notifications, headless agent commands |
 | | `inbox.py` | notifications page (local, token, read-only) |
 | | `container.py` | build (staged context), start (name, port, mounts per project), stop, login, shell, pop-up proxy; forwarding of host commands |
-| Setup | `doctor.py` | setup state and next step (read-only) |
+| Setup | `doctor.py` | setup state and next step (read-only; also `settings_migrations`) |
+| | `migrations.py` | settings migrations: `labpipe migrate`, old keys understood in memory for one release (host side, no numpy) |
 | | `wizard.py` | `labpipe setup` (asks in the terminal) |
 | | `installer.py` | `labpipe setup --first`: the installer's questions (tools present, agent tool, models, login, first project, start) |
 | | `release.py` | the version, `CHANGELOG.md` (parse, entries between two versions), release tags and the state of a git checkout; `labpipe --version` |
@@ -272,6 +273,50 @@ characters, stored per entry in `manifest.json` and in `provenance.json` → `co
   otherwise it is stale ("analysed before per-method versions; redo to be sure").
 - **Replay** still compares the git commit; the versions show whether a commit changed anything.
 
+## Settings migrations and versioned checks
+
+Two things a release must not do to an existing project: refuse its settings, or fail its old notes.
+
+- **Settings migrations** (`migrations.py`). A release that renames a key (`rename`), moves it
+  (`move`), drops it (`remove`) or changes what a value means (`transform`) adds a `Migration` to
+  `migrations.MIGRATIONS` (`method_setting()` makes the three for a method key: `lab.yaml`,
+  `samples.yaml`, `config/measurements/<m>/`), with a test in `tests/test_migrations.py`.
+  - *Pending* is decided from the file's content (the old key is there, or a transform's function
+    would change the value), so no record of applied migrations exists.
+  - `plan(project)` returns one item per file that would change (`before`, `after`, a diff,
+    `comments_kept`); `apply(project, planned, backup_dir)` backs the files up, refuses if one
+    changed since the plan, then writes. `labpipe migrate [--apply [--yes]]` is the command
+    (host side), `doctor` shows `settings_migrations`.
+  - Renames and plain values are edited in the text, so comments stay (also inside one-line
+    `{a: 1}`); after each edit the file is parsed again and must equal what the operation does to
+    the data, else `safe_dump` writes it and the plan says `comments_kept: False`. A move
+    does that too.
+  - **Old keys keep working for one release**: the loaders of the project's settings files
+    (`settings._load`, `local.yaml`, `samples.yaml`, `sample_ids.yaml`, `ignore.yaml`,
+    `labpipe.yaml`, the lab methods' defaults) call `migrations.upgraded`, which applies the
+    migrations of the newest release (and "Unreleased") to the parsed data and warns once per file on
+    stderr. The unknown-key check runs after it, so typos still fail. The hash recorded in
+    `provenance.json` is of the file as written.
+  - **CI** (`scripts/check_settings_migrations.py`, next to the docs check): a key path of a
+    shipped settings file (`plots.yaml`, `report.yaml`, `pipeline.yaml`, `*.example.yaml`, each
+    method's default file) that is gone since the base commit must be covered by a migration's
+    `old_keys` and `files`, in every file a user spells it in. An "Unreleased" migration must
+    be named in `CHANGELOG.md` under "Settings migrated" (skipped without a changelog).
+- **Versioned checks** (`notes.CHECKS_VERSION`, `postdoc.CHECKS_VERSION`).
+  - A passing `labpipe notes verify` records `notes_check` (rules, labpipe version, sha256 of notes
+    and results) in the manifest entry; a postdoc `verify.json` holds `rules` and `labpipe`.
+  - If the rules were made stricter and these exact notes (same text, same results) passed
+    under older rules, `verify_entry` says ok with `checked_with`, and the report adds "checked
+    with the rules of labpipe X". `notes todo` compares only results hashes, so a rule change
+    never queues a note. A postdoc analysis that passed is not checked again. Notes verified
+    before the version was recorded have no `notes_check`: run `labpipe notes verify` on them
+    with the old release before it is replaced.
+  - `tests/test_checks_versions.py` fingerprints the rule code; when it changes the test fails
+    until `CHECKS_VERSION` is bumped (if stricter) and the fingerprint is updated.
+
+**For developers**: renaming or removing a settings key needs a migration with a test; making
+the notes or postdoc rules stricter needs a `CHECKS_VERSION` bump.
+
 ## Agents and the harness
 
 - **Roles**: `agents/*.md` hold the roles, harness-neutral: supervisor, `<m>`-analyst, postdoc.
@@ -318,6 +363,7 @@ One container per project.
 | Path | Written by |
 |---|---|
 | `labpipe.yaml`, `lab/`, `config/` lab files | `project new` creates them; then the user, or an agent with the user's OK |
+| `backups/migrate-<UTC>/` | `labpipe migrate --apply` (copies of the settings files it changed) |
 | `AGENTS.md`, `CLAUDE.md`, `.labpipe/`, `.claude/*.json`, `.codex/`, `.agents/` | `project sync` (generated; agents never write them) |
 | `manifest.json` | scanner, pipeline (locked) |
 | `analysis/<sample>/<method>/<m>/` | pipeline (code); `notes.md` by the analyst agent |
@@ -340,6 +386,10 @@ One container per project.
   settings, the generated files and overlays, dev mode, the guard, and a scan, analysis, report
   and replay in a project made by `project new`.
 - `tests/test_release.py`: version equality, the changelog format, entries between versions, release tags, the check for announced changes (also on a copy of the code), the release script's changelog change, the dependency updater (no network). The installer's switch to the newest release is in `tests/test_install.py`.
+- `tests/test_migrations.py`: the plan, comments kept, apply and backups, old keys for one release
+  in the loaders, the command, doctor and the CI check (host-side: runs on Python 3.10 without numpy).
+- `tests/test_checks_versions.py`: the rule fingerprints and the versions of the notes checks
+  (the postdoc's and the report's side are in `tests/test_postdoc.py` and `tests/test_report.py`).
 - `tests/test_encoding.py`: every text read and write names UTF-8 (Windows would otherwise use
   another code page).
 - `tests/test_docs.py` checks the docs against the code where it can be done mechanically:

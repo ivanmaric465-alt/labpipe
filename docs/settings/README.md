@@ -14,6 +14,9 @@ Your changes go in your project's own files (`config/`, `lab/`; never committed)
 | automatic processing, notifications, pop-ups | [automation.md](automation.md) | `config/local.yaml` → `automation` |
 | what the postdoc knows about the project | [context.md](context.md) | `context/` |
 | the container (port, engine, allowed hosts) | [container.md](container.md) | `config/local.yaml` → `container` |
+| settings that an update renamed or moved (old names, backup) | [migrations.md](migrations.md) | `labpipe migrate` |
+
+After a labpipe update, `labpipe migrate` shows whether your settings files use names that changed (see [migrations.md](migrations.md)); old names keep working, with a warning, for one release.
 
 Easiest: tell your agent what you want in your own words ("bigger fonts", "group the report by method"); it finds the setting on these pages, changes it with your OK and shows you the result.
 

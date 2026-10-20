@@ -18,6 +18,10 @@ markers and inline code are not numbers). Also exempt here: the question text, t
 timestamps, page numbers after "p."/"pp.", and `documents/...` file names. As with notes, a
 number is checked as "found somewhere in the sources", not "used in the right place".
 
+The rules are versioned (CHECKS_VERSION): verify.json records the version and labpipe's release.
+An analysis that passed keeps passing when a later release makes the rules stricter (its text is
+not checked again), and the report says "checked with the rules of labpipe X".
+
 Attempts are counted per distinct analysis.md; the third failed attempt records the run as
 failed (verify.json lists the reasons) and later calls change nothing.
 """
@@ -40,6 +44,7 @@ from labpipe.notes import _matches, _walk_numbers, numbers_in_notes
 from labpipe.provenance import sha256_file, utc_now
 from labpipe.safety import PROJECT_ROOT, assert_pipeline_writable, atomic_write_text
 
+CHECKS_VERSION = 1      # bump when the rules in `_check` get stricter (like notes.CHECKS_VERSION)
 RUN_ID = re.compile(r"^\d{8}T\d{6}Z(?:-\d+)?$")
 MAX_ATTEMPTS = 3
 PARTS = {"Question": r"question", "Summary": r"summary", "Check before using": r"check before using"}
@@ -337,7 +342,8 @@ def verify(config: dict, run: str) -> dict[str, Any]:
     ok = not checked["problems"]
     state = "verified" if ok else "failed" if attempts >= MAX_ATTEMPTS else "retry"
     result = {"schema": "labpipe.postdoc.verify/1", "run": path.name, "utc": utc_now(), "ok": ok,
-              "state": state, "attempts": attempts, "max_attempts": MAX_ATTEMPTS,
+              "state": state, "rules": CHECKS_VERSION, "labpipe": __version__,
+              "attempts": attempts, "max_attempts": MAX_ATTEMPTS,
               "analysis_sha256": sha, **checked,
               "history": [*previous.get("history", []),
                           {"attempt": attempts, "utc": utc_now(), "ok": ok,
@@ -365,6 +371,14 @@ def _state(path: Path) -> str:
     return "unverified"
 
 
+def _rules(path: Path) -> dict[str, Any]:
+    """The rules a run's analysis passed (verify.json before the versions were recorded: 1)."""
+    recorded = _read_json(path / "verify.json") or {}
+    rules = recorded.get("rules", 1)
+    return {"rules": rules, "labpipe": recorded.get("labpipe"),
+            "older_rules": bool(recorded.get("ok")) and rules < CHECKS_VERSION}
+
+
 def list_runs(config: dict) -> list[dict[str, Any]]:
     base = runs_dir(config)
     if not base.is_dir():
@@ -379,6 +393,7 @@ def list_runs(config: dict) -> list[dict[str, Any]]:
         rows.append({"run": path.name, "path": _rel(path), "question": request.get("question"),
                      "utc": request.get("utc"), "model": request.get("model"),
                      "harness": request.get("harness"), "state": _state(path),
+                     **_rules(path),
                      "freshness": None if fresh is None else
                      {k: (v if isinstance(v, bool) else len(v)) for k, v in fresh.items()}})
     return rows

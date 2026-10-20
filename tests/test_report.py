@@ -226,3 +226,16 @@ def test_building_changes_nothing_else(project, config):
     assert {p for p in after if p not in before} == {project / "analysis" / "report.html",
                                                      project / "analysis" / "report-x.html"}
     assert all(after[p] == before[p] for p in before)
+
+
+def test_notes_that_passed_under_older_rules_are_shown_as_passed_with_a_line(
+        project, config, monkeypatch):
+    monkeypatch.setattr(report, "verify_entry", lambda config, eid: {
+        "ok": True, "checked_with": {"rules": 1, "labpipe": "v0.3.0"}})
+    _, page = build(project, config)
+    assert "PLAINWORDS" in page and "did not pass" not in page
+    assert page.count("checked with the rules of labpipe v0.3.0") == 1      # the one with notes
+    monkeypatch.setattr(report, "verify_entry", lambda config, eid: {"ok": False})
+    assert "did not pass" in build(project, config)[1]
+    monkeypatch.setattr(report, "verify_entry", lambda config, eid: {"ok": True})
+    assert "checked with the rules" not in build(project, config)[1]

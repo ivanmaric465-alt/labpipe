@@ -439,3 +439,44 @@ def test_no_cost_limit_unless_set(config, project):
     command = automation._harness_command(config, {**chosen, "max_budget_usd": 3}, project / "l.md")
     assert command[command.index("--max-budget-usd") + 1] == "3"
     assert automation._budget("none") is None and automation._budget("") is None
+
+
+# ---- the checks are versioned ------------------------------------------------------------
+
+def test_verify_records_the_rules_and_the_release(config, project):
+    from labpipe import __version__
+    run = _run(config, project, _text())
+    result = postdoc.verify(config, run)
+    assert result["ok"] and result["rules"] == postdoc.CHECKS_VERSION == 1
+    assert result["labpipe"] == __version__
+    row = postdoc.list_runs(config)[0]
+    assert row["rules"] == 1 and row["older_rules"] is False
+
+
+def test_an_analysis_that_passed_stays_verified_when_the_rules_get_stricter(
+        config, project, monkeypatch):
+    run = _run(config, project, _text())
+    assert postdoc.verify(config, run)["ok"]
+    monkeypatch.setattr(postdoc, "CHECKS_VERSION", 2)
+    row = postdoc.list_runs(config)[0]
+    assert row["state"] == "verified" and row["older_rules"] is True and row["rules"] == 1
+    again = postdoc.verify(config, run)
+    assert again["ok"] and again["unchanged"] and again["rules"] == 1     # not checked again
+    # a verify.json from before the versions were recorded passed under rules 1
+    path = project / "analysis" / "_postdoc" / run / "verify.json"
+    recorded = json.loads(path.read_text(encoding="utf-8"))
+    del recorded["rules"], recorded["labpipe"]
+    path.write_text(json.dumps(recorded), encoding="utf-8")
+    row = postdoc.list_runs(config)[0]
+    assert row["rules"] == 1 and row["labpipe"] is None and row["older_rules"] is True
+
+
+def test_the_report_says_which_rules_an_older_analysis_passed(config, project, monkeypatch):
+    run = _run(config, project, _text())
+    assert postdoc.verify(config, run)["ok"]
+    assert "checked with the rules" not in _section(config, monkeypatch, project)
+    monkeypatch.setattr(postdoc, "CHECKS_VERSION", 2)
+    section = _section(config, monkeypatch, project)
+    from labpipe import __version__
+    assert f"checked with the rules of labpipe {__version__}" in section
+    assert "warnbox" not in section

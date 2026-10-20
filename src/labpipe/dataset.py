@@ -21,6 +21,7 @@ from typing import Any
 import yaml
 
 from labpipe import manifest as mf
+from labpipe import migrations
 from labpipe.provenance import utc_now
 from labpipe.registry import load_methods
 from labpipe.report import _sample_order
@@ -100,8 +101,9 @@ def build(config: dict) -> dict[str, Any]:
     methods = load_methods()
     data = mf.load(config)
     samples_path = PROJECT_ROOT / SAMPLES_FILE
-    samples_cfg = (yaml.safe_load(samples_path.read_text(encoding="utf-8")) or {}
-                   if samples_path.exists() else {})
+    samples_cfg = (migrations.upgraded(
+        samples_path, yaml.safe_load(samples_path.read_text(encoding="utf-8")) or {},
+        PROJECT_ROOT) if samples_path.exists() else {})
     rows: dict[str, list[dict[str, Any]]] = {sample: [] for sample in samples_cfg.get("samples") or {}}
     galleries: dict[str, dict[str, dict[str, Any]]] = {}
     for entry in data["entries"].values():

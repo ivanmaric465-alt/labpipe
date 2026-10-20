@@ -47,12 +47,12 @@ areas:
   method-template:  # the contract every method follows
     code: ["src/labpipe/methods/template/*", src/labpipe/methods_kit.py]
     docs: [docs/ADDING_A_METHOD.md, docs/ARCHITECTURE.md]
-  notes:
+  notes:            # the rules and their CHECKS_VERSION
     code: [src/labpipe/notes.py]
-    docs: [AGENTS.md, "agents/*-analyst.md"]
+    docs: [AGENTS.md, "agents/*-analyst.md", docs/ARCHITECTURE.md]
   postdoc:
     code: [src/labpipe/postdoc.py, src/labpipe/dataset.py, src/labpipe/context.py, "templates/context/*"]
-    docs: [agents/postdoc.md, docs/settings/context.md, AGENTS.md, README.md]
+    docs: [agents/postdoc.md, docs/settings/context.md, AGENTS.md, README.md, docs/ARCHITECTURE.md]
   agents:
     code: [src/labpipe/agents.py, "agents/*.md"]
     docs: [docs/settings/agents.md, AGENTS.md, docs/SETUP.md]
@@ -73,6 +73,9 @@ areas:
     code: [src/labpipe/release.py, scripts/check_release.py, scripts/release.py,
            scripts/check_updates.py, CHANGELOG.md, ".github/*", ".github/workflows/*"]
     docs: [docs/RELEASING.md, README.md, docs/ARCHITECTURE.md]
+  migrations:       # settings migrations: old keys, labpipe migrate, the CI check
+    code: [src/labpipe/migrations.py, scripts/check_settings_migrations.py]
+    docs: [docs/settings/migrations.md, docs/ARCHITECTURE.md, AGENTS.md]
   locking:
     code: [src/labpipe/locking.py, src/labpipe/__init__.py, src/labpipe/methods/__init__.py]
     docs: [docs/ARCHITECTURE.md]
