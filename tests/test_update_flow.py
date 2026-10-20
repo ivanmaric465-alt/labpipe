@@ -410,6 +410,8 @@ def test_a_rollback_goes_back_and_restores_the_settings_from_the_backup(install)
         ("0.2.0", "0.3.0"), ("0.3.0", "0.2.0")]
     assert "version: 0.2.0" in (install.home / "reinstall.log").read_text(encoding="utf-8")
     assert "Looking for analyses that are out of date" in err
+    # the eds analyses were made with v0.2.0's calculation: done again, not out of date
+    assert summary["stale"] == {}, summary["stale"]
 
 
 def test_a_rollback_without_a_backup_says_so(install):

@@ -9,6 +9,8 @@
   `plot_outdated` (`labpipe replot` redraws);
 * done and analysed before versions existed: the current versions are adopted if the
   entry's code_version is the current, clean commit; otherwise it is marked stale;
+* stale, but its method's analysis version and its analysis settings are the current ones
+  again (a rollback, a setting changed back): done again;
 * failed: back to pending only if the method's analysis version changed and the attempt
   budget for this file hash is not used up;
 * needs_review: back to pending once a human override resolves it;
@@ -106,6 +108,18 @@ def _stale_reason(entry: dict[str, Any], versions: dict[str, Any], current_code:
     if then != now:
         return f"the {entry['method']} calculation changed (version {then} → {now})"
     return None
+
+
+def _current_again(entry: dict[str, Any], versions: dict[str, Any], sample: str) -> bool:
+    """A stale entry whose calculation and analysis settings are the current ones again (e.g.
+    after `labpipe update --to` an older release, or a setting changed back): its results are
+    valid as they are. One from before versions existed stays stale."""
+    if entry.get("analysis_version") != versions["analysis_version"]:
+        return False
+    if not entry.get("settings_sha256"):
+        return True
+    resolved = settings_mod.resolve(entry["method"], sample, entry["measurement_id"])[0]
+    return settings_mod.compare_entry(entry, resolved)["analysis_current"]
 
 
 def _changed_since_failure(entry: dict[str, Any], versions: dict[str, Any],
@@ -271,6 +285,9 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                             entry["plot_outdated"] = False
                             entry.pop("plot_outdated_reason", None)
                             entry.pop("plot_sha256_wanted", None)
+                elif old_status == "stale" and _current_again(entry, versions[method], sample):
+                    mf.set_status(entry, "done", "current again: the calculation and settings "
+                                  "it was analysed with are the current ones")
                 elif (old_status == "failed" and entry["attempts"] < max_attempts
                       and _changed_since_failure(entry, versions[method], current_code)):
                     mf.set_status(entry, "pending", "code changed since failure; retrying")

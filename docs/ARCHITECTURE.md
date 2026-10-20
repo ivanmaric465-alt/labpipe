@@ -275,8 +275,10 @@ characters, stored per entry in `manifest.json` and in `provenance.json` → `co
 - **Scanner**: a done entry whose analysis version differs is stale ("the <method> calculation
   changed (version a → b)"). A failed entry is retried when it changes. An entry from before
   versions existed adopts the current ones if its `code_version` is the current clean commit,
-  otherwise it is stale ("analysed before per-method versions; redo to be sure").
-- **Replay** still compares the git commit; the versions show whether a commit changed anything.
+  otherwise it is stale ("analysed before per-method versions; redo to be sure"). A stale entry
+  whose analysis version and analysis settings are the current ones again (a rollback, a setting
+  changed back) is done again ("current again").
+- **Replay** needs the same analysis and plot versions; another commit is only noted.
 
 ## Settings migrations and versioned checks
 

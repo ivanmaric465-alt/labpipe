@@ -57,7 +57,7 @@ Agents quote these numbers; they never calculate them.
 
 ## Rollback
 
-`labpipe update --to v0.2.0` puts the installation's code and image on that release. Your analyses are not touched: results made with the newer code stay as they are (the scan then lists what the older code considers out of date). Settings: see step 6. A backup of the state you leave is made in `backups/<the release you leave>/` first. Releases before `labpipe update` existed cannot be used as a target.
+`labpipe update --to v0.2.0` puts the installation's code and image on that release. Your analyses are not touched: results made with the newer code stay as they are (the scan then lists what the older code considers out of date), and analyses made with that release's calculation and your settings at the time are current again ("done"). Settings: see step 6. A backup of the state you leave is made in `backups/<the release you leave>/` first. Releases before `labpipe update` existed cannot be used as a target.
 
 ## Backups
 
