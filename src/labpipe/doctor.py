@@ -203,6 +203,22 @@ def _settings_migrations() -> list[dict[str, Any]]:
                   "`labpipe migrate --apply` only with their OK", files=len(pending))]
 
 
+def _onboarding(config: dict | None) -> list[dict[str, Any]]:
+    """The first conversation is not finished (a warning, never blocking: `ready` counts `todo`
+    only). Not in dev mode: the repository is its own project, nobody is onboarded there."""
+    from labpipe import onboarding
+    if config is None or safety.dev_mode():
+        return []
+    left = onboarding.remaining(config)
+    if left is None:
+        return []
+    step, handled, total = left
+    return [_item("onboarding", "warn", f"onboarding: next step {step} ({handled} of {total} done)",
+                  f"follow {onboarding.doc_path()} → {step}; `labpipe onboarding done {step}` "
+                  "after each step (the user can skip any step or all: `labpipe onboarding "
+                  "skip all`)")]
+
+
 def _container() -> list[dict[str, Any]]:
     """Container mode on this computer: running, up to date, logged in."""
     from labpipe.container import ContainerError, status_record
@@ -447,6 +463,7 @@ def run() -> dict[str, Any]:
     elif config is not None:
         items.append(_item("manifest", "todo", "nothing scanned yet",
                            "labpipe scan, then analyse one file with the user"))
+    items += _onboarding(config)          # last: setup items come first
     order = {"todo": 0, "warn": 1, "ok": 2}
     first = min((i for i in items if i["status"] != "ok"),
                 key=lambda i: order[i["status"]], default=None)

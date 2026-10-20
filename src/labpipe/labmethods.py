@@ -34,7 +34,7 @@ METHODS_DIR = "lab/methods"
 # equal to the commands of the CLI) and the template.
 RESERVED = frozenset({
     "agents", "analyze", "automation", "container", "context", "dataset", "doctor", "guard",
-    "init", "inventory", "methods", "migrate", "notes", "pending", "postdoc", "project", "readonly-view",
+    "init", "inventory", "methods", "migrate", "notes", "onboarding", "pending", "postdoc", "project", "readonly-view",
     "replay", "replot", "report", "requeue", "review", "roots", "scan", "setup", "shell",
     "status", "template", "update", "lab",
 })

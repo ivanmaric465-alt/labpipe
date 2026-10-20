@@ -17,6 +17,7 @@
   labpipe <method> check --entry ID         print the deterministic checks of an entry
   labpipe <method> summary --entry ID       compact human-readable summary (if the method has one)
   labpipe report                            write analysis/report.html (overview for people)
+  labpipe onboarding [status|done ID|skip ID|all|restart [--tour]]   the first conversation: where it stands, mark a step
   labpipe migrate [--apply [--yes]]         settings files that use old names: show the change, or apply it (backup first)
   labpipe update [--check|--preview|--to vX.Y.Z] [--yes]   update (or roll back) the installation and this project to a release
   labpipe project new FOLDER [--data PATH]... [--name NAME]   create a project (a folder with labpipe.yaml)
@@ -146,6 +147,25 @@ def cmd_methods(args, config) -> int:
         return 1
     _print(result)
     return 0 if result["ok"] else 1
+
+
+def cmd_onboarding(args, config) -> int:
+    """The first conversation's record (labpipe.onboarding): status, done, skip, restart."""
+    from labpipe import onboarding
+    try:
+        if args.action == "done":
+            result = onboarding.done(args.step, config)
+        elif args.action == "skip":
+            result = onboarding.skip(args.step, config)
+        elif args.action == "restart":
+            result = onboarding.restart(args.tour, config)
+        else:
+            result = onboarding.status(config)
+    except onboarding.OnboardingError as exc:
+        _print({"error": str(exc)})
+        return 2
+    _print(result)
+    return 0
 
 
 def cmd_migrate(args, config) -> int:
@@ -588,6 +608,16 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--baseline", action="store_true",
                       help="record files seen for the first time as 'baseline' (not analysed)")
     scan.set_defaults(func=cmd_scan)
+    onboarding = sub.add_parser("onboarding", help="the first conversation with the agent: where "
+                                "it stands, mark a step done or skipped, start again")
+    onboarding_actions = onboarding.add_subparsers(dest="action")
+    onboarding_actions.add_parser("status", help="the steps and the next one (default)")
+    for name, text in (("done", "this step is finished"), ("skip", "skip this step ('all': every "
+                                                                  "step not handled yet)")):
+        onboarding_actions.add_parser(name, help=text).add_argument("step", metavar="ID")
+    onboarding_actions.add_parser("restart", help="forget the record and start again").add_argument(
+        "--tour", action="store_true", help="only the tour steps (and done)")
+    onboarding.set_defaults(func=cmd_onboarding, needs_config=True, tour=False)
     migrate = sub.add_parser("migrate", help="settings files that use old names: show what would "
                              "change; --apply changes them (backup first)")
     migrate.add_argument("--apply", action="store_true", help="make the change (asks first)")

@@ -44,7 +44,8 @@ SECRET_NAME = "labpipe-claude-token"
 SAFE_ID = re.compile(r"[A-Za-z0-9_.-]+")
 # Commands that always run on the host (the guard must be fast; the rest are host tasks).
 LOCAL_COMMANDS = {"guard", "container", "shell", "setup", "init", "doctor", "agents",
-                  "readonly-view", "methods", "project", "migrate", "update"}
+                  "readonly-view", "methods", "project", "migrate", "update",
+                  "onboarding"}
 # Of `methods`, only `new` and `versions` stay on the host (they write or read files); `check`
 # runs an analysis (numpy, scipy, matplotlib are in the image only) and goes into the container.
 FORWARDED_SUBCOMMANDS = {"methods": {"check"}}
