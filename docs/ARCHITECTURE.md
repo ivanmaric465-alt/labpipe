@@ -84,7 +84,9 @@ $LABPIPE_HOME/              default ~/.local/share/labpipe (Windows %LOCALAPPDAT
   are the `analysis` extra and are in the image (`container/requirements.lock`). A test blocks
   them and runs the host commands; CI installs the host part on Python 3.10.
 - **A full native install** (`./install.sh --full`, Python 3.14) adds the analysis libraries
-  from `requirements.lock`: analysis without a container. CI runs the main tests that way.
+  from `requirements.lock` (the same packages as the image; optional extras such as `refbuild`
+  are never in it): analysis without a container. CI runs the main tests that way, plus the
+  `refbuild` extra on Linux so `xrd refs build` stays tested.
 - **`labpipe setup --first`** (`installer.py`) is what `install.sh` / `install.ps1` call after the
   environment exists: checks Podman/Docker and the agent tool (shows install commands, never runs
   them), asks the agent tool, models per role and pop-ups, writes `defaults.yaml`, stores the

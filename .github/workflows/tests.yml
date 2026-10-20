@@ -35,6 +35,8 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           "$LABPIPE_VENV/bin/python" -m pip install --quiet pytest
+          # the optional refbuild extra, so `xrd refs build` stays tested (users install it only if needed)
+          "$LABPIPE_VENV/bin/python" -m pip install --quiet -e ".[refbuild]"
           "$LABPIPE_VENV/bin/python" -m pytest -q
       # Code changed without its docs (docs/docmap.yaml)? On main: since the previous push.
       - name: Docs move with the code
