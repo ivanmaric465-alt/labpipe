@@ -14,7 +14,8 @@ Everything specific to one method (its settings, how to word its results, its co
 
 Run `labpipe doctor` first (it only reads). If `ready` is true, go to what the user asks. Otherwise lead the user through setup, one item at a time, as described in `docs/SETUP.md`.
 
-- If `labpipe` itself is not found, the user has not installed it yet: have them run `./install.sh` (Linux/macOS) or `.\install.ps1` (Windows) from the repository folder (README → Install).
+- If `labpipe` itself is not found, the user has not installed it yet: show them the one-line install (README → Install); they run it. It asks its questions itself and creates the first project.
+- **Optional dependencies** (e.g. pymatgen for `labpipe xrd refs build`) are never installed by you. When a command reports one missing, show the user the exact command it prints (it names this installation's own Python and the pinned version), say what the package is for, and let them run it.
 - **The user runs anything that needs admin rights or asks questions in a terminal** (`labpipe setup`, `labpipe automation setup`, mounts, shares, `sudo`). Show the exact commands and explain them; never run them yourself.
 
 ## Rules (non-negotiable)
@@ -61,6 +62,7 @@ All commands print JSON.
 | `labpipe container setup \| start [--replace] \| stop \| status \| logs \| login \| popups` | Container mode (`docs/settings/container.md`); the user runs `setup`, `login` and `popups` (they ask questions or install a service) |
 | `labpipe shell` | An agent session inside the container (the user runs it) |
 | `labpipe roots rename OLD NEW` | Re-key manifest entries after a raw root's `id` changed in `local.yaml` |
+| `labpipe setup --first [--answers F] [--no-start]` | The installer's questions (tools, models, login, first project); the user runs it, or the installer does |
 | `labpipe init`, `labpipe readonly-view --source PATH` | Create this machine's `config/local.yaml`; print the commands for a read-only view (runs nothing) |
 
 Method-specific commands (e.g. `labpipe xrd refs`) are in the method's doc.
@@ -182,4 +184,4 @@ A code change: a separate task with the user, tests and a commit; never during a
 - **Units**: `results.json` → `units` is authoritative; never convert by hand.
 - **Plots**: ACS journal style, 3.25 in single column (7 in double), 300 dpi, Arial or a metric-compatible fallback; the full measured range. Method specifics: its doc.
 - **Checks**: `review` = a human must look before the result is used; `warning` = mention it in the notes; `info` = context.
-- **Platforms**: Linux is the reference; Windows runs natively (CI). Forward slashes in YAML paths. Never put the venv, `analysis/` or `manifest.json` in a synced folder. The venv: `~/.local/share/labpipe/venv` (Linux/macOS), `%LOCALAPPDATA%\labpipe\venv` (Windows).
+- **Platforms**: Linux is the reference; Windows runs natively (CI). Forward slashes in YAML paths. Never put the venv, `analysis/` or `manifest.json` in a synced folder. The installation: `~/.local/share/labpipe/` (`app/` the code, `venv/`; Windows `%LOCALAPPDATA%\labpipe\`), your defaults for new projects `~/.config/labpipe/defaults.yaml`. The host needs only Python 3.10+ and PyYAML; the analysis runs in the container (native analysis: `install.sh --full`, Python 3.14).

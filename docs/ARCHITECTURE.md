@@ -56,7 +56,7 @@ project is one lab folder and is never written by an update.
 - **Dev mode**: with no project around, `PROJECT_ROOT` is `CODE_ROOT` itself: the repository is
   its own project, as it was before projects existed. Only there are `AGENTS.md`, `docs/` and
   `.claude/*.json` both the sources and what the agents read.
-- **An installation** (marked by `.labpipe-installed`, or the default install folder) is never
+- **An installation** (marked by `.labpipe-installed`, or `LABPIPE_HOME/app`) is never
   its own project: commands there say *"not in a labpipe project; create one with
   `labpipe project new <folder>`"*.
 - **Read from the code**: `config/<method>.yaml`, `plots.yaml`, `report.yaml`, `pipeline.yaml`,
@@ -65,6 +65,33 @@ project is one lab folder and is never written by an update.
 - **Read from the project**: `labpipe.yaml`, `config/local.yaml`, `lab.yaml`, `samples.yaml`,
   `sample_ids.yaml`, `ignore.yaml`, `config/measurements/`, `context/`, `lab/`; written: `analysis/`,
   `logs/`, `manifest.json`.
+
+## Install: the host and the container
+
+```
+$LABPIPE_HOME/              default ~/.local/share/labpipe (Windows %LOCALAPPDATA%\labpipe)
+  app/                      the code: a git clone, marked `.labpipe-installed`; install.sh is run from it
+  venv/                     the host environment
+~/.local/bin/labpipe        link to venv/bin/labpipe (LABPIPE_BIN: the folder)
+~/.config/labpipe/          defaults.yaml (the installer's choices for new projects), claude.env (Docker only)
+                            (LABPIPE_CONFIG_HOME)
+```
+
+- **The host is slim.** The base package needs PyYAML only and Python 3.10+. It starts the
+  container and forwards commands into it, creates projects, generates agent files, runs the
+  guard and `doctor`, and `xrd refs` (with the optional pymatgen). numpy, scipy and matplotlib
+  are the `analysis` extra and are in the image (`container/requirements.lock`). A test blocks
+  them and runs the host commands; CI installs the host part on Python 3.10.
+- **A full native install** (`./install.sh --full`, Python 3.14) adds the analysis libraries
+  from `requirements.lock`: analysis without a container. CI runs the main tests that way.
+- **`labpipe setup --first`** (`installer.py`) is what `install.sh` / `install.ps1` call after the
+  environment exists: checks Podman/Docker and the agent tool (shows install commands, never runs
+  them), asks the agent tool, models per role and pop-ups, writes `defaults.yaml`, stores the
+  login, creates the first project (`project new` takes `agents:` and `container:` engine and
+  pop-ups from `defaults.yaml`), starts the container, records existing files as baseline if
+  asked. `--answers FILE.yaml` replaces the questions, `--no-start` skips what needs the tools.
+- **doctor** in an installation also reports the install location, host Python, container
+  engine, whether the image is current and the defaults file.
 
 ## Repository layout (the code)
 
@@ -85,7 +112,7 @@ docs/                   methods/, settings/, design/ (approved design notes), SA
   docmap.yaml           which docs belong to which code, and which docs repeat each other
 scripts/check_docs.py   fails when code changed without its docs (CI)
 tests/                  pytest; CI on Linux and Windows
-install.sh, install.ps1 installers
+install.sh, install.ps1 installers (below: Install)
 ```
 
 ## A project (the lab's folder)
@@ -148,9 +175,10 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | | `container.py` | build (staged context), start (name, port, mounts per project), stop, login, shell, pop-up proxy; forwarding of host commands |
 | Setup | `doctor.py` | setup state and next step (read-only) |
 | | `wizard.py` | `labpipe setup` (asks in the terminal) |
+| | `installer.py` | `labpipe setup --first`: the installer's questions (tools present, agent tool, models, login, first project, start) |
 | | `roview.py` | commands for a read-only view (native mode) |
 | | `methods_kit.py` | `methods new | check`: scaffold and check a method |
-| Support | `safety.py` | code and project roots, dev mode, write checks, atomic writes, container path mapping |
+| Support | `safety.py` | code and project roots, install and config folders, dev mode, write checks, atomic writes, container path mapping |
 | | `locking.py` | cross-platform file lock |
 
 ## The method contract

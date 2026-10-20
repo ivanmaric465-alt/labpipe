@@ -6,17 +6,23 @@ build-backend = "setuptools.build_meta"
 name = "labpipe"
 version = "0.1.0"
 description = "Deterministic, provenance-tracked analysis pipeline for materials lab data (XRD first)."
-requires-python = ">=3.14"
+requires-python = ">=3.10"   # the host part; the analysis extra needs more (below)
 license = "MIT"
 license-files = ["LICENSE"]
+# The base install is the host part: it starts the container and forwards commands into it.
+# The analysis libraries are in the `analysis` extra and in the container image.
 dependencies = [
-    "numpy==2.5.4",
-    "scipy==1.18.1",
-    "matplotlib==3.11.2",
     "PyYAML==6.0.3",
 ]
 
 [project.optional-dependencies]
+# The analysis itself (native install, and what the image contains). numpy and scipy need
+# Python >= 3.12; requirements.lock is the exact set tested, on Python 3.14.
+analysis = [
+    "numpy==2.5.4",
+    "scipy==1.18.1",
+    "matplotlib==3.11.2",
+]
 # Only needed to (re)build references/xrd/patterns from the COD CIFs.
 refbuild = ["pymatgen==2026.9.24"]
 test = ["pytest"]
@@ -30,3 +36,4 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["slow: builds a virtual environment and installs into it (needs the network)"]

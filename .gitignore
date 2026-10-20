@@ -33,3 +33,4 @@ build/
 /.claude/agents/
 /.opencode/agents/
 /.codex/agents/
+/.labpipe-installed

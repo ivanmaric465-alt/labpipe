@@ -487,7 +487,7 @@ def _last_nightly(config: dict) -> dt.date | None:
     for event in _events(config):
         if event.get("event") == "nightly" or event.get("trigger") == "nightly":
             moment = dt.datetime.strptime(event["utc"], "%Y-%m-%dT%H:%M:%SZ").replace(
-                tzinfo=dt.UTC)
+                tzinfo=dt.timezone.utc)
             dates.append(moment.astimezone().date())
     return max(dates, default=None)
 

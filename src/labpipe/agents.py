@@ -68,7 +68,10 @@ def codex_trust(project: Path = PROJECT_ROOT) -> str | None:
     """trust_level of this project in the user's Codex config (None if not set). Codex
     applies the project's .codex/ (rules, hooks, agents) only when it is "trusted"."""
     import os
-    import tomllib
+    try:
+        import tomllib                      # Python 3.11+; older hosts: trust is not detected
+    except ImportError:
+        return None
     config = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")) / "config.toml"
     try:
         projects = tomllib.loads(config.read_text(encoding="utf-8")).get("projects") or {}

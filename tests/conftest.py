@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import math
 
-import numpy as np
 import pytest
 
-from labpipe.methods.xrd import fitting
-
+try:                      # the slim host install has no numpy: its tests need none of this
+    import numpy as np
+    from labpipe.methods.xrd import fitting
+except ImportError:
+    np = fitting = None
 
 
 @pytest.fixture(autouse=True)

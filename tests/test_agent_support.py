@@ -235,7 +235,7 @@ def test_guard_unattended_allows_reading_inside_the_project_only(config):
 
 
 def test_agents_render_codex_toml():
-    import tomllib
+    tomllib = pytest.importorskip("tomllib")      # Python 3.11+ (the host may be 3.10)
     from labpipe import agents
     role = {"name": "demo", "role": "analyst", "description": 'a "quoted" role', "source": "demo.md",
             "capabilities": ["shell"], "body": 'Body with """ and \\ and ü\n', "text": "x"}

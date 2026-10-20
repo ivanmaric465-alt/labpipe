@@ -6,7 +6,7 @@ Each project has its own container. The project folder is mounted read-write at 
 
 ## Settings
 
-`config/local.yaml` (written by `labpipe container setup`):
+`config/local.yaml` (written by `labpipe project new` from the engine and pop-up choices of the installer, kept in `~/.config/labpipe/defaults.yaml`; or by `labpipe container setup`):
 
 ```yaml
 container:
@@ -20,7 +20,7 @@ container:
 labpipe container setup              # writes the block, keeps existing keys
 labpipe container start [--replace] [--dev]  # (re)starts; builds the image when needed
                                      # --dev mounts the code folder: code edits need no rebuild
-labpipe container login claude|codex
+labpipe container login claude|codex   # Claude: a Podman secret; Docker: ~/.config/labpipe/claude.env (mode 600)
 labpipe container status | logs | stop
 labpipe shell                        # a session inside the container
 ```

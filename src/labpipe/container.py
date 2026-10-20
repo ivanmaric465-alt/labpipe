@@ -234,7 +234,7 @@ def host_timezone() -> str | None:
 
 
 def claude_env_file() -> Path:
-    return Path.home() / ".config" / "labpipe" / "claude.env"
+    return safety.config_home() / "claude.env"
 
 
 def claude_login_present(engine: str) -> bool:
@@ -401,8 +401,12 @@ def forward_argv(argv: list[str], cwd: Path | str, repo_root: Path | str, engine
 
 def inspect(engine: str, name: str) -> dict | None:
     """The container's inspect record, or None if there is no container of that name."""
-    result = subprocess.run([engine, "container", "inspect", name], capture_output=True,
-                            text=True)
+    try:
+        result = subprocess.run([engine, "container", "inspect", name], capture_output=True,
+                                text=True)
+    except OSError as exc:
+        raise ContainerError(f"{engine} cannot be run ({exc}): is it installed? "
+                             "(`labpipe doctor` shows what to install)") from exc
     if result.returncode != 0:
         return None
     try:

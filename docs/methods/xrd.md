@@ -48,7 +48,7 @@ labpipe xrd refs list | build
 
 - Two sets: the references that come with labpipe (code folder, `root: code` in `provenance.json`) and the lab's own, which `refs add` puts in the project's `lab/references/xrd/` (`root: project`; updates never touch them). A lab reference may not reuse a shipped id. `refs list` shows each one's `source`.
 - Adding or rebuilding a reference changes the XRD analysis version: existing XRD analyses become out of date (`labpipe requeue --stale` redoes them; old results kept).
-- `labpipe xrd refs` runs on your computer, never in the container (also in container mode). Building needs the optional pymatgen there: `pip install -e ".[refbuild]"` in labpipe's environment. Whether you add references, and which, is your choice.
+- `labpipe xrd refs` runs on your computer, never in the container (also in container mode). Building needs the optional pymatgen, which is not part of the base install. If it is missing, `refs build` (and `refs add`) print the exact command for this installation: `"<labpipe's python>" -m pip install "pymatgen==<pinned version>"`. Show it to the user, say it is only used to compute reflection lists and runs on their computer, and let them run it; never install it yourself. Whether you add references, and which, is your choice.
 - Check the CIF first: cell edges in Å, not kX; ambient conditions; not a theoretical or hydrogen-loaded structure. `references/xrd/phases.yaml` → `excluded` lists examples of what to reject.
 - COD is open data. ICSD/ICDD CIFs are licensed and must not be committed.
 - `fcc` and `rocksalt` references also take part in the lattice-parameter comparison.

@@ -9,8 +9,8 @@ In a project, references you add go to lab/references/xrd/ (cif/, patterns/, pha
 which updates never touch; the ones that come with labpipe stay in the code folder. In the
 repository itself (dev mode) `add` and `build` write the shipped ones.
 
-Building needs the optional 'refbuild' dependency (pymatgen):
-    pip install -e ".[refbuild]"
+Building needs the optional 'refbuild' dependency (pymatgen, pinned in pyproject.toml);
+the error shows the exact install command for this installation.
 The analysis itself never imports pymatgen; it reads patterns/<id>.json and
 converts d-spacings to 2θ with the wavelength recorded in each measurement.
 
@@ -91,8 +91,11 @@ def build_one(entry: dict) -> dict:
         from pymatgen.analysis.diffraction.xrd import XRDCalculator
         from pymatgen.io.cif import CifParser
     except ImportError as exc:
-        raise SystemExit("building references needs pymatgen: pip install -e \".[refbuild]\"") \
-            from exc
+        raise SystemExit(
+            "building references needs the optional package pymatgen (it is not part of "
+            "labpipe's base install). It installs into labpipe's own environment on this "
+            "computer, not in the container; you run:\n  "
+            + safety.optional_install_command("pymatgen")) from exc
     cif_path = _cif_path(entry)
     raw = cif_path.read_bytes()
     text = raw.decode("utf-8", errors="replace")

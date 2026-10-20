@@ -29,7 +29,7 @@ import yaml
 from labpipe import __version__, agents
 from labpipe.provenance import utc_now
 from labpipe.safety import (CODE_ROOT, FIXED_GENERATED, GENERATED_DIR, GENERATED_RECORD, PROJECT_FILE, PROJECT_ROOT, atomic_write_bytes,
-                            atomic_write_text, default_config_files, find_project, is_dev,
+                            atomic_write_text, config_home, default_config_files, find_project, is_dev,
                             load_pipeline_config, synced_marker)
 
 SCHEMA = "labpipe.project/1"
@@ -259,20 +259,35 @@ def status(project: Path | None = None) -> dict[str, Any]:
 
 def user_defaults_file() -> Path:
     """This user's defaults for new projects (the installer writes it)."""
-    return Path.home() / ".config" / "labpipe" / "defaults.yaml"
+    return config_home() / "defaults.yaml"
+
+
+def user_defaults() -> dict[str, Any]:
+    """The user's defaults file: `agents:` (harness, models, reasoning) and `container:`
+    (engine, popups). {} if there is none."""
+    try:
+        data = yaml.safe_load(user_defaults_file().read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def _agents_block() -> dict[str, Any]:
-    try:
-        block = (yaml.safe_load(user_defaults_file().read_text(encoding="utf-8")) or {}).get(
-            "agents")
-    except (OSError, yaml.YAMLError):
-        block = None
+    block = user_defaults().get("agents")
     if isinstance(block, dict) and block:
         return block
     example = yaml.safe_load((CODE_ROOT / "config" / "local.example.yaml").read_text(
         encoding="utf-8"))
     return example["agents"]
+
+
+def _container_block() -> dict[str, Any] | None:
+    """The `container:` block of a new project: container mode is on when the user's defaults
+    name an engine (the installer does); popups come along."""
+    block = user_defaults().get("container")
+    if not isinstance(block, dict) or not block.get("engine"):
+        return None
+    return {key: block[key] for key in ("engine", "popups") if key in block}
 
 
 def _root_id(folder: Path, taken: set[str]) -> str:
@@ -287,9 +302,11 @@ def _root_id(folder: Path, taken: set[str]) -> str:
 def _local_yaml(data: list[Path]) -> str:
     taken: set[str] = set()
     roots = [{"id": _root_id(folder, taken), "path": folder.as_posix()} for folder in data]
-    body = yaml.safe_dump({"raw_roots": roots, "protected_paths": [],
-                           "agents": _agents_block()}, sort_keys=False, allow_unicode=True,
-                          width=1000)
+    blocks: dict[str, Any] = {"raw_roots": roots, "protected_paths": [],
+                              "agents": _agents_block()}
+    if _container_block():
+        blocks["container"] = _container_block()
+    body = yaml.safe_dump(blocks, sort_keys=False, allow_unicode=True, width=1000)
     return ("# This project on this computer (never shared). Raw data is only read from the\n"
             "# folders in raw_roots. All settings: config/local.example.yaml and docs/settings/.\n"
             + body)

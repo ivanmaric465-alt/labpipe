@@ -454,6 +454,7 @@ def test_the_guard_leaves_the_repository_alone_in_dev_mode(monkeypatch):
 # ---- the whole thing in a project ------------------------------------------------------
 
 def test_scan_analyze_report_and_replay_in_a_project_made_by_project_new(tmp_path):
+    pytest.importorskip("numpy")      # the analysis side; the slim host install has none
     data = tmp_path / "data"
     (data / "XRD").mkdir(parents=True)
     positions = fcc_positions(3.8898)

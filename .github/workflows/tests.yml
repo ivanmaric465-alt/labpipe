@@ -19,6 +19,7 @@ jobs:
         run: |
           echo "LABPIPE_VENV=$RUNNER_TEMP/labpipe-venv" >> "$GITHUB_ENV"
           echo "LABPIPE_NO_SETUP=1" >> "$GITHUB_ENV"
+          echo "LABPIPE_FULL=1" >> "$GITHUB_ENV"     # the analysis libraries: CI tests the analysis
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
@@ -48,3 +49,31 @@ jobs:
         run: |
           & "$env:LABPIPE_VENV\Scripts\python.exe" -m pip install --quiet pytest
           & "$env:LABPIPE_VENV\Scripts\python.exe" -m pytest -q
+
+  # The slim host install on the oldest Python it supports: no numpy, scipy or matplotlib, and
+  # the host-side tests (the installer, the container commands, projects, guard, doctor).
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install the host part (install.sh, no --full)
+        env:
+          LABPIPE_HOME: ${{ runner.temp }}/labpipe-host
+          LABPIPE_BIN: ${{ runner.temp }}/labpipe-bin
+          LABPIPE_NO_SETUP: "1"
+        run: ./install.sh
+      - name: The host install has no analysis libraries
+        run: |
+          "$RUNNER_TEMP/labpipe-host/venv/bin/python" -c "import yaml, labpipe"
+          if "$RUNNER_TEMP/labpipe-host/venv/bin/python" -c "import numpy" 2>/dev/null; then
+            echo "numpy is installed in the host environment" >&2; exit 1; fi
+      - name: Host-side tests
+        run: |
+          py="$RUNNER_TEMP/labpipe-host/venv/bin/python"
+          "$py" -m pip install --quiet pytest
+          "$py" -m pytest -q tests/test_install.py tests/test_container.py tests/test_project.py \
+            tests/test_agent_support.py tests/test_dataset.py tests/test_encoding.py \
+            tests/test_inbox.py tests/test_in_container.py tests/test_postdoc.py tests/test_report.py

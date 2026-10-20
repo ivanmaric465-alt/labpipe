@@ -66,7 +66,8 @@ areas:
     code: [src/labpipe/container.py, "container/*"]
     docs: [docs/settings/container.md, docs/ARCHITECTURE.md, README.md]
   setup:
-    code: [src/labpipe/doctor.py, src/labpipe/wizard.py, install.sh, install.ps1]
+    code: [src/labpipe/doctor.py, src/labpipe/wizard.py, src/labpipe/installer.py, install.sh,
+           install.ps1, pyproject.toml]
     docs: [docs/SETUP.md, README.md, AGENTS.md]
   locking:
     code: [src/labpipe/locking.py, src/labpipe/__init__.py, src/labpipe/methods/__init__.py]

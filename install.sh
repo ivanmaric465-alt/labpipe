@@ -1,44 +1,90 @@
 #!/usr/bin/env bash
 # labpipe installer for Linux and macOS.
 #
-# Safe to rerun. Never uses sudo and never touches raw data. It:
-#   1. finds Python >= 3.14,
-#   2. creates a virtual environment OUTSIDE synced folders
-#      (default ~/.local/share/labpipe/venv; override with LABPIPE_VENV),
-#   3. installs the pinned versions from requirements.lock and labpipe itself,
+#   git clone https://github.com/ivanmaric465-alt/labpipe ~/.local/share/labpipe/app && ~/.local/share/labpipe/app/install.sh
+#
+# Safe to rerun. Never uses sudo and never touches raw data. Everything lives under
+# LABPIPE_HOME (default ~/.local/share/labpipe): app/ (this code), venv/. It:
+#   1. finds Python >= 3.10 (>= 3.14 with --full),
+#   2. creates the virtual environment (OUTSIDE synced folders),
+#   3. installs labpipe: the slim host part (PyYAML only; the analysis runs in the
+#      container). --full (or LABPIPE_FULL=1) also installs the analysis libraries from
+#      requirements.lock, for a native install without a container (needs Python 3.14),
 #   4. links `labpipe` into ~/.local/bin (override with LABPIPE_BIN),
-#   5. creates config/local.yaml if missing (`labpipe init`),
-#   6. offers the guided setup (`labpipe setup`): the raw-data folder and its
-#      read-only view, the sandbox check, models per agent role, and automatic
-#      processing. Each part asks first; commands needing admin rights are shown
-#      for you to run, never run by the script. Skip it with LABPIPE_NO_SETUP=1,
-#   7. runs `labpipe doctor`, which lists whatever is still left.
+#   5. marks app/ as an installation (`.labpipe-installed`),
+#   6. asks the first questions (`labpipe setup --first`): container engine and agent tool
+#      present?, models, login, your first project, the container. What needs admin rights
+#      is shown for you to run, never run by this script.
+#
+# Options:  --full        also install the analysis libraries (native, Python 3.14)
+#           --no-start    do not check tools, log in, build or start the container
+#           --answers F   answer the questions from a YAML file (CI, tests)
+#           --no-setup    stop after the environment (LABPIPE_NO_SETUP=1 does the same)
+# Environment: LABPIPE_HOME, LABPIPE_VENV, LABPIPE_BIN, LABPIPE_PYTHON, LABPIPE_FULL,
+#              LABPIPE_CONFIG_HOME, LABPIPE_ALLOW_SYNCED.
 
 set -euo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VENV="${LABPIPE_VENV:-$HOME/.local/share/labpipe/venv}"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+HOME_DIR="${LABPIPE_HOME:-$HOME/.local/share/labpipe}"
+VENV="${LABPIPE_VENV:-$HOME_DIR/venv}"
 BIN="${LABPIPE_BIN:-$HOME/.local/bin}"
+FULL="${LABPIPE_FULL:-}"
+NO_SETUP="${LABPIPE_NO_SETUP:-}"
+SETUP_ARGS=()
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --full) FULL=1 ;;
+        --no-setup) NO_SETUP=1 ;;
+        --no-start) SETUP_ARGS+=(--no-start) ;;
+        --answers)
+            [ $# -ge 2 ] || { echo "--answers needs a file" >&2; exit 2; }
+            shift
+            SETUP_ARGS+=(--answers "$(cd "$(dirname "$1")" && pwd -P)/$(basename "$1")") ;;
+        -h|--help) sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) echo "unknown option: $1 (see --help)" >&2; exit 2 ;;
+    esac
+    shift
+done
+
+if [ "$FULL" = 1 ]; then MIN_MINOR=14; else MIN_MINOR=10; fi
 
 say() { printf '\n==> %s\n' "$*"; }
 die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
 
-say "1/7 Looking for Python >= 3.14"
+# Never overwrite somebody else's `labpipe` (checked first, before anything is installed).
+if [ -e "$BIN/labpipe" ] || [ -L "$BIN/labpipe" ]; then
+    [ "$(readlink "$BIN/labpipe" || true)" = "$VENV/bin/labpipe" ] ||
+        die "$BIN/labpipe exists and points elsewhere; remove it or set LABPIPE_BIN."
+fi
+
+say "1/6 Looking for Python >= 3.$MIN_MINOR"
 PY=""
-for candidate in "${LABPIPE_PYTHON:-}" python3.14 python3 python; do
+for candidate in "${LABPIPE_PYTHON:-}" python3.14 python3.13 python3.12 python3.11 python3.10 python3 python; do
     [ -n "$candidate" ] || continue
     if command -v "$candidate" >/dev/null 2>&1 &&
-       "$candidate" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 14) else 1)' 2>/dev/null; then
+       "$candidate" -c "import sys; sys.exit(0 if sys.version_info >= (3, $MIN_MINOR) else 1)" 2>/dev/null; then
         PY="$(command -v "$candidate")"
         break
     fi
 done
-[ -n "$PY" ] || die "Python 3.14 or newer not found. Install it (Linux: your package manager,
+if [ -z "$PY" ]; then
+    if [ "$FULL" = 1 ]; then
+        die "Python 3.14 or newer not found (needed for --full). Install it (Linux: your package manager,
        e.g. 'sudo dnf install python3.14' or 'sudo apt install python3.14 python3.14-venv';
        macOS: 'brew install python@3.14' or python.org), or set LABPIPE_PYTHON=/path/to/python."
+    fi
+    die "Python 3.10 or newer not found. Install it (Linux: your package manager,
+       e.g. 'sudo dnf install python3' or 'sudo apt install python3 python3-venv';
+       macOS: 'brew install python' or python.org), or set LABPIPE_PYTHON=/path/to/python."
+fi
 echo "    $PY ($("$PY" -c 'import sys; print(sys.version.split()[0])'))"
+"$PY" -c 'import venv, ensurepip' 2>/dev/null ||
+    die "$PY cannot create virtual environments. Debian/Ubuntu: 'sudo apt install python3-venv'
+       (or python3.X-venv for that version), then rerun this installer."
 
-say "2/7 Virtual environment: $VENV"
+say "2/6 Virtual environment: $VENV"
 synced_segment() {  # a path segment named like a sync client's folder
     local IFS=/ seg
     for seg in $1; do
@@ -49,28 +95,31 @@ synced_segment() {  # a path segment named like a sync client's folder
     done
     return 1
 }
-if synced_segment "$VENV" && [ "${LABPIPE_ALLOW_SYNCED:-}" != 1 ]; then
-    die "$VENV looks like a synced folder. Sync clients corrupt virtual environments;
-       choose another LABPIPE_VENV (or set LABPIPE_ALLOW_SYNCED=1 if you are sure)."
+if { synced_segment "$VENV" || synced_segment "$REPO"; } && [ "${LABPIPE_ALLOW_SYNCED:-}" != 1 ]; then
+    die "$VENV (or $REPO) looks like a synced folder. Sync clients corrupt virtual environments;
+       choose another LABPIPE_HOME (or set LABPIPE_ALLOW_SYNCED=1 if you are sure)."
 fi
 if [ -x "$VENV/bin/python" ] &&
-   "$VENV/bin/python" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 14) else 1)'; then
+   "$VENV/bin/python" -c "import sys; sys.exit(0 if sys.version_info >= (3, $MIN_MINOR) else 1)"; then
     echo "    exists, reusing"
 else
-    [ ! -e "$VENV" ] || die "$VENV exists but is not a Python >= 3.14 environment; move it away first."
+    [ ! -e "$VENV" ] || die "$VENV exists but is not a Python >= 3.$MIN_MINOR environment; move it away first."
+    mkdir -p "$(dirname "$VENV")"
     "$PY" -m venv "$VENV"
 fi
 
-say "3/7 Installing pinned dependencies and labpipe"
+if [ "$FULL" = 1 ]; then KIND="full: with the analysis libraries"; else KIND="host part: PyYAML only"; fi
+say "3/6 Installing labpipe ($KIND)"
 "$VENV/bin/python" -m pip install --quiet --upgrade pip
-"$VENV/bin/python" -m pip install --quiet -r "$REPO/requirements.lock"
-"$VENV/bin/python" -m pip install --quiet --no-deps -e "$REPO"
-
-say "4/7 Putting 'labpipe' on PATH: $BIN/labpipe"
-mkdir -p "$BIN"
-if [ -e "$BIN/labpipe" ] && [ "$(readlink "$BIN/labpipe" || true)" != "$VENV/bin/labpipe" ]; then
-    die "$BIN/labpipe exists and points elsewhere; remove it or set LABPIPE_BIN."
+if [ "$FULL" = 1 ]; then
+    "$VENV/bin/python" -m pip install --quiet -r "$REPO/requirements.lock"
+    "$VENV/bin/python" -m pip install --quiet --no-deps -e "$REPO"
+else
+    "$VENV/bin/python" -m pip install --quiet -e "$REPO"
 fi
+
+say "4/6 Putting 'labpipe' on PATH: $BIN/labpipe"
+mkdir -p "$BIN"
 ln -sfn "$VENV/bin/labpipe" "$BIN/labpipe"
 case ":$PATH:" in
     *":$BIN:"*) echo "    $BIN is on PATH" ;;
@@ -78,26 +127,29 @@ case ":$PATH:" in
        echo "          export PATH=\"$BIN:\$PATH\"" ;;
 esac
 
-say "5/7 Machine settings (config/local.yaml)"
-"$VENV/bin/labpipe" init
-
-say "6/7 Guided setup (labpipe setup)"
-if [ -t 0 ] && [ -t 1 ] && [ "${LABPIPE_NO_SETUP:-}" != 1 ]; then
-    read -r -p "    Set up the raw-data folder, sandbox, agents and automation now? [Y/n] " answer
-    case "${answer:-y}" in
-        [Yy]*) "$VENV/bin/labpipe" setup || true ;;
-        *) echo "    skipped; run 'labpipe setup' any time" ;;
-    esac
+say "5/6 Installation marker"
+mkdir -p "$HOME_DIR"
+if [ "$REPO" = "$(cd "$HOME_DIR" && pwd -P)/app" ]; then
+    touch "$REPO/.labpipe-installed"
+    echo "    $REPO is the installation's app folder"
 else
-    echo "    skipped (no terminal, or LABPIPE_NO_SETUP=1); run 'labpipe setup' any time"
+    echo "    $REPO is not $HOME_DIR/app: treated as a repository (developer install)"
+    if [ "$FULL" = 1 ] && [ ! -f "$REPO/config/local.yaml" ]; then "$VENV/bin/labpipe" init >/dev/null; fi
 fi
 
-say "7/7 Setup check (labpipe doctor)"
-"$VENV/bin/labpipe" doctor || true
+say "6/6 First questions (labpipe setup --first)"
+if [ "$NO_SETUP" = 1 ]; then
+    echo "    skipped; run 'labpipe setup --first' any time"
+elif [ ${#SETUP_ARGS[@]} -eq 0 ] && { [ ! -t 0 ] || [ ! -t 1 ]; }; then
+    echo "    skipped (no terminal); run 'labpipe setup --first' any time"
+else
+    # from the home folder, so that a project folder we happen to be in is not the context
+    rc=0
+    (cd "$HOME_DIR" && "$VENV/bin/labpipe" setup --first ${SETUP_ARGS[@]+"${SETUP_ARGS[@]}"}) || rc=$?
+    [ "$rc" = 0 ] || exit "$rc"     # it said what to do (e.g. what to install first)
+fi
 
 cat <<EOF
 
-Installed. 'labpipe doctor' above lists what is left (file naming, references,
-a first analysis). Easiest: open this folder in your AI agent (e.g. Claude Code)
-and say "set this up for me"; it reads 'labpipe doctor' and guides you through it.
+Installed. More projects: labpipe project new <folder> --data <data folder>
 EOF

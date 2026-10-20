@@ -59,24 +59,70 @@ def _read_only(path: Path) -> tuple[bool | None, str]:
                  "without writing; confirm the share/folder is read-only (docs/SAFETY.md)")
 
 
+def _host_only() -> bool:
+    """This environment only forwards into the container (no project yet, or container mode):
+    it needs Python 3.10+ and PyYAML, not the analysis libraries."""
+    return (safety.NO_PROJECT or container_mode()) and not in_container()
+
+
+def _installation() -> list[dict[str, Any]]:
+    """An installation (not a repository): where it is, the host Python, the container engine,
+    whether the image is current, the user's defaults file."""
+    from labpipe import container
+    from labpipe.installer import engine_hint, os_family
+    from labpipe.project import user_defaults_file
+    items = [_item("install", "ok", f"installation {safety.install_home()}: code {CODE_ROOT}, "
+                   f"venv {sys.prefix}")]
+    engine = shutil.which("podman") or shutil.which("docker")
+    if not engine:
+        items.append(_item("engine", "warn", "neither Podman nor Docker is installed",
+                           "the user runs: " + "; ".join(engine_hint(os_family()))))
+    else:
+        name = Path(engine).name.removesuffix(".exe")
+        tag = container.image_tag({**container.DEFAULTS, **container.pipeline_container_block()})
+        try:
+            found = container.image_exists(name, tag)
+        except OSError:
+            found = False
+        items.append(_item("engine", "ok", f"{container.engine_version(name) or name}; "
+                           + (f"image {tag} is current" if found else
+                              f"image for this code ({tag}) not built yet"),
+                           None if found else "`labpipe container start` in a project builds it"))
+    defaults = user_defaults_file()
+    items.append(_item("defaults", "ok" if defaults.is_file() else "warn",
+                       f"defaults for new projects: {defaults}" if defaults.is_file() else
+                       f"no {defaults}: new projects get the built-in defaults",
+                       None if defaults.is_file() else f"the user reruns the installer "
+                       f"({CODE_ROOT / 'install.sh'}) or `labpipe setup --first`"))
+    return items
+
+
 def _environment() -> list[dict[str, Any]]:
     items = []
     version = ".".join(map(str, sys.version_info[:3]))
-    items.append(_item("python", "ok" if sys.version_info >= (3, 14) else "todo",
-                       f"Python {version} at {sys.executable}",
-                       None if sys.version_info >= (3, 14) else "install Python ≥ 3.14 (README)"))
+    host = _host_only()
+    wanted = (3, 10) if host else (3, 14)
+    ok_python = sys.version_info >= wanted
+    items.append(_item("python", "ok" if ok_python else "todo",
+                       f"Python {version} at {sys.executable}"
+                       + (" (host: it only starts the container; the analysis runs there)"
+                          if host else ""),
+                       None if ok_python else
+                       "install Python ≥ " + ".".join(map(str, wanted)) + " (README)"))
     on_path = shutil.which("labpipe")
     items.append(_item("labpipe_on_path", "ok" if on_path else "todo",
                        f"`labpipe` on PATH: {on_path}" if on_path else
                        "`labpipe` is not on PATH, so agents cannot run it as `labpipe ...`",
                        None if on_path else "activate the venv before starting the agent, or "
                        "link the venv's labpipe into a folder on PATH (README → Install)"))
+    if safety.is_installation(CODE_ROOT):
+        items += _installation()
     if _synced(Path(sys.prefix)):
         items.append(_item("venv_location", "warn", f"virtual environment {sys.prefix} is inside a "
                            "synced folder", "recreate it outside synced folders (README → Install)"))
     # inside the container the image's own lock applies (container/requirements.lock)
     lock = CODE_ROOT / ("container" if in_container() else "") / "requirements.lock"
-    if lock.exists():
+    if lock.exists() and not host:
         mismatched = []
         for line in lock.read_text(encoding="utf-8").splitlines():
             line = line.split("#", 1)[0].strip()
@@ -261,7 +307,9 @@ def _method_setup() -> list[dict[str, Any]]:
         items.append(_item("xrd_references", "todo" if unbuilt else "ok",
                            f"{len(phases)} reference phase(s)" + (
                                f"; not built: {', '.join(unbuilt)}" if unbuilt else ""),
-                           "labpipe xrd refs build (needs the refbuild extra)" if unbuilt else None))
+                           ("the user runs `labpipe xrd refs build` on this computer; it needs pymatgen, and the "
+                            "command reports the exact install command if it is missing")
+                           if unbuilt else None))
     xrd = CODE_ROOT / "config" / "xrd.yaml"
     if xrd.exists():
         standard = (yaml.safe_load(xrd.read_text(encoding="utf-8")) or {}).get(

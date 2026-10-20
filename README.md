@@ -18,17 +18,20 @@ Details: [docs/SAFETY.md](docs/SAFETY.md) (safety), [docs/ADDING_A_METHOD.md](do
 
 ## Requirements
 
-- Python ≥ 3.14 and git
-- Claude Code or Codex, for the agents and automatic processing
-- Linux only, for automatic processing: bubblewrap and socat
+- Python 3.10 or newer and git on your computer (the host part only starts the container; the analysis runs in it)
+- Podman (or Docker)
+- Claude Code or Codex, for the agents
+- Linux only, optional: `xdg-dbus-proxy` for desktop pop-ups
+
+The installer checks for Podman and the agent tool, and shows the exact commands for your system when one is missing. You run them (some need admin rights); labpipe never does. Typical ones:
 
 ```bash
 # Fedora
-sudo dnf install python3.14 git bubblewrap socat
+sudo dnf install git podman
 # Debian / Ubuntu
-sudo apt install python3.14 python3.14-venv git bubblewrap socat
+sudo apt install git podman python3-venv
 # macOS
-brew install python@3.14 git
+brew install git podman
 # Claude Code (Linux / macOS)
 curl -fsSL https://claude.ai/install.sh | bash
 # or Codex
@@ -37,28 +40,46 @@ npm install -g @openai/codex
 
 ```powershell
 # Windows
-winget install Python.Python.3.14
 winget install Git.Git
+winget install RedHat.Podman
 irm https://claude.ai/install.ps1 | iex
 ```
 
 ## Install
 
-Clone to a folder that is not synced (not OneDrive, Dropbox, …). No admin rights needed.
+One line (no admin rights, not in a synced folder like OneDrive or Dropbox):
 
 ```bash
-git clone https://github.com/ivanmaric465-alt/labpipe.git
-cd labpipe
-./install.sh
+git clone https://github.com/ivanmaric465-alt/labpipe ~/.local/share/labpipe/app && ~/.local/share/labpipe/app/install.sh
 ```
 
 ```powershell
-git clone https://github.com/ivanmaric465-alt/labpipe.git
-cd labpipe
-powershell -ExecutionPolicy Bypass -File .\install.ps1
+git clone https://github.com/ivanmaric465-alt/labpipe "$env:LOCALAPPDATA\labpipe\app"; & "$env:LOCALAPPDATA\labpipe\app\install.ps1"
 ```
 
-The installer creates a venv outside the repo, puts `labpipe` on your PATH, then offers the guided setup.
+Everything is under `~/.local/share/labpipe` (`app/` the code, `venv/` a small environment) and one link, `~/.local/bin/labpipe`. Rerun the installer any time; it never replaces a `labpipe` that is somebody else's.
+
+It then asks, in plain words, with the answer in brackets (Enter takes it):
+
+1. Podman or Docker and the agent tool present? If not: the commands to install them, then rerun.
+2. Which agent tool (Claude Code or Codex), which model for each role (supervisor, analyst, postdoc; recommendations shown), desktop pop-ups (Linux).
+3. The login: it shows `claude setup-token` (Codex: a device login) and stores the token for the container. Nothing you paste is shown.
+4. Your first project: name, folder (`~/labpipe-projects/<name>`), data folder (labpipe only reads it), and whether to analyse what is already there or only new files.
+5. It builds and starts the container (the first build takes minutes), then prints the notifications page and: *Open Claude Code in `<project folder>` and say: start*.
+
+Your answers are kept in `~/.config/labpipe/defaults.yaml` and become the defaults of every new project.
+
+Not interactive (CI, tests): `install.sh --answers answers.yaml [--no-start]`; the keys are in `src/labpipe/installer.py`.
+
+### Full native install (advanced)
+
+Runs the analysis on your computer, without a container. Needs Python 3.14.
+
+```bash
+LABPIPE_FULL=1 ~/.local/share/labpipe/app/install.sh      # or: install.sh --full
+```
+
+Optional extras go into labpipe's own environment, and only when a command asks for one. For example `labpipe xrd refs build` needs pymatgen and prints the exact command to run (it uses the environment's own Python and the pinned version).
 
 ## Projects
 
@@ -98,14 +119,18 @@ SEM/S-1 a001.txt         S-1/S-1 a001.txt         2026-03/S-1 a001.txt
 
 ## Set up
 
+The installer made your first project. Open Claude Code or Codex in the project folder (trust the folder when Codex asks) and say *"start"*. The agent runs `labpipe doctor` and goes through file naming, unrecognised files, references and a first analysis.
+
 ```bash
-labpipe setup          # data folder, what it recognises, sandbox, models per agent, automation
-labpipe doctor         # what is still missing
+cd ~/labpipe-projects/<name>
+labpipe doctor                 # what is still missing
+labpipe project new ~/labpipe-projects/<other> --data <its data folder>     # another project
 ```
+
+Without a container (full native install) the guided setup is `labpipe setup`: data folder and its read-only view, what it recognises, sandbox, models per agent, automation.
 
 - Run a single step: `labpipe setup --only raw-data` (or `files`, `sandbox`, `agents`, `automation`).
 - For the read-only view, setup prints the commands for your system (e.g. a bind mount). **You run them**; setup waits, checks the result and saves it.
-- Then open the folder in Claude Code or Codex (trust the folder when Codex asks) and say *"set this up for me"*. The agent goes through file naming, unrecognised files, references and a first analysis.
 
 ## Use
 
@@ -220,14 +245,16 @@ labpipe xrd refs add my_phase.cif --id NiO --structure-type rocksalt
 labpipe xrd refs build
 ```
 
-In a project, the references you add are kept in `lab/references/xrd/` (updates never touch them). `xrd refs` runs on your computer, not in the container; building needs the optional pymatgen (`pip install -e ".[refbuild]"`). Do not commit licensed CIFs (ICSD, ICDD).
+In a project, the references you add are kept in `lab/references/xrd/` (updates never touch them). `xrd refs` runs on your computer, not in the container; building needs the optional pymatgen; the command tells you exactly what to run if it is missing. Do not commit licensed CIFs (ICSD, ICDD).
 
 ## Update
 
 ```bash
-git pull
-./install.sh                     # Windows: .\install.ps1
-labpipe agents sync
+git -C ~/.local/share/labpipe/app pull
+~/.local/share/labpipe/app/install.sh --no-setup
+cd ~/labpipe-projects/<name>
+labpipe project sync
+labpipe container start --replace    # rebuilds the image if the code changed
 labpipe doctor
 ```
 
@@ -238,15 +265,26 @@ labpipe requeue --stale
 labpipe analyze --pending
 ```
 
-## Uninstall (Linux)
+## Uninstall
+
+Show-only: these commands remove things, so you run them yourself. Your projects and your data are never touched.
 
 ```bash
-systemctl --user disable --now labpipe-watch.service labpipe-nightly.timer
-rm ~/.config/systemd/user/labpipe-*
-rm -r ~/.local/share/labpipe/venv ~/.local/bin/labpipe
+# for each project: stop and remove its container, home volume and image
+cd ~/labpipe-projects/<name> && labpipe container stop
+podman rm -f labpipe-<name>; podman volume rm labpipe-<name>-home   # check names: podman ps -a / podman volume ls
+podman image rm localhost/labpipe                                   # all tags: podman images
+podman secret rm labpipe-claude-token
+# automatic processing, if you set it up natively (Linux)
+systemctl --user disable --now labpipe-watch.service labpipe-nightly.timer labpipe-dbus-proxy.service
+rm -f ~/.config/systemd/user/labpipe-*
+# labpipe itself: the code, the environment, the link, your defaults
+rm -r ~/.local/share/labpipe
+rm ~/.local/bin/labpipe
+rm -r ~/.config/labpipe
 ```
 
-A read-only view: `sudo umount <view>`, then remove its line from `/etc/fstab`. Your raw data is never changed.
+Docker: the same with `docker`. A read-only view: `sudo umount <view>`, then remove its line from `/etc/fstab`. Your raw data is never changed. To remove a project too, delete its folder yourself.
 
 ## Troubleshooting
 
@@ -263,7 +301,7 @@ A read-only view: `sudo umount <view>`, then remove its line from `/etc/fstab`. 
 
 ```bash
 ~/.local/share/labpipe/venv/bin/python -m pip install pytest
-~/.local/share/labpipe/venv/bin/python -m pytest
+~/.local/share/labpipe/venv/bin/python -m pytest         # needs the full install (LABPIPE_FULL=1)
 ```
 
 ## License

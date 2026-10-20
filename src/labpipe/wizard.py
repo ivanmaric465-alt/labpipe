@@ -198,7 +198,7 @@ def sandbox() -> None:
     claude = shutil.which("claude")
     print(f"Claude Code: {claude or 'not found on PATH'}"
           + ("" if claude else " (needed for the agents and automatic processing; see "
-             "README → Prerequisites, then rerun this step)"))
+             "README → Requirements, then rerun this step)"))
     if system == "Linux":
         missing = [tool for tool in ("bwrap", "socat") if not shutil.which(tool)]
         if not missing:

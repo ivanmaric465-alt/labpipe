@@ -55,16 +55,44 @@ def find_project(start: Path | str | None = None) -> Path | None:
     return None
 
 
+def install_home() -> Path:
+    """The installation folder (app/, venv/): LABPIPE_HOME, else ~/.local/share/labpipe
+    (Windows: %LOCALAPPDATA%/labpipe)."""
+    chosen = os.environ.get("LABPIPE_HOME")
+    if chosen:
+        return Path(chosen).expanduser()
+    if os.name == "nt":
+        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "labpipe"
+    return Path.home() / ".local" / "share" / "labpipe"
+
+
+def config_home() -> Path:
+    """This user's labpipe folder for settings that belong to no project (defaults.yaml, the
+    container login file): LABPIPE_CONFIG_HOME, else ~/.config/labpipe."""
+    chosen = os.environ.get("LABPIPE_CONFIG_HOME")
+    return Path(chosen).expanduser() if chosen else Path.home() / ".config" / "labpipe"
+
+
 def is_installation(code_root: Path) -> bool:
     """Is this code folder an installation (replaced by updates) rather than a repository
-    somebody develops in? Marked by `.labpipe-installed` (the installer writes it) or by the
-    default installation folder."""
+    somebody develops in? Marked by `.labpipe-installed` (the installer writes it) or by
+    being the installation's own app folder (`install_home()/app`)."""
     if (code_root / ".labpipe-installed").exists():
         return True
-    home = Path.home()
-    defaults = [home / ".local" / "share" / "labpipe" / "app",
-                Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local")) / "labpipe" / "app"]
-    return any(os.path.realpath(code_root) == os.path.realpath(d) for d in defaults)
+    return os.path.realpath(code_root) == os.path.realpath(install_home() / "app")
+
+
+def optional_install_command(package: str) -> str:
+    """The exact command that installs an optional dependency into THIS environment, at the
+    version pinned in pyproject.toml (extras). The user runs it; labpipe never does."""
+    import re
+    import sys
+    try:
+        text = (CODE_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    except OSError:
+        text = ""
+    pin = re.search(rf'"({re.escape(package)}==[^"\s]+)"', text)
+    return f'"{sys.executable}" -m pip install "{pin.group(1) if pin else package}"'
 
 
 def _roots() -> tuple[Path, Path, bool]:

@@ -16,7 +16,7 @@ never analysed and never reported as unrecognised.
 from __future__ import annotations
 
 import importlib
-from fnmatch import fnmatch
+from fnmatch import fnmatch, fnmatchcase
 from functools import cache
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
@@ -53,9 +53,26 @@ def skip_reason(relative_path: str, config: dict, ignored: list[str]) -> str | N
     return None
 
 
+def _segments_match(parts: tuple[str, ...], patterns: tuple[str, ...]) -> bool:
+    if not patterns:
+        return not parts
+    head, rest = patterns[0], patterns[1:]
+    if head == "**":                       # any number of folders (also none)
+        if not rest:
+            return bool(parts)
+        return any(_segments_match(parts[i:], rest) for i in range(len(parts) + 1))
+    return bool(parts) and fnmatchcase(parts[0], head) and _segments_match(parts[1:], rest)
+
+
+def glob_match(relative_path: str, pattern: str) -> bool:
+    """Whole-path glob, case-insensitive; `**` matches any number of folders. (Same as
+    PurePosixPath.full_match, which Python 3.10-3.12 hosts do not have.)"""
+    return _segments_match(PurePosixPath(relative_path.lower()).parts,
+                           PurePosixPath(pattern.lower()).parts)
+
+
 def _matches(relative_path: str, patterns: list[str]) -> bool:
-    path = PurePosixPath(relative_path)
-    return any(path.full_match(pattern, case_sensitive=False) for pattern in patterns)
+    return any(glob_match(relative_path, pattern) for pattern in patterns)
 
 
 @cache

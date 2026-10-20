@@ -3,6 +3,7 @@
   labpipe doctor                            setup state of this installation (read-only)
   labpipe init                              create config/local.yaml (this machine's paths)
   labpipe setup [--only STEP]               guided setup in your terminal (data folder, files, sandbox, agents, automation)
+  labpipe setup --first [--answers F] [--no-start]   the installer's questions: tools, models, login, first project
   labpipe readonly-view --source PATH       print this OS's commands for a read-only view (runs nothing)
   labpipe inventory                         what labpipe recognises in the data folder(s)
   labpipe methods new NAME --example F --description D   scaffold a new analysis method
@@ -148,6 +149,12 @@ def cmd_notes_verify(args, config) -> int:
 
 
 def cmd_setup(args, config) -> int:
+    if args.first:
+        from labpipe.installer import run as first_run
+        return first_run(args.answers, start=not args.no_start)
+    if args.answers or args.no_start:
+        _print({"error": "--answers and --no-start belong to `labpipe setup --first`"})
+        return 2
     from labpipe.wizard import run
     return run(args.only)
 
@@ -487,6 +494,12 @@ def build_parser() -> argparse.ArgumentParser:
     setup = sub.add_parser("setup", help="guided setup in your terminal: raw data, sandbox, "
                                          "agents, automation")
     setup.add_argument("--only", choices=["raw-data", "files", "sandbox", "agents", "automation"])
+    setup.add_argument("--first", action="store_true",
+                       help="the installer's questions: tools, models, login, first project")
+    setup.add_argument("--answers", metavar="FILE.yaml",
+                       help="with --first: answer from a file instead of asking (CI, tests)")
+    setup.add_argument("--no-start", action="store_true",
+                       help="with --first: no tool checks, login, build or start")
     setup.set_defaults(func=cmd_setup, needs_config=False)
     roview = sub.add_parser("readonly-view",
                             help="print the commands for a read-only view of the raw data")
@@ -637,7 +650,8 @@ def main(argv: list[str] | None = None) -> int:
         return forwarded
     args = build_parser().parse_args(argv)
     if safety.NO_PROJECT and args.command not in NO_PROJECT_COMMANDS and not (
-            args.command == "project" and args.action == "new"):
+            args.command == "project" and args.action == "new") and not (
+            args.command == "setup" and args.first):
         _print({"error": safety.NO_PROJECT_MESSAGE})
         return 2
     try:
