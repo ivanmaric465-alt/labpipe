@@ -22,6 +22,18 @@ def _not_in_container(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _no_real_systemd(monkeypatch, tmp_path_factory):
+    """No test talks to the user's systemd or sees their unit files: `systemctl` is a fake
+    that answers "unknown" (tests that need other answers replace it) and the unit folder
+    is an empty one of our own."""
+    import subprocess
+    from labpipe import autostart
+    monkeypatch.setattr(autostart, "_systemctl", lambda *words: subprocess.CompletedProcess(
+        ["systemctl", "--user", *words], 1, "", ""))
+    monkeypatch.setattr(autostart, "unit_dir", lambda: tmp_path_factory.mktemp("units"))
+
+
 LAMBDA1 = 1.540598
 LAMBDA2 = 1.544426
 RATIO = 0.5

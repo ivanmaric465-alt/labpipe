@@ -157,10 +157,10 @@ def test_forward_cwd_and_paths(tmp_path):
     assert cmd[-3:] == ["/project/sub/m.yaml", "--out=/project/a", "S-1"]
 
 
-def test_native_watcher_refused_in_container_mode(tmp_path):
-    for argv in (["automation", "watch"], ["automation", "setup"]):
-        with pytest.raises(ct.ForwardError, match="the container runs the watcher"):
-            _fwd(argv, tmp_path, tmp_path)
+def test_watch_refused_and_setup_stays_on_the_host_in_container_mode(tmp_path):
+    with pytest.raises(ct.ForwardError, match="the container runs the watcher"):
+        _fwd(["automation", "watch"], tmp_path, tmp_path)
+    assert _fwd(["automation", "setup"], tmp_path, tmp_path) is None
     assert _fwd(["automation", "run"], tmp_path, tmp_path)[-3:] == ["labpipe", "automation", "run"]
 
 
@@ -267,8 +267,9 @@ def test_doctor_reports_container_state(monkeypatch):
     assert items["container"]["status"] == "ok" and "token=t" in items["container"]["message"]
     assert items["container_login"]["status"] == "todo"
     state.update(running=False, next="labpipe container start")
-    [item] = doctor._container()
+    item, start = doctor._container()
     assert item["status"] == "todo" and item["next"] == "labpipe container start"
+    assert start["check"] == "autostart"
 
 
 def test_commands_refuse_without_container_block(monkeypatch):

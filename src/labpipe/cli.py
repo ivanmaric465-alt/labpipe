@@ -24,7 +24,7 @@
   labpipe project sync                      regenerate AGENTS.md, CLAUDE.md, .labpipe/, harness files
   labpipe agents sync|status                generate the harness's agent files from agents/*.md (+ lab/agents/)
   labpipe roots rename OLD NEW              keep manifest entries when a raw root's id changes
-  labpipe automation setup|watch|run|status automatic processing (setup asks you; needs a terminal)
+  labpipe automation setup|run|status  automatic processing runs in the container (setup: timings, start at login; needs a terminal)
   labpipe analyze --pending [--limit N]     analyse all pending entries (deterministic loop)
   labpipe requeue (--stale | --baseline | --entry ID)   put entries back to pending
   labpipe review                            write logs/review_queue.md
@@ -684,10 +684,10 @@ def build_parser() -> argparse.ArgumentParser:
     auto_run = auto.add_parser("run", help="one pass: scan; start the AI only if there is work")
     auto_run.add_argument("--reason", default="manual")
     auto_run.set_defaults(func=cmd_automation)
-    auto.add_parser("watch", help="check for new files and run when they have settled"
+    auto.add_parser("watch", help="the container's entry point (refuses elsewhere)"
                     ).set_defaults(func=cmd_automation)
-    auto_setup = auto.add_parser("setup", help="interactive: choose timings, install the services")
-    auto_setup.add_argument("--yes", action="store_true", help="install without the final question")
+    auto_setup = auto.add_parser("setup", help="interactive: choose timings, start the container at login, remove old native units")
+    auto_setup.add_argument("--yes", action="store_true", help="answer yes to the questions (restart, enable autostart, remove old units)")
     auto_setup.set_defaults(func=cmd_automation)
     auto.add_parser("status").set_defaults(func=cmd_automation)
     auto.add_parser("notify-test").set_defaults(func=cmd_automation)

@@ -291,7 +291,7 @@ def test_roots_rename_keeps_entries(tmp_path):
     assert after["relative_path"] == before["relative_path"] and after["entry_id"] != before["entry_id"]
 
 
-def test_automation_run_and_setup_files(tmp_path, monkeypatch):
+def test_automation_run_and_local_settings(tmp_path, monkeypatch):
     project, raw, env = _project(tmp_path)
     env["LABPIPE_AGENT_MODE"] = "unattended"
     assert _labpipe(env, "automation", "run")["status"] == "nothing_to_do"
@@ -312,9 +312,6 @@ def test_automation_run_and_setup_files(tmp_path, monkeypatch):
     set_local_block("automation", {"settle_minutes": 5, "nightly_at": "03:30"})
     text = local.read_text(encoding="utf-8")
     assert text.count("automation:") == 1 and "settle_minutes: 5" in text and "raw_roots" in text
-    units = automation._systemd_units({"claude": "/opt/claude/bin/claude", "nightly_at": "03:30"})
-    assert "OnCalendar=*-*-* 03:30:00" in units["labpipe-nightly.timer"]
-    assert "automation watch" in units["labpipe-watch.service"]
 
 
 def test_notifications_tell_once_and_name_the_users_agent(tmp_path):
@@ -411,7 +408,7 @@ def test_automation_health_reports_failed_runs(tmp_path, monkeypatch):
     from labpipe import automation, manifest
     monkeypatch.setattr(automation, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(manifest, "PROJECT_ROOT", tmp_path)
-    monkeypatch.setattr(automation, "_services", lambda: {"labpipe-watch.service": "active"})
+    monkeypatch.setattr("labpipe.container.container_mode", lambda: True)   # the watcher is in the container
     config = {"logs_dir": "logs", "manifest": "manifest.json", "automation": {}}
     log = tmp_path / "logs" / "automation.log"
     log.parent.mkdir()

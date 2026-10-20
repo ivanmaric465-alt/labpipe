@@ -408,10 +408,11 @@ def forward_argv(argv: list[str], cwd: Path | str, repo_root: Path | str, engine
         return None
     if words[1:2] and words[1] in (on_host or {}).get(command, []):
         return None
-    if command == "automation" and words[1:2] and words[1] in ("watch", "setup"):
+    if command == "automation" and words[1:2] == ["setup"]:
+        return None   # asks in the user's terminal and sets up the host (autostart)
+    if command == "automation" and words[1:2] == ["watch"]:
         raise ForwardError("container mode is on: the container runs the watcher and the "
-                           "nightly pass. Stop the native services: systemctl --user disable "
-                           "--now labpipe-watch.service labpipe-nightly.timer")
+                           "nightly pass (`labpipe container status`)")
     cwd, repo = Path(cwd), Path(repo_root)
     workdir = _inside(cwd, repo) or PROJECT_MOUNT
     mapped = [_map_arg(arg, cwd, repo) for arg in argv]

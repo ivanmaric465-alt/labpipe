@@ -1,5 +1,8 @@
 """Automatic processing: `labpipe automation watch | run | setup | status`.
 
+Automatic processing lives only in the project's container (docs/design/container.md); the
+native systemd units and the native macOS/Windows pop-ups are retired.
+
 * `run`: one pass. Takes a lock (a second run exits at once), scans, and starts
   the AI supervisor only if there is work (pending entries or missing notes),
   for at most `max_measurements_per_run` of them (the batch, passed to the
@@ -8,16 +11,17 @@
   that needs the user: files no method recognises, files needing a decision,
   failed analyses, analyses out of date (stale). Each is told once; the message
   says what to do, naming the user's own agent tool (config/local.yaml → agents).
-* `watch`: checks the raw roots every `check_every_seconds` (file sizes and
+* `watch`: the container's entry point (outside it, it refuses). Checks the raw roots every `check_every_seconds` (file sizes and
   modification times only, no hashing; every file except system files and
   config/ignore.yaml, so unrecognised files count too). After a change, once nothing has
   changed for `settle_minutes`, it calls `run`. If work is left after a clean
   run that made progress, the next batch runs at the next check.
-* `health`: for `labpipe doctor` (services running, last run ok, nothing stuck).
-* `setup`: asks the user, writes `automation:` into config/local.yaml and the
-  service files for this OS (Linux: systemd user units; macOS/Windows: printed,
-  untested), and installs them only after the user confirms. Needs a terminal:
-  agents cannot install schedules.
+* `health`: for `labpipe doctor` (last run ok, nothing stuck; read from logs/automation.log).
+* `setup`: container mode: asks the timings, writes `automation:` into config/local.yaml,
+  offers to restart the container (the watcher reads the settings once, at its start), sets up
+  starting the container at login (autostart.py) and offers to remove the old native units.
+  Native mode: says that automatic processing needs container mode. Needs a terminal: agents
+  cannot install schedules.
 
 Settings (config/local.yaml):
 
@@ -28,12 +32,14 @@ Settings (config/local.yaml):
       max_measurements_per_run: 10 # the rest follows in the next run
       max_budget_usd: null         # none: the harness's own usage limits apply (subscription);
                                    # set a USD limit per AI run only when paying per use (API key)
-      claude: /home/me/.local/bin/claude
-      notify: {desktop: true, command: null}   # command: ["prog", "{message}"]
+      claude: /home/me/.local/bin/claude   # `automation run` by hand on the host (in the container: `claude`)
+      notify: {desktop: true, command: null}   # desktop: Linux notify-send (container: needs
+                                               # `labpipe container popups on`); command: ["prog", "{message}"]
 """
 
 from __future__ import annotations
 
+import argparse
 import calendar
 import datetime as dt
 import json
@@ -46,13 +52,15 @@ import time
 from pathlib import Path
 from typing import Any
 
+from labpipe import autostart
 from labpipe import manifest as mf
 from labpipe import scanner
 from labpipe.locking import try_exclusive
 from labpipe.notes import todo as notes_todo
 from labpipe.provenance import code_version, utc_now
 from labpipe.registry import load_methods, skip_reason, user_ignore
-from labpipe.safety import PROJECT_ROOT, assert_pipeline_writable, in_container, set_local_block
+from labpipe.safety import (PROJECT_ROOT, SetupError, assert_pipeline_writable, in_container,
+                            load_pipeline_config, set_local_block)
 
 DEFAULTS = {"check_every_seconds": 60, "settle_minutes": 3, "nightly_at": "02:00",
             "max_measurements_per_run": 10, "max_budget_usd": None, "claude": None, "codex": None,
@@ -117,22 +125,15 @@ def notify(config: dict, message: str, kind: str = "info") -> list[str]:
     finished, test) is kept in logs/notifications.jsonl for the browser page."""
     chosen = settings(config)["notify"]
     sent = []
-    if chosen.get("desktop"):
-        system = platform.system()
-        command = None
-        if system == "Linux" and shutil.which("notify-send"):
-            command = ["notify-send", "--app-name=labpipe", "labpipe", message]
-        elif system == "Darwin":
-            command = ["osascript", "-e",
-                       f'display notification {json.dumps(message)} with title "labpipe"']
-        elif system == "Windows":
-            script = ("Add-Type -AssemblyName System.Windows.Forms; $n = New-Object "
-                      "System.Windows.Forms.NotifyIcon; $n.Icon = [System.Drawing.SystemIcons]"
-                      "::Information; $n.Visible = $true; $n.ShowBalloonTip(10000, 'labpipe', "
-                      f"{json.dumps(message)}, 'Info'); Start-Sleep 11; $n.Dispose()")
-            command = ["powershell", "-NoProfile", "-Command", script]
-        if command and subprocess.run(command, capture_output=True, timeout=30).returncode == 0:
-            sent.append("desktop")
+    # Linux only: in the container notify-send reaches the desktop through the D-Bus proxy
+    # (`labpipe container popups on`); elsewhere the notifications page is the channel.
+    if chosen.get("desktop") and platform.system() == "Linux" and shutil.which("notify-send"):
+        command = ["notify-send", "--app-name=labpipe", "labpipe", message]
+        try:
+            if subprocess.run(command, capture_output=True, timeout=30).returncode == 0:
+                sent.append("desktop")
+        except (OSError, subprocess.SubprocessError):
+            pass
     if chosen.get("command"):
         command = [str(part).replace("{message}", message) for part in chosen["command"]]
         try:
@@ -517,6 +518,12 @@ def _start_page(config: dict) -> None:
 
 
 def watch(config: dict) -> None:
+    if not in_container():
+        print("labpipe automation watch is the container's own entry point. Automatic "
+              "processing runs in the project's container: `labpipe container start` (and "
+              "`labpipe automation setup` to start it at login). By hand: `labpipe "
+              "automation run`.", file=sys.stderr)
+        raise SystemExit(2)
     chosen = settings(config)
     # the scan's settle time (automation.settle_minutes overrides pipeline.yaml in
     # load_pipeline_config), so the watcher never runs a pass the scan still waits out
@@ -530,17 +537,16 @@ def watch(config: dict) -> None:
     # files still settling: look again once they have had time to settle
     changed_at = time.time() if result.get("settling") else None
     started_with = code_version()
-    inside = in_container()   # no systemd timer there: the watcher also does the nightly pass
-    last_nightly = _last_nightly(config) if inside else None
+    last_nightly = _last_nightly(config)   # the watcher also does the nightly pass
     while True:
         time.sleep(interval)
         if code_version() != started_with:
-            # New code (e.g. after git pull): exit so the service manager restarts the
-            # watcher with it (systemd: Restart=on-failure).
+            # New code: exit so the engine restarts the container (--restart unless-stopped)
+            # and the watcher starts with it.
             _log(config, {"event": "watch_restart", "reason": "code changed",
                           "from": started_with, "to": code_version()})
             sys.exit(3)
-        if inside and nightly_due(dt.datetime.now(), chosen["nightly_at"], last_nightly):
+        if nightly_due(dt.datetime.now(), chosen["nightly_at"], last_nightly):
             last_nightly = dt.date.today()
             _log(config, {"event": "nightly", "trigger": "nightly"})
             more = _more_batches(run(config, reason="nightly"))
@@ -570,36 +576,13 @@ def _ask(question: str, default: str) -> str:
     return answer or default
 
 
-def _systemd_units(chosen: dict) -> dict[str, str]:
-    labpipe = Path(sys.executable).with_name("labpipe")
-    tool = chosen.get("codex") or chosen.get("claude") or "claude"
-    path = os.pathsep.join(dict.fromkeys([str(labpipe.parent), str(Path(tool).parent),
-                                          "/usr/local/bin", "/usr/bin", "/bin"]))
-    common = (f"WorkingDirectory={PROJECT_ROOT}\nEnvironment=PATH={path}\n"
-              "Environment=LABPIPE_AGENT_MODE=unattended\n")
-    return {
-        "labpipe-watch.service": (
-            "[Unit]\nDescription=labpipe: watch the raw data and analyse new measurements\n\n"
-            f"[Service]\nType=simple\n{common}ExecStart={labpipe} automation watch\n"
-            "Restart=on-failure\nRestartSec=30\n\n[Install]\nWantedBy=default.target\n"),
-        "labpipe-nightly.service": (
-            "[Unit]\nDescription=labpipe: nightly safety-net pass\n\n"
-            f"[Service]\nType=oneshot\n{common}ExecStart={labpipe} automation run --reason nightly\n"),
-        "labpipe-nightly.timer": (
-            "[Unit]\nDescription=labpipe: nightly safety-net pass\n\n"
-            f"[Timer]\nOnCalendar=*-*-* {chosen['nightly_at']}:00\nPersistent=true\n\n"
-            "[Install]\nWantedBy=timers.target\n"),
-    }
+def _yes(question: str) -> bool:
+    return input(f"{question} [y/N] ").strip().lower() in ("y", "yes")
 
 
-def setup(config: dict, *, assume_yes: bool = False) -> int:
-    if not sys.stdin.isatty():
-        print("Run `labpipe automation setup` yourself in a terminal: installing a schedule is "
-              "your decision, so agents cannot do it.")
-        return 2
-    current = settings(config)
-    print("labpipe automation: watch the raw data and analyse new files on their own.\n")
-    chosen = {
+def _setup_timings(config: dict, current: dict) -> None:
+    chosen = dict(config.get("automation") or {})   # keeps notify, claude, codex as they are
+    chosen.update({
         "check_every_seconds": int(_ask("How often should labpipe check for new files (seconds)?",
                                         str(current["check_every_seconds"]))),
         "settle_minutes": float(_ask("How long must a file stay unchanged before it counts as "
@@ -612,53 +595,73 @@ def setup(config: dict, *, assume_yes: bool = False) -> int:
             "Cost limit per AI run in USD, only if you pay per use with an API key (Claude Code "
             "only). Enter or 'none': your subscription's own usage limits apply",
             str(current["max_budget_usd"] or "none"))),
-        "claude": current["claude"], "codex": current["codex"],
-        "notify": {"desktop": _ask("Desktop notifications? (y/n)",
-                                   "y" if current["notify"]["desktop"] else "n").lower().startswith("y"),
-                   "command": current["notify"].get("command")},
-    }
-    harness = (config.get("agents") or {}).get("harness") or "claude-code"
-    tool = "codex" if harness == "codex" else "claude"
-    chosen[tool] = _ask(f"Path to the {tool} command", current[tool] or shutil.which(tool) or tool)
+    })
     set_local_block("automation", chosen)
     print("\nSaved to config/local.yaml → automation.")
-    if platform.system() != "Linux":
-        print("Automatic installation is implemented for Linux (systemd) only so far. On this "
-              "system, run `labpipe automation watch` at login and `labpipe automation run` "
-              "nightly (launchd on macOS, Task Scheduler on Windows).")
+
+
+def _offer_restart(assume_yes: bool) -> None:
+    """The watcher reads automation: once, at its start: a running container needs a restart."""
+    from labpipe import container
+    try:
+        engine = container.current_engine()
+        name = container.container_config(load_pipeline_config())["name"]
+        if not container.running(engine, name):
+            print("The container is not running: `labpipe container start` starts it with "
+                  "these settings.")
+            return
+    except (container.ContainerError, SetupError):
+        return
+    print("The running container reads these settings only when it starts.")
+    if assume_yes or _yes("Restart it now (labpipe container start --replace)?"):
+        container.cmd_start(argparse.Namespace(replace=True, dev=False))
+    else:
+        print("Later: labpipe container start --replace")
+
+
+def _old_units(assume_yes: bool) -> None:
+    units = autostart.old_units()
+    if not units:
+        return
+    print("\nOld native automation is installed (earlier versions of labpipe). It is retired: "
+          "the container does this work now, and both together would analyse twice. Found:")
+    for path in units:
+        print(f"  {path}")
+    print("Will run:")
+    for line in autostart.removal_commands(units):
+        print(f"  {line}")
+    if not (assume_yes or _yes("Remove them now?")):
+        print("Not removed. Run the commands above yourself, or rerun `labpipe automation setup`.")
+        return
+    print("Removed." if autostart.remove_old_units(units) else
+          "Files removed, but systemctl reported a problem: check `systemctl --user "
+          "list-units 'labpipe-*'`.")
+
+
+def setup(config: dict, *, assume_yes: bool = False) -> int:
+    if not sys.stdin.isatty():
+        print("Run `labpipe automation setup` yourself in a terminal: starting things at login "
+              "is your decision, so agents cannot do it.")
+        return 2
+    if in_container():
+        print("Run `labpipe automation setup` on the host computer, not inside the container.")
+        return 2
+    from labpipe import container
+    print("labpipe automation: the project's container watches the raw data and analyses new "
+          "files on its own.\n")
+    _old_units(assume_yes)
+    if not container.container_mode():
+        print("\nAutomatic processing needs container mode (the native watcher is retired): "
+              "`labpipe container setup`, then run this again. Without the container, process "
+              "new data by hand: `labpipe automation run`, or tell the agent \"process the "
+              "new data\".")
         return 0
-    units = _systemd_units(chosen)
-    target = Path.home() / ".config" / "systemd" / "user"
-    print(f"\nThese files will be written to {target}:")
-    for name, text in units.items():
-        print(f"\n--- {name}\n{text}")
-    if not assume_yes and not _ask("Install and start them now? (y/n)", "n").lower().startswith("y"):
-        print("Nothing installed. Rerun `labpipe automation setup` when you are ready.")
-        return 0
-    target.mkdir(parents=True, exist_ok=True)
-    for name, text in units.items():
-        (target / name).write_text(text, encoding="utf-8")
-    for command in (["systemctl", "--user", "daemon-reload"],
-                    ["systemctl", "--user", "enable", "--now", "labpipe-nightly.timer"],
-                    ["systemctl", "--user", "enable", "--now", "labpipe-watch.service"]):
-        subprocess.run(command, check=True)
-        print("ran:", " ".join(command))
-    print("\nInstalled. The watcher runs while you are logged in. To keep it running after "
-          "logout and after reboots without logging in: `loginctl enable-linger`.\n"
-          "Check: `labpipe automation status`. Stop: `systemctl --user disable --now "
-          "labpipe-watch.service labpipe-nightly.timer`.")
+    _setup_timings(config, settings(config))
+    _offer_restart(assume_yes)
+    print("\nStart at login:")
+    autostart.offer(container.current_engine(), lambda q: assume_yes or _yes(q))
+    print("\nCheck: `labpipe automation status` and `labpipe doctor`.")
     return 0
-
-
-def _services() -> dict[str, str]:
-    if platform.system() != "Linux" or not shutil.which("systemctl"):
-        return {}
-    states = {}
-    for unit in ("labpipe-watch.service", "labpipe-nightly.timer"):
-        state = subprocess.run(["systemctl", "--user", "is-active", unit],
-                               capture_output=True, text=True)
-        states[unit] = state.stdout.strip() or state.stderr.strip()
-    return states
 
 
 def _events(config: dict) -> list[dict[str, Any]]:
@@ -675,17 +678,11 @@ def _events(config: dict) -> list[dict[str, Any]]:
 
 
 def health(config: dict, now: float | None = None) -> dict[str, Any]:
-    """For doctor: services running, last run succeeded, nothing waiting too long. Reads only."""
+    """For doctor: last run succeeded, nothing waiting too long. Reads only."""
     now = time.time() if now is None else now
     problems, fixes = [], []
     from labpipe.container import container_mode
-    # no systemd services inside the container, nor with container mode on the host
-    services = {} if in_container() or container_mode() else _services()
-    stopped = [unit for unit, state in services.items() if state != "active"]
-    if stopped:
-        problems.append(f"not running: {', '.join(stopped)}")
-        fixes.append("`systemctl --user enable --now " + " ".join(stopped)
-                     + "` (or rerun `labpipe automation setup`)")
+    watcher = in_container() or container_mode()   # the watcher runs in the container only
     runs = [e for e in _events(config)
             if e.get("event") in ("run_finished", "run_failed", "scan_failed")]
     last = runs[-1] if runs else None
@@ -714,7 +711,7 @@ def health(config: dict, now: float | None = None) -> dict[str, Any]:
                                                   "%Y-%m-%dT%H:%M:%SZ"))
             if now - since > WAITING_TOO_LONG_HOURS * 3600:
                 waiting.append(entry["entry_id"])
-    if waiting and services.get("labpipe-watch.service") == "active":
+    if waiting and watcher:
         problems.append(f"{len(waiting)} file(s) pending for more than "
                         f"{WAITING_TOO_LONG_HOURS} h although the watcher runs")
         fixes.append("read logs/automation.log; `labpipe automation run` processes them now")
@@ -722,10 +719,11 @@ def health(config: dict, now: float | None = None) -> dict[str, Any]:
     return {"status": "warn" if problems else "ok",
             "message": "; ".join([state, *others]) if problems
                        else (f"inside the container; {state}" if in_container()
-                             else f"automatic processing running; {state}"),
+                             else f"automatic processing in the container; {state}" if watcher
+                             else f"no automatic processing (needs container mode); {state}"),
             "next": " · ".join(fixes) or None,
-            "details": {"services": services, "last_run": last, "waiting_long": waiting[:8]}}
+            "details": {"last_run": last, "waiting_long": waiting[:8]}}
 
 
 def status(config: dict) -> dict[str, Any]:
-    return {"settings": settings(config), **_services(), "last_events": _events(config)[-5:]}
+    return {"settings": settings(config), "last_events": _events(config)[-5:]}
