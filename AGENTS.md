@@ -16,6 +16,7 @@ Run `labpipe doctor` first (it only reads). If `ready` is true, go to what the u
 
 - If `labpipe` itself is not found, the user has not installed it yet: show them the one-line install (README → Install); they run it. It asks its questions itself and creates the first project.
 - **`settings_migrations`** (a warning): an update renamed or moved settings, and a file of the user still has the old names (they keep working for one release, with a warning). Show the user `labpipe migrate` (it changes nothing: files, the migrations, the diff, whether comments in the file are kept). **Apply it (`labpipe migrate --apply`, which makes a backup in `backups/migrate-<time>/`) only with the user's OK**, then tell them where the backup is. `docs/settings/migrations.md`.
+- **`project_release`** (a warning): this project was set up or updated with another labpipe release than the installed one. Show the user `labpipe update --check` (what changed) and tell them to run `labpipe update` in their terminal (below); do not run it yourself.
 - **Optional dependencies** (e.g. pymatgen for `labpipe xrd refs build`) are never installed by you. When a command reports one missing, show the user the exact command it prints (it names this installation's own Python and the pinned version), say what the package is for, and let them run it.
 - **The user runs anything that needs admin rights or asks questions in a terminal** (`labpipe setup`, `labpipe automation setup`, mounts, shares, `sudo`). Show the exact commands and explain them; never run them yourself.
 
@@ -55,6 +56,7 @@ All commands print JSON.
 | `labpipe dataset` / `dataset compare --quantity Q (--reference S \| --against P) [--run RUN]` | All samples with the named quantities of their measurements / differences and trends across samples, done by code |
 | `labpipe context init \| index` | Create `context/` from the templates / extract the text of `context/documents/` |
 | `labpipe postdoc start "Q" \| verify RUN \| list \| run "Q"` | A run for the postdoc / check its `analysis.md` / past runs / the whole thing without a conversation |
+| `labpipe update [--check\|--preview\|--to vX.Y.Z]` | New release, preview or rollback: `--check` says what is available and what the changelog says (read-only); `--check --preview` also analyses copies of the measurements with the new code and says what would change in the numbers (changes nothing); `labpipe update` itself backs up, switches the code, migrates settings, regenerates, restarts and lists what is out of date: **the user runs it**, never you |
 | `labpipe migrate` / `migrate --apply [--yes]` | Settings files that use names an update changed: show the change (read-only) / make it, with a backup (only with the user's OK, after showing the diff) |
 | `labpipe replay PROVENANCE.json` | Regenerate outputs and compare hashes (needs the same analysis version as the record) |
 | `labpipe project new FOLDER [--data PATH]... [--name NAME]` / `project sync` | Create a project folder (the user runs it) / regenerate its generated files (`AGENTS.md`, `CLAUDE.md`, `.labpipe/`, harness files) after `lab/LAB.md`, `lab/agents/` or a labpipe update changed |
@@ -69,6 +71,15 @@ All commands print JSON.
 | `labpipe init`, `labpipe readonly-view --source PATH` | Create this machine's `config/local.yaml`; print the commands for a read-only view (runs nothing) |
 
 Method-specific commands (e.g. `labpipe xrd refs`) are in the method's doc.
+
+## Updates (the user runs them)
+
+`labpipe update` changes the installed code and the project's settings, so **you never run it** (the harness asks if you try; unattended runs refuse it). When the user asks for an update or `doctor` says `project_release`:
+
+1. Run `labpipe update --check` (it changes nothing) and read the user its four parts: changes results (per method), settings migrated, new, needs your action. If results change, say that `labpipe update --check --preview` shows what would change in their own numbers, by code (quote its lines; no numbers of your own).
+2. Show the command, `labpipe update`, in the project folder, and what it does: asks first, backs up `labpipe.yaml`, `config/`, `manifest.json` and `lab/methods.yaml` to `backups/<release>/`, shows each settings diff and asks, regenerates the generated files, restarts the container, lists the out-of-date analyses. Back: `labpipe update --to vX.Y.Z`. The user runs it in their terminal. Details: `docs/settings/updates.md`.
+3. **After it**: tell the user what the changelog said under *Needs your action*, which methods have out-of-date analyses and how many (the update printed it; they stay valid), and where a migrated file's original is (`backups/<release>/migrated/`). Redo the out-of-date analyses (`labpipe requeue --stale`, `labpipe analyze --pending`, then the notes) only when the user asks: it costs AI time, and the results change.
+4. If it stopped, the error names `labpipe update --resume <file>`; the user runs that after fixing what it says.
 
 ## Agents
 

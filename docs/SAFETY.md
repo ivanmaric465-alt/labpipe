@@ -27,7 +27,7 @@ LABPIPE_AGENT_MODE=unattended claude -p "Run one pipeline pass." \
 - `--setting-sources project --strict-mcp-config` keeps your personal settings, plugins and MCP servers out of the run, so it depends only on what is in the repository.
 - `dontAsk` refuses anything not pre-approved, instead of waiting for an answer nobody gives.
 - `.claude/unattended.json` is self-contained: it pre-approves `labpipe` commands and notes/log edits, turns on the sandbox (startup fails if it is unavailable), and blocks network commands, web access and edits of settings, code and references. Allow rules in `.claude/settings.json` are ignored by Claude Code until the folder is trusted in an interactive session, so unattended runs do not rely on them.
-- `LABPIPE_AGENT_MODE=unattended` tells the guard hook to allow only plain `labpipe ...` commands and writes of `notes.md` and `logs/`.
+- `LABPIPE_AGENT_MODE=unattended` tells the guard hook to allow only plain `labpipe ...` commands and writes of `notes.md` and `logs/`. `labpipe update` (it changes the installed code and the settings) is the user's: refused there (guard and a deny rule), and asked for in interactive sessions (`.claude/settings.json`, `.codex/rules`).
 - `labpipe` must be on `PATH` for the run (`labpipe doctor` checks).
 
 **Do not add `Edit(...)` deny rules for files labpipe writes** (`manifest.json`, `analysis/`, `logs/`). In a sandboxed run, Claude Code turns `Edit` deny rules into OS-level write blocks for every process, `labpipe` included, so the pipeline could no longer write its own state. Agents are kept away from those files by the guard hook instead. `Edit` denies on settings, code and references in `.claude/unattended.json` are fine, because labpipe never writes there during a run.

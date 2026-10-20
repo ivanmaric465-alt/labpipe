@@ -1,6 +1,6 @@
 # Releasing (for maintainers)
 
-Users install releases (tags `vX.Y.Z`), never whatever is on `main`. `install.sh` / `install.ps1` in the installation's own clone switch to the newest tag (`--main` stays on the clone's current state: for developers). `labpipe update` will go from release to release and show the changelog first (docs/design/install.md → Updates).
+Users install releases (tags `vX.Y.Z`), never whatever is on `main`. `install.sh` / `install.ps1` in the installation's own clone switch to the newest tag (`--main` stays on the clone's current state: for developers). `labpipe update` goes from release to release (and back) and shows the changelog first (`docs/settings/updates.md`); its "Changes results" lines are what users read before they agree, and what the preview (`labpipe update --preview`) confirms with their own numbers.
 
 ## The changelog
 

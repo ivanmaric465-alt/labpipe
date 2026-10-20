@@ -76,6 +76,9 @@ areas:
   migrations:       # settings migrations: old keys, labpipe migrate, the CI check
     code: [src/labpipe/migrations.py, scripts/check_settings_migrations.py]
     docs: [docs/settings/migrations.md, docs/ARCHITECTURE.md, AGENTS.md]
+  update:           # labpipe update: releases, backups, the state, the preview, rollback
+    code: [src/labpipe/update.py, src/labpipe/preview.py]
+    docs: [README.md, docs/settings/updates.md, AGENTS.md, docs/ARCHITECTURE.md]
   locking:
     code: [src/labpipe/locking.py, src/labpipe/__init__.py, src/labpipe/methods/__init__.py]
     docs: [docs/ARCHITECTURE.md]

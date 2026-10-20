@@ -4,7 +4,7 @@ A project is one folder with its own data, settings, context, results and contai
 
 ```bash
 labpipe project new ~/labpipe-projects/<name> --data ~/labdata/<folder> [--data ...] [--name NAME]
-labpipe project sync          # after a labpipe update, or a change in lab/
+labpipe project sync          # after a change in lab/ (`labpipe update` does it itself)
 ```
 
 - `project new` refuses a synced folder (Dropbox, OneDrive, Google Drive, iCloud, Nextcloud, ownCloud, Koofr, Syncthing, MEGA, Seafile) and a non-empty folder that is not a project. It creates `labpipe.yaml`, `config/local.yaml` (the data folders; the agents block and the container engine and pop-ups from `~/.config/labpipe/defaults.yaml`, which the installer writes; without it the example's agents block and no container), `config/lab.yaml`, `config/samples.yaml`, `lab/LAB.md`, `lab/agents/README.md`, then runs `project sync`. It never overwrites a file.
