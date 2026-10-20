@@ -44,6 +44,44 @@ gh release create v0.2.0 --title "labpipe v0.2.0" --notes-file - <<'EOF'
 EOF
 ```
 
+## Platform check (Windows, macOS)
+
+CI runs the tests on Windows but never a real install, container or update there, and never on macOS. Before a release that changes the installer, the container, `labpipe update` or automation, someone runs this once on each system, with a copy of a few real instrument files in a test data folder. Write down what failed (the command, its output) in an issue.
+
+macOS (Terminal):
+
+```bash
+brew install git podman && podman machine init && podman machine start
+curl -fsSL https://claude.ai/install.sh | bash
+git clone https://github.com/ivanmaric465-alt/labpipe ~/.local/share/labpipe/app && ~/.local/share/labpipe/app/install.sh
+```
+
+Windows (PowerShell, not as administrator):
+
+```powershell
+winget install Git.Git; winget install RedHat.Podman
+podman machine init; podman machine start
+irm https://claude.ai/install.ps1 | iex
+git clone https://github.com/ivanmaric465-alt/labpipe "$env:LOCALAPPDATA\labpipe\app"; & "$env:LOCALAPPDATA\labpipe\app\install.ps1"
+```
+
+Answer the installer's questions (first project: the test data folder; analyse what is there: yes). Then, in a new terminal, in the project folder:
+
+```bash
+labpipe --version                    # the release, not "main"
+labpipe doctor                       # ready: true; autostart: what it says for this system
+labpipe container status             # running; open the notifications page it prints
+labpipe status                       # the test files: done (or pending while the watcher works)
+labpipe report                       # open analysis/report.html: figures, "How to read this report"
+labpipe update --check               # "up to date" (or the changelog of a newer release)
+```
+
+Also check:
+- the agent tool opened in the project folder, saying "start": `labpipe doctor`, then the onboarding;
+- a new file copied into the data folder is analysed within a few minutes (the watcher in the container);
+- after a restart of the computer and `podman machine start`: does the container come back by itself (autostart, untested on these systems);
+- the data folder is unchanged (same files, same dates).
+
 ## What CI checks
 
 - `scripts/check_docs.py`: code changed, its docs did not (docs/docmap.yaml). Excuse: commit line `Docs-checked: <area>`.
