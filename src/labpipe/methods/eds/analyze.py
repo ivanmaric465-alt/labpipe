@@ -223,13 +223,18 @@ ATOMIC_WEIGHT = {
 
 
 def _renormalised(values: dict[str, float]) -> dict[str, float]:
+    """Renormalised to 100; a negative value counts as 0 (it stays in the result, as 0)."""
+    values = {name: max(value, 0.0) for name, value in values.items()}
     total = sum(values.values())
     return {name: 100.0 * value / total for name, value in values.items()} if total > 0 else {}
 
 
 def metal_basis(elements: list[dict[str, Any]], non_metals: list[str]) -> dict[str, Any]:
     """Atomic % of the metals (sum 100), from wt% / atomic weight; also from the rounded
-    at% for comparison. Falls back to at% if a metal has no atomic weight in the table."""
+    at% for comparison. Falls back to at% if a metal has no atomic weight in the table.
+    A negative value (INCA, after background subtraction) is taken as 0: the element stays
+    with 0, and `taken_as_zero` lists it with the recorded value (wt%, or at% when that is
+    what the basis uses)."""
     metals = [e for e in elements if e["element"] not in set(non_metals)]
     from_atomic = _renormalised({e["element"]: e["atomic_percent"] for e in metals
                                  if e["atomic_percent"] is not None})
@@ -237,10 +242,15 @@ def metal_basis(elements: list[dict[str, Any]], non_metals: list[str]) -> dict[s
         at_percent = _renormalised({e["element"]: e["weight_percent"] / ATOMIC_WEIGHT[e["element"]]
                                     for e in metals})
         basis = "weight_percent / standard atomic weight"
+        taken_as_zero = {e["element"]: e["weight_percent"] for e in metals
+                         if e["weight_percent"] < 0}
     else:
         at_percent, basis = from_atomic, "atomic_percent as recorded (an atomic weight is missing)"
+        taken_as_zero = {e["element"]: e["atomic_percent"] for e in metals
+                         if e["atomic_percent"] is not None and e["atomic_percent"] < 0}
     return {"at_percent": at_percent, "computed_from": basis,
-            "at_percent_from_recorded_atomic_percent": from_atomic}
+            "at_percent_from_recorded_atomic_percent": from_atomic,
+            "taken_as_zero": taken_as_zero}
 
 
 def compare_with_nominal(measured: dict[str, float],
@@ -260,7 +270,8 @@ def compare_with_nominal(measured: dict[str, float],
 
 # --- run ----------------------------------------------------------------------------------
 
-def _composition_bars(bars, metals: dict[str, float], nominal: dict | None) -> None:
+def _composition_bars(bars, metals: dict[str, float], nominal: dict | None,
+                      taken_as_zero: dict[str, float]) -> None:
     names = sorted(metals, key=lambda name: -metals[name])
     positions = range(len(names))
     if nominal:
@@ -272,7 +283,7 @@ def _composition_bars(bars, metals: dict[str, float], nominal: dict | None) -> N
         bars.legend(frameon=False, fontsize=7)
     else:
         bars.bar(list(positions), [metals[n] for n in names], 0.6, color="0.2")
-    bars.set_xticks(list(positions), names)
+    bars.set_xticks(list(positions), [f"{n}\nn.d." if n in taken_as_zero else n for n in names])
     bars.set_ylabel("Metals (at%, sum 100)")
 
 
@@ -309,7 +320,18 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
         checks.append({"code": "no_uncertainty_reported", "severity": "warning",
                        "message": "the export has no σ: small differences between elements or "
                                   "samples cannot be judged"})
-    low = [e for e in elements if e["weight_percent"] < float(settings["low_concentration_wt_percent"])]
+    zeroed = basis["taken_as_zero"]
+    if zeroed:
+        unit = "wt%" if basis["computed_from"].startswith("weight") else "at%"
+        checks.append({"code": "negative_value", "severity": "review",
+                       "message": "INCA reported negative values ("
+                                  + ", ".join(f"{name} {str(value).replace('-', '−')} {unit}"
+                                              for name, value in zeroed.items())
+                                  + "): below detection after background subtraction; taken as 0 "
+                                    "in the metal basis. Check the spectrum for a peak at that "
+                                    "element"})
+    low = [e for e in elements
+           if 0 <= e["weight_percent"] < float(settings["low_concentration_wt_percent"])]
     if low:
         checks.append({"code": "low_concentration", "severity": "warning",
                        "message": "near the detection limit (< "
@@ -403,7 +425,7 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
         axis.set_axis_off()
         axis.set_title(label, fontsize=8)
     if with_bars:
-        _composition_bars(axes[-1], metals, nominal)
+        _composition_bars(axes[-1], metals, nominal, basis["taken_as_zero"])
     figure.tight_layout()
     staging = out_dir / ".plot-staging"
     staging.mkdir(exist_ok=True)
@@ -419,7 +441,7 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
         figures.append({"file": file, "caption": f"{label} ({picture.name})"})
     if with_bars:
         single, axis = plt.subplots(figsize=(3.25, 2.6))
-        _composition_bars(axis, metals, nominal)
+        _composition_bars(axis, metals, nominal, basis["taken_as_zero"])
         single.tight_layout()
         single.savefig(staging / "panel_composition.png", dpi=dpi, metadata={"Software": None})
         plt.close(single)

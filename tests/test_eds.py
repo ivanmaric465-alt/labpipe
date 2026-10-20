@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from labpipe import settings as settings_mod
 from labpipe.methods.eds import analyze, summary
 from labpipe.methods_kit import check
 
@@ -112,6 +113,39 @@ def test_eds_summary_is_formatting_only(tmp_path):
     assert overview["Nominal"] == "not given"
 
 
+def test_eds_negative_value_is_taken_as_zero_and_flagged(tmp_path):
+    report = make_example(tmp_path / "raw")
+    text = report.read_text(encoding="latin-1").replace(
+        "<TR><TD>Pt M<TD>3.00<TD>0.20</TR>",
+        "<TR><TD>Pt M<TD>3.00<TD>0.20</TR>\n<TR><TD>Ru L<TD>-0.14<TD>-0.05</TR>")
+    report.write_text(text, encoding="latin-1")
+    out = tmp_path / "out"
+    analyze.run(report, out, settings=settings_mod.resolve("eds", None, None)[0]
+                | {"nominal_at_percent": {"Pd": 1, "Pt": 1, "Ru": 1}}, context={}, pipeline=False)
+    results = json.loads((out / "results.json").read_text(encoding="utf-8"))
+    basis = results["metal_basis"]
+    pd, pt = 2.00 / 106.42, 3.00 / 195.08
+    assert basis["at_percent"] == pytest.approx(
+        {"Pd": 100 * pd / (pd + pt), "Pt": 100 * pt / (pd + pt), "Ru": 0.0})
+    assert sum(basis["at_percent"].values()) == pytest.approx(100.0)
+    assert sum(basis["at_percent_from_recorded_atomic_percent"].values()) == pytest.approx(100.0)
+    assert basis["at_percent_from_recorded_atomic_percent"]["Ru"] == 0.0
+    assert basis["taken_as_zero"] == {"Ru": -0.14}
+    ru = next(e for e in results["composition"]["elements"] if e["element"] == "Ru")
+    assert ru["weight_percent"] == -0.14 and ru["atomic_percent"] == -0.05   # as recorded
+    checks = {c["code"]: c for c in results["checks"]}
+    assert checks["negative_value"]["severity"] == "review" and results["status"] == "review"
+    assert "Ru −0.14 wt%" in checks["negative_value"]["message"]
+    assert "low_concentration" not in checks   # a negative value is not "low"
+    rows = {r["element"]: r for r in results["nominal_comparison"]["rows"]}
+    assert rows["Ru"]["measured_at_percent"] == 0.0
+    assert rows["Pd"]["measured_at_percent"] == pytest.approx(basis["at_percent"]["Pd"])
+    overview = summary.summarize(results)["overview"]
+    assert "Ru n.d. (negative)" in overview["Metals (at%, metal basis)"]
+    assert "Ru -0.1" in overview["All elements (wt%)"]
+    assert any(c["code"] == "negative_value" for c in summary.summarize(results)["check_before_using"])
+
+
 def test_eds_contract(tmp_path):
     result = check("eds", make_example(tmp_path / "raw"), work_dir=tmp_path / "check")
     assert result["ok"], [c for c in result["checks"] if not c["ok"]]
@@ -128,7 +162,6 @@ def test_eds_flags_images_named_for_another_report(tmp_path):
 
 
 def test_eds_images_from_settings_replace_the_links(tmp_path):
-    from labpipe import settings as settings_mod
     make_example(tmp_path, "S-13")
     other = tmp_path / "S-14.htm"
     other.write_text(REPORT.format(stem="S-13"), encoding="latin-1")

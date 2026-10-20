@@ -5,8 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 
-def _composition(values: dict[str, float]) -> str:
-    return " · ".join(f"{name} {value:.1f}" for name, value in
+def _composition(values: dict[str, float], not_detected: dict[str, float] | None = None) -> str:
+    """`not_detected`: elements recorded negative, shown as n.d. (their value is 0)."""
+    not_detected = not_detected or {}
+    return " · ".join(f"{name} n.d. (negative)" if name in not_detected else f"{name} {value:.1f}"
+                      for name, value in
                       sorted(values.items(), key=lambda item: -item[1]))
 
 
@@ -14,7 +17,9 @@ def summarize(results: dict[str, Any]) -> dict[str, Any]:
     elements = results["composition"]["elements"]
     non_metals = set(results["metal_basis"]["excluded_non_metals"])
     overview = {
-        "Metals (at%, metal basis)": _composition(results["metal_basis"]["at_percent"]) or "none",
+        "Metals (at%, metal basis)": _composition(
+            results["metal_basis"]["at_percent"],
+            results["metal_basis"].get("taken_as_zero")) or "none",
         "All elements (wt%)": _composition({e["element"]: e["weight_percent"] for e in elements}),
         "Non-metals (wt%)": _composition({e["element"]: e["weight_percent"] for e in elements
                                           if e["element"] in non_metals}) or "none",

@@ -21,7 +21,7 @@ Status: APPROVED 2026-10-17 with changes (below). Implemented.
 ## How (deterministic)
 1. Recognise: `.htm`/`.html` with INCA markers ("Processing option", a Weight%/Atomic% table) (`recognise:`); its linked JPGs and `.ipj` files are claimed by EDS as companions, so `s-100.jpg` is never read as a sample "S-100".
 2. Parse with the standard library HTML parser; numbers with `.` or `,` as decimal mark (never silently dropped); keep the Totals row.
-3. Compute in code: metal basis, renormalised at%, comparison with nominal.
+3. Compute in code: metal basis, renormalised at%, comparison with nominal. A negative value (INCA can report e.g. Ru −0.1 wt% after background subtraction) is below detection, an artefact of the method: it counts as 0 in the metal basis (the element stays, with 0), is listed in `metal_basis.taken_as_zero` with the recorded value, and raises the review check `negative_value`. The table as recorded keeps the negative value.
 4. Duplicates: a report byte-identical to another (`S-11 - Copy.htm` = `S-11.htm`) is recorded as `duplicate`, not analysed. This is a general scanner rule (same content within a method = duplicate), useful for every method.
 - Defaults (`config/eds.yaml`): `non_metals: [C, N, O, F, S, Si, Cl]`, `low_concentration_wt_percent: 1.0`, `nominal_at_percent: null`, `images: null` (the linked ones).
 - Code reused: the INCA table idea from eln_refactor `utils/instrument_reports.py` (a3931a4). Its bugs are not carried over: "Wt% Sigma" columns counted as composition, decimal commas dropped silently, image links failing on case (reported earlier; not fixed there).
@@ -32,6 +32,7 @@ Status: APPROVED 2026-10-17 with changes (below). Implemented.
 | `normalised_totals` | info | processing normalised to 100%: the analytical total is unknown |
 | `no_uncertainty_reported` | warning | the export has no σ; small differences cannot be judged |
 | `low_concentration` | warning | an element below `low_concentration_wt_percent` (near the detection limit) |
+| `negative_value` | review | a metal reported negative (below detection after background subtraction); taken as 0 in the metal basis; check the spectrum for a peak. Not also `low_concentration` |
 | `support_dominates` | info | non-metals are most of the signal (e.g. C 82 wt%): metal ratios rest on small peaks |
 | `no_nominal` | info | no nominal composition given for this sample |
 | `images_missing` | warning | a linked JPG (or one named in `images`) is not found |
@@ -45,8 +46,8 @@ Status: APPROVED 2026-10-17 with changes (below). Implemented.
 
 ## Reading the plot
 - **Three panels** in one figure (the report shows them one at a time, large): the **electron image** with the analysed area, the **spectrum** image from the INCA report, and a **bar chart** of the metals. The first two are the pictures INCA saved, shown unchanged; check there that the analysed area is representative (not an agglomerate or empty support) and that the labelled peaks stand out of the background.
-- **Bar chart**: y is the composition in at% of the metals only, renormalised to 100 (C, O and the other `non_metals` left out); one bar per metal, the largest first. With a nominal composition for the sample, each metal has two bars: dark = measured, light = nominal (legend). Without one, a single dark bar. The numbers are `metal_basis` and `nominal_comparison` in `results.json`; the full table as INCA recorded it is in the report card.
-- **Good vs look again**: bars close to nominal and no review checks. Look again when a bar is tiny (near the detection limit, `low_concentration`), when non-metals dominate the spectrum (`support_dominates`), or when the images belong to another report (`linked_images_other_name`). There are no error bars: the export has no uncertainties.
+- **Bar chart**: y is the composition in at% of the metals only, renormalised to 100 (C, O and the other `non_metals` left out); one bar per metal, the largest first. With a nominal composition for the sample, each metal has two bars: dark = measured, light = nominal (legend). Without one, a single dark bar. An element reported negative has no bar (it is 0) and its label says `n.d.` (not detected). The numbers are `metal_basis` and `nominal_comparison` in `results.json`; the full table as INCA recorded it is in the report card.
+- **Good vs look again**: bars close to nominal and no review checks. Look again when a metal is labelled `n.d.` (`negative_value`), when a bar is tiny (near the detection limit, `low_concentration`), when non-metals dominate the spectrum (`support_dominates`), or when the images belong to another report (`linked_images_other_name`). There are no error bars: the export has no uncertainties.
 - **Plot settings**: `plot.panels: [image, spectrum, composition]` chooses and orders the panels, `plot.width_in` (see `docs/settings/plots.md`).
 
 ## Settings (`config/eds.yaml`)
@@ -65,6 +66,7 @@ For `labpipe dataset` (`summary.quantities`), copied from `results.json`:
 - Sample properties (from `config/samples.yaml`): `sample.nominal.<element>` from `samples.<id>.eds.nominal_at_percent`.
 
 ## Interpretation
+- A metal reported negative is "below detection (reported negative), taken as 0", never zero content.
 - Elements only from the table; never a phase, a stoichiometry or an element the table does not contain.
 - Compositions are of the analysed area only; normalised totals and the missing σ limit how far small differences can be trusted (say so).
 
@@ -73,4 +75,5 @@ For `labpipe dataset` (`summary.quantities`), copied from `results.json`:
 - Metal basis from wt% / standard atomic weight (IUPAC), not from the recorded at%: INCA rounds at% to 0.01, so a minor metal at 0.03 at% carries ±17 % rounding error, while its wt% (e.g. 0.27) has more digits. The at%-based version is kept in results.json for comparison.
 - Added check `linked_images_other_name` (review): in real data one report links the images named for another report while images named for itself exist next to it. labpipe does not guess which are right; the user sets them per measurement (`images: [s-140.jpg, s-141.jpg]` in `config/measurements/eds/<measurement_id>.yaml`, 2026-10-19). JPGs named for a report (`s-140.jpg` next to `S-14.htm`) are claimed by EDS even when no report links them.
 - 2026-10-19, user: report figures shown one at a time with arrows (as in their ELN reports), so the panels are large; SEM galleries the same way.
+- 2026-10-20, user: negative element values are mostly an artefact of the method and are taken as 0 in the metal basis (they used to inflate the other metals after renormalisation, and nothing flagged it); they raise a review check. The all-elements table keeps the recorded values.
 - Duplicates: byte-identical reports (`X - Copy.htm`) are recorded as duplicates by the general scanner rule.
