@@ -57,6 +57,8 @@ git clone https://github.com/ivanmaric465-alt/labpipe ~/.local/share/labpipe/app
 git clone https://github.com/ivanmaric465-alt/labpipe "$env:LOCALAPPDATA\labpipe\app"; & "$env:LOCALAPPDATA\labpipe\app\install.ps1"
 ```
 
+The installer installs the newest **release**, not whatever is on `main`; `install.sh --main` (PowerShell: `-Main`) installs the development state. What changed in each release: [CHANGELOG.md](CHANGELOG.md).
+
 Everything is under `~/.local/share/labpipe` (`app/` the code, `venv/` a small environment) and one link, `~/.local/bin/labpipe`. Rerun the installer any time; it never replaces a `labpipe` that is somebody else's.
 
 It then asks, in plain words, with the answer in brackets (Enter takes it):
@@ -272,6 +274,8 @@ labpipe xrd refs build
 In a project, the references you add are kept in `lab/references/xrd/` (updates never touch them). `xrd refs` runs on your computer, not in the container; building needs the optional pymatgen; the command tells you exactly what to run if it is missing. Do not commit licensed CIFs (ICSD, ICDD).
 
 ## Update
+
+Updates go from release to release; [CHANGELOG.md](CHANGELOG.md) says what changes (results, settings, what needs your action). `labpipe --version` shows what is installed.
 
 ```bash
 git -C ~/.local/share/labpipe/app pull

@@ -69,6 +69,10 @@ areas:
     code: [src/labpipe/doctor.py, src/labpipe/wizard.py, src/labpipe/installer.py, install.sh,
            install.ps1, pyproject.toml]
     docs: [docs/SETUP.md, README.md, AGENTS.md]
+  release:          # versions, the changelog, how a release is made and checked
+    code: [src/labpipe/release.py, scripts/check_release.py, scripts/release.py,
+           scripts/check_updates.py, CHANGELOG.md, ".github/*", ".github/workflows/*"]
+    docs: [docs/RELEASING.md, README.md, docs/ARCHITECTURE.md]
   locking:
     code: [src/labpipe/locking.py, src/labpipe/__init__.py, src/labpipe/methods/__init__.py]
     docs: [docs/ARCHITECTURE.md]

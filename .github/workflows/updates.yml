@@ -1,0 +1,37 @@
+# Weekly: newer pins in requirements.lock, container/requirements.lock, pyproject.toml and
+# CLAUDE_CODE_VERSION -> one pull request. CI tests it; it reaches users only in a release.
+name: updates
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  pins:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Look for newer versions
+        run: python scripts/check_updates.py --apply | tee "$RUNNER_TEMP/updates.txt"
+      - name: Open a pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet; then echo "nothing to update"; exit 0; fi
+          branch="updates/$(date +%Y-%m-%d)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git commit -am "Update pinned dependencies"
+          git push origin "$branch"
+          {
+            echo "Newer versions (old -> new):"; echo
+            sed 's/^/- /' "$RUNNER_TEMP/updates.txt"; echo
+            echo "If an analysis version changes, CHANGELOG.md needs a \`Changes results\` bullet (scripts/check_release.py says which)."
+          } > "$RUNNER_TEMP/body.md"
+          gh pr create --title "Update pinned dependencies" --body-file "$RUNNER_TEMP/body.md" --base main --head "$branch"

@@ -1,0 +1,14 @@
+# Weekly pull requests for the image's base and npm packages and for the workflows' actions.
+# The Python pins (requirements.lock) are not readable by dependabot: .github/workflows/updates.yml
+# does them. Nothing here reaches users before a release (docs/RELEASING.md).
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: /container
+    schedule: {interval: weekly}
+  - package-ecosystem: npm            # Codex (container/package.json)
+    directory: /container
+    schedule: {interval: weekly}
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}

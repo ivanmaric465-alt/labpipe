@@ -36,6 +36,7 @@ All commands print JSON.
 
 | Command | Purpose |
 |---|---|
+| `labpipe --version` | Version of labpipe and the release tag (or commit) of the code folder |
 | `labpipe doctor` | Setup state and the next setup step (read-only) |
 | `labpipe scan` | Update `manifest.json` from the raw roots (idempotent) |
 | `labpipe pending` | Entries waiting for analysis, with their subagent |

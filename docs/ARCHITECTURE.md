@@ -96,6 +96,14 @@ $LABPIPE_HOME/              default ~/.local/share/labpipe (Windows %LOCALAPPDAT
 - **doctor** in an installation also reports the install location, host Python, container
   engine, whether the image is current and the defaults file.
 
+## Releases
+
+Users install releases, never `main`: `install.sh` / `install.ps1` in the installation's own clone (`$LABPIPE_HOME/app`) switch to the newest `vX.Y.Z` tag (detached HEAD) and start over from it; `--main` or `LABPIPE_CHANNEL=main` stays on the current state, as do a clone with local changes and a repository without release tags. Any other checkout (CI, developers) is never switched.
+
+- `__version__` in `src/labpipe/__init__.py` is the version; `pyproject.toml` repeats it (a test keeps them equal). `labpipe --version` prints it with the tag at HEAD, or the commit.
+- `CHANGELOG.md` has four fixed parts per release (changes results, settings migrated, new, needs your action); `release.py` parses it for `labpipe update`.
+- CI: `scripts/check_release.py` fails when a shipped method's analysis version changed without a "Changes results" bullet naming it (excuse: commit line `Results-unchanged: <method> <reason>`). `scripts/release.py` makes the release commit and prints the tag and push commands. Dependabot and `scripts/check_updates.py` (weekly workflow) open pull requests for new pins; they reach users only in a release. All in `docs/RELEASING.md`.
+
 ## Repository layout (the code)
 
 ```
@@ -182,6 +190,7 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | Setup | `doctor.py` | setup state and next step (read-only) |
 | | `wizard.py` | `labpipe setup` (asks in the terminal) |
 | | `installer.py` | `labpipe setup --first`: the installer's questions (tools present, agent tool, models, login, first project, start) |
+| | `release.py` | the version, `CHANGELOG.md` (parse, entries between two versions), release tags and the state of a git checkout; `labpipe --version` |
 | | `roview.py` | commands for a read-only view (native mode) |
 | | `methods_kit.py` | `methods new | check`: scaffold and check a method (in a project: into `lab/`) |
 | Support | `safety.py` | code and project roots, install and config folders, dev mode, write checks, atomic writes, container path mapping |
@@ -330,6 +339,7 @@ One container per project.
 - `tests/test_project.py`: finding the project, `project new` and its refusals, the two roots in
   settings, the generated files and overlays, dev mode, the guard, and a scan, analysis, report
   and replay in a project made by `project new`.
+- `tests/test_release.py`: version equality, the changelog format, entries between versions, release tags, the check for announced changes (also on a copy of the code), the release script's changelog change, the dependency updater (no network). The installer's switch to the newest release is in `tests/test_install.py`.
 - `tests/test_encoding.py`: every text read and write names UTF-8 (Windows would otherwise use
   another code page).
 - `tests/test_docs.py` checks the docs against the code where it can be done mechanically:
