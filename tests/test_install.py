@@ -298,12 +298,13 @@ assert run(['project', 'sync'])[0] == 0
 assert run(['agents', 'sync'])[0] == 0
 rc, text = run(['doctor'])
 assert 'python' in [c['check'] for c in json.loads(text)['checks']]
-rc, text = run(['container', 'status'])
-assert json.loads(text)['engine'] == 'podman'
 rc, text = run(['guard'], stdin={event!r})
 from labpipe import container
-assert container.forward(['status']) == 0           # sent into the "running" container
 assert container.forward(['xrd', 'refs', 'list']) is None   # run on the host
+if sys.platform != 'win32':     # the fake engine is a shell script
+    rc, text = run(['container', 'status'])
+    assert json.loads(text)['engine'] == 'podman'
+    assert container.forward(['status']) == 0       # sent into the "running" container
 """, folder, env_engine)
     assert rest.returncode == 0, rest.stdout + rest.stderr
 
