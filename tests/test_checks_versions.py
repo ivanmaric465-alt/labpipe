@@ -106,13 +106,13 @@ def project(tmp_path, monkeypatch):
     monkeypatch.setattr(notes, "load_methods", lambda: {"xrd": {}})
     out = tmp_path / "analysis" / "S-1" / "xrd" / "S-1_a"
     out.mkdir(parents=True)
-    (out / "results.json").write_text(json.dumps({"a": 3.88}), encoding="utf-8")
-    (out / "notes.md").write_text(NOTES, encoding="utf-8")
+    (out / "results.json").write_text(json.dumps({"a": 3.88}), encoding="utf-8", newline="")
+    (out / "notes.md").write_text(NOTES, encoding="utf-8", newline="")
     entry = {"entry_id": "xrd:lab:S-1_a.xrdml", "method": "xrd", "sample_id": "S-1",
              "measurement_id": "S-1_a", "status": "done", "results_sha256": RESULTS_SHA,
              "output_dir": "analysis/S-1/xrd/S-1_a"}
     (tmp_path / "manifest.json").write_text(json.dumps(
-        {"schema": "labpipe.manifest/1", "entries": {entry["entry_id"]: entry}}), encoding="utf-8")
+        {"schema": "labpipe.manifest/1", "entries": {entry["entry_id"]: entry}}), encoding="utf-8", newline="")
     (tmp_path / "logs").mkdir()
     return tmp_path
 
@@ -157,12 +157,12 @@ def test_the_command_records_only_passes_under_the_current_rules(project, config
     from labpipe import cli
     monkeypatch.setattr(cli, "_refresh_report", lambda config: None)
     (project / "analysis" / "S-1" / "xrd" / "S-1_a" / "notes.md").write_text(
-        "Lattice parameter 9.99 " + RESULTS_SHA, encoding="utf-8")
+        "Lattice parameter 9.99 " + RESULTS_SHA, encoding="utf-8", newline="")
     args = cli.build_parser().parse_args(["notes", "verify", "--entry", EID])
     assert cli.cmd_notes_verify(args, config) == 1
     assert "notes_check" not in _entry(project)          # a failure records nothing
     (project / "analysis" / "S-1" / "xrd" / "S-1_a" / "notes.md").write_text(
-        NOTES, encoding="utf-8")
+        NOTES, encoding="utf-8", newline="")
     assert cli.cmd_notes_verify(args, config) == 0
     assert _entry(project)["notes_check"]["rules"] == 1
     capsys.readouterr()
@@ -182,18 +182,18 @@ def test_changed_text_or_results_or_unrecorded_notes_do_not_get_the_old_pass(
     notes.record_check(config, notes.verify_entry(config, EID))
     _stricter(monkeypatch)
     path = project / "analysis" / "S-1" / "xrd" / "S-1_a" / "notes.md"
-    path.write_text(NOTES + "A new sentence.\n", encoding="utf-8")        # other text
+    path.write_text(NOTES + "A new sentence.\n", encoding="utf-8", newline="")        # other text
     assert notes.verify_entry(config, EID)["ok"] is False
-    path.write_text(NOTES, encoding="utf-8")
+    path.write_text(NOTES, encoding="utf-8", newline="")
     assert notes.verify_entry(config, EID)["ok"] is True
     manifest_file = project / "manifest.json"
     data = json.loads(manifest_file.read_text(encoding="utf-8"))
     data["entries"][EID]["results_sha256"] = "b" * 64                     # other results
-    manifest_file.write_text(json.dumps(data), encoding="utf-8")
+    manifest_file.write_text(json.dumps(data), encoding="utf-8", newline="")
     assert notes.verify_entry(config, EID)["ok"] is False
     data["entries"][EID]["results_sha256"] = RESULTS_SHA
     del data["entries"][EID]["notes_check"]                               # never recorded
-    manifest_file.write_text(json.dumps(data), encoding="utf-8")
+    manifest_file.write_text(json.dumps(data), encoding="utf-8", newline="")
     assert notes.verify_entry(config, EID)["ok"] is False
 
 
@@ -214,5 +214,5 @@ def test_notes_todo_never_lists_a_note_only_because_the_rules_changed(project, c
     assert notes.todo(config) == []                            # ... and is still not queued
     (project / "analysis" / "S-1" / "xrd" / "S-1_a" / "notes.md").write_text(
         "Some other results 1111111111111111111111111111111111111111111111111111111111111111",
-        encoding="utf-8")
+        encoding="utf-8", newline="")
     assert [row["entry_id"] for row in notes.todo(config)] == [EID]   # (other results: queued)

@@ -44,7 +44,7 @@ def _fresh_warnings(monkeypatch):
 @pytest.fixture
 def project(tmp_path):
     (tmp_path / "config").mkdir()
-    (tmp_path / "config" / "lab.yaml").write_text(LAB, encoding="utf-8")
+    (tmp_path / "config" / "lab.yaml").write_text(LAB, encoding="utf-8", newline="")
     return tmp_path
 
 
@@ -66,7 +66,7 @@ def test_rename_edits_only_the_key_and_keeps_every_comment(project):
 
 
 def test_nothing_pending_when_the_old_key_is_absent(project):
-    (project / "config" / "lab.yaml").write_text("plots:\n  resolution: 600\n", encoding="utf-8")
+    (project / "config" / "lab.yaml").write_text("plots:\n  resolution: 600\n", encoding="utf-8", newline="")
     assert migrations.plan(project, [DPI]) == []
     assert migrations.plan(project, []) == []
 
@@ -75,7 +75,7 @@ def test_rename_does_not_touch_lookalikes(project):
     """`dpi:` in a string, a list item, a block text and another section is not the key."""
     text = ("plots:\n  note: |\n    dpi: 1\n  dpi: 2\n  items:\n    - dpi: 3\n"
             "xrd:\n  dpi: 4\n")
-    (project / "config" / "lab.yaml").write_text(text, encoding="utf-8")
+    (project / "config" / "lab.yaml").write_text(text, encoding="utf-8", newline="")
     after = _only(migrations.plan(project, [DPI]))["after"]
     assert after == text.replace("  dpi: 2", "  resolution: 2")
 
@@ -100,17 +100,17 @@ def test_transform_changes_only_the_value_and_keeps_the_comment_column(project):
     assert item["after"] == LAB.replace("font_size: 9        #", "font_size: 90       #")
     assert item["comments_kept"] is True
     # applying it again changes nothing: the function returns a new value as it is
-    (project / "config" / "lab.yaml").write_text(item["after"], encoding="utf-8")
+    (project / "config" / "lab.yaml").write_text(item["after"], encoding="utf-8", newline="")
     assert migrations.plan(project, [migration]) == []
 
 
 def test_transform_keeps_the_quote_style_and_falls_back_for_a_section(project):
     (project / "config" / "lab.yaml").write_text('xrd:\n  unit: "A"\n  other: x\n',
-                                                 encoding="utf-8")
+                                                 encoding="utf-8", newline="")
     to_nm = Migration("m", "v0.3.0", "d", ("config/lab.yaml",), operations=[
         transform("xrd.unit", lambda v: "nm" if v == "A" else v, "now nm")])
     assert _only(migrations.plan(project, [to_nm]))["after"] == 'xrd:\n  unit: "nm"\n  other: x\n'
-    (project / "config" / "lab.yaml").write_text("xrd:\n  unit: [a]  # list\n", encoding="utf-8")
+    (project / "config" / "lab.yaml").write_text("xrd:\n  unit: [a]  # list\n", encoding="utf-8", newline="")
     listed = Migration("m", "v0.3.0", "d", ("config/lab.yaml",), operations=[
         transform("xrd.unit", lambda v: v + ["b"], "now with b")])
     item = _only(migrations.plan(project, [listed]))
@@ -131,7 +131,7 @@ def test_move_falls_back_to_the_data_and_says_the_comments_are_lost(project):
 
 
 def test_move_without_comments_loses_nothing(project):
-    (project / "config" / "lab.yaml").write_text("report:\n  group_by: method\n", encoding="utf-8")
+    (project / "config" / "lab.yaml").write_text("report:\n  group_by: method\n", encoding="utf-8", newline="")
     migration = Migration("m", "v0.3.0", "d", ("config/lab.yaml",),
                           operations=[move("report.group_by", "plots.group_by")])
     assert _only(migrations.plan(project, [migration]))["comments_kept"] is True
@@ -139,7 +139,7 @@ def test_move_without_comments_loses_nothing(project):
 
 def test_remove_deletes_the_key_with_what_it_holds(project):
     text = "plots:\n  dpi: 600   # old\n  font_size: 9\nxrd:\n  old:\n    a: 1\n    b: [2]\n\n  keep: 1\n"
-    (project / "config" / "lab.yaml").write_text(text, encoding="utf-8")
+    (project / "config" / "lab.yaml").write_text(text, encoding="utf-8", newline="")
     migration = Migration("m", "v0.3.0", "d", ("config/lab.yaml",),
                           operations=[remove("plots.dpi"), remove("xrd.old", "gone")])
     item = _only(migrations.plan(project, [migration]))
@@ -149,7 +149,7 @@ def test_remove_deletes_the_key_with_what_it_holds(project):
 
 def test_when_both_names_are_there_the_new_one_wins(project):
     (project / "config" / "lab.yaml").write_text("plots:\n  dpi: 1\n  resolution: 2\n",
-                                                 encoding="utf-8")
+                                                 encoding="utf-8", newline="")
     item = _only(migrations.plan(project, [DPI]))
     assert yaml.safe_load(item["after"]) == {"plots": {"resolution": 2}}
 
@@ -157,8 +157,8 @@ def test_when_both_names_are_there_the_new_one_wins(project):
 def test_several_migrations_and_files_and_globs(project):
     folder = project / "config" / "measurements" / "xrd"
     folder.mkdir(parents=True)
-    (folder / "S-1_a.yaml").write_text("note: x  # why\nbackground: {order: 3}\n", encoding="utf-8")
-    (folder / "S-1_b.yaml").write_text("background: {degree: 3}\n", encoding="utf-8")
+    (folder / "S-1_a.yaml").write_text("note: x  # why\nbackground: {order: 3}\n", encoding="utf-8", newline="")
+    (folder / "S-1_b.yaml").write_text("background: {degree: 3}\n", encoding="utf-8", newline="")
     ms = migrations.method_setting("0.3.0-order", "v0.3.0", "background.order is now degree",
                                    "xrd", rename("background.order", "background.degree"))
     assert [m.id for m in ms] == ["0.3.0-order", "0.3.0-order-samples", "0.3.0-order-measurements"]
@@ -173,7 +173,7 @@ def test_several_migrations_and_files_and_globs(project):
 def test_method_setting_reaches_samples_and_presets(project):
     (project / "config" / "samples.yaml").write_text(
         "presets:\n  p:\n    xrd: {background: {order: 2}}\nsamples:\n  S-1:\n    xrd: {background: {order: 4}}\n",
-        encoding="utf-8")
+        encoding="utf-8", newline="")
     ms = migrations.method_setting("m", "v0.3.0", "d", "xrd",
                                    rename("background.order", "background.degree"))
     after = yaml.safe_load(_only(migrations.plan(project, ms[1:2]))["after"])
@@ -184,7 +184,7 @@ def test_method_setting_reaches_samples_and_presets(project):
 def test_keys_inside_one_line_mappings_are_edited_in_place(project):
     text = ("samples:\n  S-1: {presets: [p], xrd: {background: {order: 3, n: 2}}}  # why\n"
             "  S-2: {xrd: {background: {order: \"4\"}, other: 1}}\n")
-    (project / "config" / "samples.yaml").write_text(text, encoding="utf-8")
+    (project / "config" / "samples.yaml").write_text(text, encoding="utf-8", newline="")
     ms = migrations.method_setting("o", "v0.3.0", "d", "xrd",
                                    rename("background.order", "background.degree"))
     item = _only(migrations.plan(project, ms[1:2]))
@@ -201,7 +201,7 @@ def test_the_example_files_survive_a_rename_with_their_comments():
     import tempfile
     with tempfile.TemporaryDirectory() as folder:
         (Path(folder) / "config").mkdir()
-        (Path(folder) / "config" / "samples.yaml").write_text(text, encoding="utf-8")
+        (Path(folder) / "config" / "samples.yaml").write_text(text, encoding="utf-8", newline="")
         item = _only(migrations.plan(Path(folder), [migration]))
     assert item["after"] == text.replace("broad_components_deg", "broad_deg")
     assert item["comments_kept"] is True
@@ -215,9 +215,9 @@ def test_bad_operations_are_refused():
 
 
 def test_files_that_are_not_mappings_or_not_yaml_are_skipped(project):
-    (project / "config" / "lab.yaml").write_text("[1, 2]\n", encoding="utf-8")
+    (project / "config" / "lab.yaml").write_text("[1, 2]\n", encoding="utf-8", newline="")
     assert migrations.plan(project, [DPI]) == []
-    (project / "config" / "lab.yaml").write_text("a: [unclosed\n", encoding="utf-8")
+    (project / "config" / "lab.yaml").write_text("a: [unclosed\n", encoding="utf-8", newline="")
     assert migrations.plan(project, [DPI]) == []
 
 
@@ -234,12 +234,12 @@ def test_apply_backs_up_then_writes(project):
 
 def test_apply_refuses_when_a_file_changed_since_the_plan_and_writes_nothing(project):
     (project / "config" / "samples.yaml").write_text("samples:\n  S-1:\n    xrd: {old: 1}\n",
-                                                     encoding="utf-8")
+                                                     encoding="utf-8", newline="")
     other = Migration("o", "v0.3.0", "d", ("config/samples.yaml",),
                       operations=[rename("samples.*.xrd.old", "samples.*.xrd.new")])
     planned = migrations.plan(project, [DPI, other])
     assert len(planned) == 2
-    (project / "config" / "samples.yaml").write_text("samples: {}\n", encoding="utf-8")
+    (project / "config" / "samples.yaml").write_text("samples: {}\n", encoding="utf-8", newline="")
     with pytest.raises(migrations.MigrationError, match="changed since the plan"):
         migrations.apply(project, planned, project / "backups" / "b")
     assert (project / "config" / "lab.yaml").read_text(encoding="utf-8") == LAB
@@ -250,7 +250,7 @@ def test_apply_never_overwrites_a_backup(project):
     planned = migrations.plan(project, [DPI])
     backup = project / "backups" / "b"
     (backup / "config").mkdir(parents=True)
-    (backup / "config" / "lab.yaml").write_text("older backup", encoding="utf-8")
+    (backup / "config" / "lab.yaml").write_text("older backup", encoding="utf-8", newline="")
     with pytest.raises(migrations.MigrationError, match="never overwritten"):
         migrations.apply(project, planned, backup)
     assert (backup / "config" / "lab.yaml").read_text(encoding="utf-8") == "older backup"
@@ -294,9 +294,9 @@ def test_upgraded_warns_once_per_file_on_stderr(project, capsys, monkeypatch):
 def _defaults(tmp_path, monkeypatch):
     config = tmp_path / "config"
     (config / "measurements" / "xrd").mkdir(parents=True, exist_ok=True)
-    (config / "xrd.yaml").write_text("background: {degree: 4}\n", encoding="utf-8")
+    (config / "xrd.yaml").write_text("background: {degree: 4}\n", encoding="utf-8", newline="")
     (config / "plots.yaml").write_text((REPO / "config" / "plots.yaml").read_text(
-        encoding="utf-8"), encoding="utf-8")
+        encoding="utf-8"), encoding="utf-8", newline="")
     monkeypatch.setattr(settings, "CONFIG", config)
     monkeypatch.setattr(settings, "DEFAULTS", config)
     return config
@@ -308,9 +308,9 @@ def test_settings_accept_old_keys_with_a_warning_and_still_refuse_unknown_ones(
     ms = migrations.method_setting("0.3.0-order", "v0.3.0", "background.order is now degree",
                                    "xrd", rename("background.order", "background.degree"))
     monkeypatch.setattr(migrations, "MIGRATIONS", ms)
-    (config / "lab.yaml").write_text("xrd:\n  background: {order: 6}\n", encoding="utf-8")
+    (config / "lab.yaml").write_text("xrd:\n  background: {order: 6}\n", encoding="utf-8", newline="")
     (config / "samples.yaml").write_text(
-        "samples:\n  S-1: {xrd: {background: {order: 7}}}\n", encoding="utf-8")
+        "samples:\n  S-1: {xrd: {background: {order: 7}}}\n", encoding="utf-8", newline="")
     resolved, sources = settings.resolve("xrd", "S-1", None)
     assert resolved["background"] == {"degree": 7}
     err = capsys.readouterr().err
@@ -321,11 +321,11 @@ def test_settings_accept_old_keys_with_a_warning_and_still_refuse_unknown_ones(
     assert sources[1]["sha256"] == hashlib.sha256(
         (config / "lab.yaml").read_bytes()).hexdigest()
     (config / "measurements" / "xrd" / "S-1_a.yaml").write_text(
-        "background: {ordr: 2}\n", encoding="utf-8")
+        "background: {ordr: 2}\n", encoding="utf-8", newline="")
     with pytest.raises(settings.SettingsError, match="unknown setting 'background.ordr'"):
         settings.resolve("xrd", "S-1", "S-1_a")
     (config / "measurements" / "xrd" / "S-1_a.yaml").write_text(
-        "background: {order: 2}\n", encoding="utf-8")       # the old name works here too
+        "background: {order: 2}\n", encoding="utf-8", newline="")       # the old name works here too
     assert settings.resolve("xrd", "S-1", "S-1_a")[0]["background"] == {"degree": 2}
 
 
@@ -341,9 +341,9 @@ def test_the_machine_ignore_and_sample_id_files_understand_old_keys(
     config = tmp_path / "config"
     config.mkdir()
     (config / "local.yaml").write_text("raw_roots: []\nautomation: {wait_minutes: 4}\n",
-                                       encoding="utf-8")
-    (config / "ignore.yaml").write_text('skip: ["TEM/**"]\n', encoding="utf-8")
-    (config / "sample_ids.yaml").write_text("override: {a.xy: S-1}\n", encoding="utf-8")
+                                       encoding="utf-8", newline="")
+    (config / "ignore.yaml").write_text('skip: ["TEM/**"]\n', encoding="utf-8", newline="")
+    (config / "sample_ids.yaml").write_text("override: {a.xy: S-1}\n", encoding="utf-8", newline="")
     assert safety.load_pipeline_config(tmp_path)["settle_minutes"] == 4
     monkeypatch.setattr(registry, "PROJECT_ROOT", tmp_path)
     assert registry.user_ignore() == ["TEM/**"]
@@ -488,12 +488,12 @@ def test_the_check_on_a_small_git_repository(tmp_path, monkeypatch, capsys):
     check = _script()
     repo = tmp_path / "repo"
     (repo / "config").mkdir(parents=True)
-    (repo / "config" / "plots.yaml").write_text("font: Arial\ndpi: 300\n", encoding="utf-8")
-    (repo / "config" / "xrd.yaml").write_text("background: {order: 3}\n", encoding="utf-8")
+    (repo / "config" / "plots.yaml").write_text("font: Arial\ndpi: 300\n", encoding="utf-8", newline="")
+    (repo / "config" / "xrd.yaml").write_text("background: {order: 3}\n", encoding="utf-8", newline="")
     (repo / "config" / "samples.example.yaml").write_text(
-        "presets:\n  carbon:\n    xrd: {a: 1}\nsamples: {}\n", encoding="utf-8")
+        "presets:\n  carbon:\n    xrd: {a: 1}\nsamples: {}\n", encoding="utf-8", newline="")
     (repo / "methods.yaml").write_text(
-        "methods:\n  xrd: {config: config/xrd.yaml}\n", encoding="utf-8")
+        "methods:\n  xrd: {config: config/xrd.yaml}\n", encoding="utf-8", newline="")
     _git(repo, "init", "-q")
     _git(repo, "add", ".")
     _git(repo, "commit", "-qm", "base")
@@ -503,13 +503,13 @@ def test_the_check_on_a_small_git_repository(tmp_path, monkeypatch, capsys):
     assert check.main("base") == 0
     assert "ok" in capsys.readouterr().out
     # a key added, an example's preset renamed: nothing needed
-    (repo / "config" / "plots.yaml").write_text("font: Arial\ndpi: 300\nnew: 1\n", encoding="utf-8")
+    (repo / "config" / "plots.yaml").write_text("font: Arial\ndpi: 300\nnew: 1\n", encoding="utf-8", newline="")
     (repo / "config" / "samples.example.yaml").write_text(
-        "presets:\n  other:\n    xrd: {a: 1}\nsamples: {}\n", encoding="utf-8")
+        "presets:\n  other:\n    xrd: {a: 1}\nsamples: {}\n", encoding="utf-8", newline="")
     assert check.main("base") == 0
     # a key removed or renamed without a migration
-    (repo / "config" / "plots.yaml").write_text("font: Arial\nresolution: 300\n", encoding="utf-8")
-    (repo / "config" / "xrd.yaml").write_text("background: {degree: 3}\n", encoding="utf-8")
+    (repo / "config" / "plots.yaml").write_text("font: Arial\nresolution: 300\n", encoding="utf-8", newline="")
+    (repo / "config" / "xrd.yaml").write_text("background: {degree: 3}\n", encoding="utf-8", newline="")
     assert check.main("base") == 1
     out = capsys.readouterr().out
     assert "config/plots.yaml: the setting 'dpi'" in out and "plots.dpi" in out
@@ -526,10 +526,10 @@ def test_the_check_on_a_small_git_repository(tmp_path, monkeypatch, capsys):
                                    rename("background.order", "background.degree"))])
     assert check.main("base") == 0                  # no CHANGELOG.md: that part is skipped
     (repo / "CHANGELOG.md").write_text("## Unreleased\n### Settings migrated\n- none\n",
-                                       encoding="utf-8")
+                                       encoding="utf-8", newline="")
     assert check.main("base") == 1
     (repo / "CHANGELOG.md").write_text("## Unreleased\n### Settings migrated\n- x\n",
-                                       encoding="utf-8")
+                                       encoding="utf-8", newline="")
     assert check.main("base") == 0
     assert check.main("no-such-ref") == 0
 
@@ -542,3 +542,10 @@ def test_the_shipped_settings_files_are_all_found():
     assert {"config/plots.yaml", "config/report.yaml", "config/pipeline.yaml", "config/xrd.yaml",
             "config/sem.yaml", "config/eds.yaml", "config/lab.example.yaml"} <= set(files)
     assert files["config/xrd.yaml"] == "method:xrd"
+
+
+def test_a_file_with_windows_line_endings_keeps_them(tmp_path):
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "lab.yaml").write_bytes(b"plots:\r\n  dpi: 600  # why\r\n")
+    item = _only(migrations.plan(tmp_path, [DPI]))
+    assert item["after"] == "plots:\r\n  resolution: 600  # why\r\n" and item["comments_kept"]
