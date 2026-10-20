@@ -190,7 +190,8 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | Automation | `automation.py` | watcher, one pass, nightly run, notifications, headless agent commands |
 | | `inbox.py` | notifications page (local, token, read-only) |
 | | `container.py` | build (staged context), start (name, port, mounts per project), stop, login, shell, pop-up proxy; forwarding of host commands (and `forward_json`: the doctor's file list comes from the container, since recognising a file imports method code) |
-| Setup | `doctor.py` | setup state and next step (read-only; also `settings_migrations`) |
+| Setup | `doctor.py` | setup state and next step (read-only; also `settings_migrations`, and the non-blocking `onboarding` warning while steps of `docs/ONBOARDING.md` remain) |
+| | `onboarding.py` | `labpipe onboarding`: the steps of the first conversation (`docs/ONBOARDING.md`), their record in `logs/onboarding.json`, the doctor's `onboarding` item (host side, no numpy) |
 | | `migrations.py` | settings migrations: `labpipe migrate`, old keys understood in memory for one release (host side, no numpy) |
 | | `update.py` | `labpipe update`: releases, backups, switching the code, the state file and the re-exec into the new code, settings, restart, what is out of date (host side) |
 | | `preview.py` | `labpipe update --preview`: the release's code folder, the scratch project, the comparison of the numbers (host side; the analyses run in a subprocess or a throwaway container) |
@@ -423,7 +424,7 @@ One container per project.
   the listed hosts. The entrypoint drops privileges.
 - **Host side**: `labpipe` on the host, anywhere inside a project, forwards commands into that
   project's container (`exec`, the working folder mapped under `/project`). Local-only
-  commands: container, shell, setup, init, doctor, agents, project, migrate, update, guard, methods (`new`,
+  commands: container, shell, setup, init, doctor, agents, project, migrate, update, onboarding, guard, methods (`new`,
   `versions`; `methods check` runs an analysis, so it goes into the container), readonly-view,
   and method subcommands listed in `methods.yaml` → `run_on_host` (`xrd refs`: building
   references needs the optional pymatgen, which the image does not have).
@@ -458,6 +459,7 @@ One container per project.
 - `tests/test_release.py`: version equality, the changelog format, entries between versions, release tags, the check for announced changes (also on a copy of the code), the release script's changelog change, the dependency updater (no network). The installer's switch to the newest release is in `tests/test_install.py`.
 - `tests/test_migrations.py`: the plan, comments kept, apply and backups, old keys for one release
   in the loaders, the command, doctor and the CI check (host-side: runs on Python 3.10 without numpy).
+- `tests/test_onboarding.py` (host-side: runs on Python 3.10 without numpy): the steps against `docs/ONBOARDING.md`, the record, the command, the doctor item, the guard.
 - `tests/test_update.py` (host-side: runs on Python 3.10 without numpy) and `tests/test_update_flow.py`:
   `labpipe update`, with the fake origin and the fake engine described under Updates.
 - `tests/test_checks_versions.py`: the rule fingerprints and the versions of the notes checks

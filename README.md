@@ -146,7 +146,15 @@ SEM/S-1 a001.txt         S-1/S-1 a001.txt         2026-03/S-1 a001.txt
 
 ## Set up
 
-The installer made your first project. Open Claude Code or Codex in the project folder (trust the folder when Codex asks) and say *"start"*. The agent runs `labpipe doctor` and goes through file naming, unrecognised files, references and a first analysis.
+The installer made your first project. Open Claude Code or Codex in the project folder (trust the folder when Codex asks) and say *"start"*. The agent runs `labpipe doctor` and goes through file naming, unrecognised files and references; then the first conversation.
+
+### First conversation
+
+Once setup is done, the agent shows you around with your own data (`docs/ONBOARDING.md`): your files, the setup questions of each method, one measurement per method with its plot explained, and a short tour of the report, steering, the agents, automatic processing, the postdoc, the settings and updates. Every step can be skipped.
+
+- It resumes where it stopped (`labpipe onboarding` shows where).
+- Say *"tour"* to see the tour again.
+- Say *"skip the onboarding"* to leave it out (`labpipe onboarding skip all`).
 
 ```bash
 cd ~/labpipe-projects/<name>

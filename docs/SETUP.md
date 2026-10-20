@@ -25,4 +25,6 @@ Read this when `labpipe doctor` says `ready: false`. Lead the user **one item at
 
 - **Project context** (optional, any time): for the postdoc (AGENTS.md → Project context and the postdoc). `labpipe context init`; the user puts the work plan and papers into `context/documents/`; `labpipe context index`; then write `context.md` together.
 
+Onboarding follows setup, when `labpipe doctor` is `ready` and shows the `onboarding` item: `docs/ONBOARDING.md`.
+
 Keep a short record of the setup decisions (paths chosen, naming rule, standards) in the `note:` fields of the settings files you change, so the next person knows why.

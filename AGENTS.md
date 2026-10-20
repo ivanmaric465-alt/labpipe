@@ -14,6 +14,8 @@ Everything specific to one method (its settings, how to word its results, its co
 
 Run `labpipe doctor` first (it only reads). If `ready` is true, go to what the user asks. Otherwise lead the user through setup, one item at a time, as described in `docs/SETUP.md`.
 
+- **`onboarding`** (a warning, never blocking): when `ready` is true and doctor shows it, or when the user says "start", "tour" or "show me around", follow `docs/ONBOARDING.md`: one step at a time, short, with their own data, skipping what they do not want. `labpipe onboarding done <id>` after each step (it resumes where it stopped); "skip the onboarding" is `labpipe onboarding skip all`; "tour" is `labpipe onboarding restart --tour`.
+
 - If `labpipe` itself is not found, the user has not installed it yet: show them the one-line install (README → Install); they run it. It asks its questions itself and creates the first project.
 - **`settings_migrations`** (a warning): an update renamed or moved settings, and a file of the user still has the old names (they keep working for one release, with a warning). Show the user `labpipe migrate` (it changes nothing: files, the migrations, the diff, whether comments in the file are kept). **Apply it (`labpipe migrate --apply`, which makes a backup in `backups/migrate-<time>/`) only with the user's OK**, then tell them where the backup is. `docs/settings/migrations.md`.
 - **`project_release`** (a warning): this project was set up or updated with another labpipe release than the installed one. Show the user `labpipe update --check` (what changed) and tell them to run `labpipe update` in their terminal (below); do not run it yourself.
@@ -40,6 +42,7 @@ All commands print JSON.
 |---|---|
 | `labpipe --version` | Version of labpipe and the release tag (or commit) of the code folder |
 | `labpipe doctor` | Setup state and the next setup step (read-only) |
+| `labpipe onboarding [status] \| done ID \| skip ID\|all \| restart [--tour]` | The first conversation (`docs/ONBOARDING.md`): the steps and the next one / mark a step done or skipped / start again (writes only `logs/onboarding.json`) |
 | `labpipe scan` | Update `manifest.json` from the raw roots (idempotent) |
 | `labpipe pending` | Entries waiting for analysis, with their subagent |
 | `labpipe status [ID]` | Manifest summary, or one entry |

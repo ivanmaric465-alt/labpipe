@@ -226,7 +226,9 @@ short, uses the user's own data and can be skipped. Progress is recorded with
    with preview and rollback. **Built** (`src/labpipe/update.py`, `preview.py`; user page
    `docs/settings/updates.md`).
 4. Onboarding: `docs/ONBOARDING.md`, "Reading the plot" per method, the doctor item,
-   `labpipe onboarding`, the report's "How to read" box.
+   `labpipe onboarding`, the report's "How to read" box. **Built**: `docs/ONBOARDING.md`, the doctor
+   item and `labpipe onboarding` (`src/labpipe/onboarding.py`); "Reading the plot" and the box
+   follow.
 5. Retire native automation (container plan, step 4).
 
 Each step is a branch with tests, and stops for review.
