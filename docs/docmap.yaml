@@ -4,7 +4,8 @@
 # none of its docs did; if the docs really need no change, say so in a commit message line
 # `Docs-checked: <area>` (several: comma-separated).
 # Paths are globs relative to the repository. tests/test_docs.py checks that every path here
-# exists and that every module in src/labpipe belongs to an area.
+# exists, that every module in src/labpipe belongs to an area, and that every tracked Markdown
+# document is named here (in an area, a linked group, or under `not_kept_in_sync`).
 schema: labpipe.docmap/1
 areas:
   structure:        # a module or file added, removed or moved
@@ -37,7 +38,7 @@ areas:
     docs: [docs/ARCHITECTURE.md, docs/SAFETY.md]
   method-xrd:
     code: ["src/labpipe/methods/xrd/*", config/xrd.yaml, "references/xrd/*.yaml"]
-    docs: [docs/methods/xrd.md, agents/xrd-analyst.md]
+    docs: [docs/methods/xrd.md, agents/xrd-analyst.md, docs/PORTING.md]
   method-eds:
     code: ["src/labpipe/methods/eds/*", config/eds.yaml]
     docs: [docs/methods/eds.md, agents/eds-analyst.md]
@@ -61,7 +62,7 @@ areas:
     docs: [docs/SAFETY.md, CLAUDE.md, AGENTS.md]
   automation:
     code: [src/labpipe/automation.py, src/labpipe/inbox.py]
-    docs: [docs/settings/automation.md, README.md, AGENTS.md]
+    docs: [docs/settings/automation.md, README.md, AGENTS.md, .agents/skills/labpipe-pass/SKILL.md]
   container:
     code: [src/labpipe/container.py, "container/*"]
     docs: [docs/settings/container.md, docs/ARCHITECTURE.md, README.md]
@@ -87,7 +88,11 @@ areas:
     docs: [docs/ARCHITECTURE.md]
 # Docs that repeat each other: a change in one is checked against the others.
 linked:
-  - [AGENTS.md, docs/SETUP.md, README.md]          # commands, setup steps, what the user says
+  - [AGENTS.md, docs/SETUP.md, README.md, docs/ONBOARDING.md]   # commands, setup and onboarding steps, what the user says
+  - [docs/ONBOARDING.md, "docs/methods/*.md", src/labpipe/methods/template/design.md]   # "Reading the plot" (onboarding shows it)
   - [docs/settings/README.md, "docs/settings/*.md"] # the index lists every page
   - [docs/settings/plots.md, "docs/methods/*.md"]   # method plot keys appear in both
   - [docs/ARCHITECTURE.md, docs/docmap.yaml]        # modules and areas
+# Documents that are a record, not instructions: approved design notes keep the decisions and their
+# reasons as they were taken. The code and the docs above are what is kept current.
+not_kept_in_sync: ["docs/design/*.md"]

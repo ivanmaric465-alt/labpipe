@@ -189,11 +189,12 @@ A separate task with the user, never during analysis work, never unattended.
 - **Docs move with the code.** `docs/docmap.yaml` says which docs belong to which code, and which docs repeat each other. In the same change:
   - update the docs of every area you touched, and the docs linked to them;
   - update `docs/ARCHITECTURE.md` when a module, command, file or flow is added, removed or moved.
+  - a new document goes into `docs/docmap.yaml` too: the area of the code it describes, or a linked group of the docs it repeats (design notes: `not_kept_in_sync`).
 - Check before committing:
   - `python scripts/check_docs.py` must pass (CI runs it too). If an area's docs truly need no change, add the commit message line `Docs-checked: <area>`.
   - A renamed, moved or removed settings key needs a `Migration` in `migrations.MIGRATIONS` (`src/labpipe/migrations.py`) with a test, and a line under "Settings migrated" in `CHANGELOG.md`; CI refuses the change without it (`scripts/check_settings_migrations.py`).
   - Stricter rules in `notes.py` or `postdoc.py` need a `CHECKS_VERSION` bump in that module; `tests/test_checks_versions.py` fails when the rule code changed (then update its fingerprint).
-  - `tests/test_docs.py` checks what can be checked mechanically: commands, the module map, links, settings keys, method pages.
+  - `tests/test_docs.py` checks what can be checked mechanically: commands, the module map, every document in the docmap, links, settings keys, method pages.
 
 ## Adding a new analysis method
 

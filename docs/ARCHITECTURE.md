@@ -467,6 +467,7 @@ One container per project.
 - `tests/test_encoding.py`: every text read and write names UTF-8 (Windows would otherwise use
   another code page).
 - `tests/test_docs.py` checks the docs against the code where it can be done mechanically:
-  every command documented, this module map complete, links resolve, settings keys and method
+  every command documented, this module map complete, every tracked document named in
+  `docs/docmap.yaml`, links resolve, settings keys and method
   plot keys on their pages, every agent role in `AGENTS.md`, a "Reading the plot" section
   (3-5 bullets) on every shipped method page.

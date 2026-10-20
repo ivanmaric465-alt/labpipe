@@ -4,13 +4,14 @@ the rest: which docs to review when code changes, scripts/check_docs.py enforces
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path, PurePosixPath
 
 import pytest
 import yaml
 
 from labpipe import cli
-from labpipe.registry import load_methods
+from labpipe.registry import glob_match, load_methods
 
 ROOT = Path(__file__).resolve().parents[1]
 INTERNAL_COMMANDS = {"guard"}          # run by the agent tools' hooks, not by people or agents
@@ -66,6 +67,22 @@ def test_docmap_paths_exist_and_cover_every_module():
                        and not any(PurePosixPath(f).full_match(p) for p in patterns))
     assert uncovered == [], f"modules in no docs/docmap.yaml area: {uncovered}"
 
+
+
+def test_every_document_is_in_the_docmap():
+    """A new Markdown document belongs to an area (the code it describes), a linked group (the
+    docs it repeats) or `not_kept_in_sync`; otherwise nothing reminds anyone to keep it current."""
+    listed = subprocess.run(["git", "ls-files", "*.md"], cwd=ROOT, capture_output=True,
+                            text=True, encoding="utf-8")
+    if listed.returncode != 0:
+        pytest.skip("not a git checkout")
+    docmap = yaml.safe_load(_text("docs/docmap.yaml"))
+    patterns = [p for area in docmap["areas"].values() for p in area["code"] + area["docs"]]
+    patterns += [p for group in docmap.get("linked", []) for p in group]
+    patterns += docmap.get("not_kept_in_sync", [])
+    unnamed = [f for f in listed.stdout.split()
+               if not any(glob_match(f, p) for p in patterns)]
+    assert unnamed == [], f"documents in no docs/docmap.yaml area or linked group: {unnamed}"
 
 def test_relative_links_in_markdown_resolve():
     broken = []
