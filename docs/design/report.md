@@ -1,6 +1,6 @@
 # Report: readable tables and sample comparison (design, draft)
 
-Status: draft, awaiting approval. Nothing of it is built yet. Built alongside it: the agents'
+Status: approved 2026-10-20; built step by step (Order of work). Built alongside it: the agents'
 writing rules (`docs/WRITING.md`) and the EDS change for negative values.
 
 ## What is wrong today (a report of 13 samples: EDS, XRD, SEM)
@@ -114,11 +114,9 @@ The order is one function in `report.py`, so a lab can also change it in its own
 
 Each step is a branch with tests, and stops for review.
 
-## Questions for the user
+## Decisions (2026-10-20, user)
 
-1. Element order in the EDS tables: by atomic number (fixed, as above), or by the mean amount
-   across samples (biggest first, still the same order in every row)?
-2. Several measurements of one sample (e.g. `S-15` and `S-15_18.9.26`): every point shown, as
-   proposed, or only the newest per sample in the comparisons?
-3. Nominal composition: a second grey line under the measured one (proposed), or
-   "measured (nominal)" in one cell?
+1. EDS tables: elements by atomic number (metals, then non-metals).
+2. Several measurements of one sample: every point is shown.
+3. Nominal composition: a second, grey line under the measured one.
+4. Negative EDS values: a `review` check, taken as 0 in the metal basis (built).
