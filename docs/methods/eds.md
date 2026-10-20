@@ -43,6 +43,12 @@ Status: APPROVED 2026-10-17 with changes (below). Implemented.
 - Looks at: the electron image (is the analysed area representative: agglomerates, empty support?), the spectrum (are the labelled metal peaks visible above background?).
 - Notes say: the metal composition, how it compares with nominal, how much to trust it (normalised, no σ, low concentrations). Never claims a phase, a stoichiometry or an element the table does not contain.
 
+## Reading the plot
+- **Three panels** in one figure (the report shows them one at a time, large): the **electron image** with the analysed area, the **spectrum** image from the INCA report, and a **bar chart** of the metals. The first two are the pictures INCA saved, shown unchanged; check there that the analysed area is representative (not an agglomerate or empty support) and that the labelled peaks stand out of the background.
+- **Bar chart**: y is the composition in at% of the metals only, renormalised to 100 (C, O and the other `non_metals` left out); one bar per metal, the largest first. With a nominal composition for the sample, each metal has two bars: dark = measured, light = nominal (legend). Without one, a single dark bar. The numbers are `metal_basis` and `nominal_comparison` in `results.json`; the full table as INCA recorded it is in the report card.
+- **Good vs look again**: bars close to nominal and no review checks. Look again when a bar is tiny (near the detection limit, `low_concentration`), when non-metals dominate the spectrum (`support_dominates`), or when the images belong to another report (`linked_images_other_name`). There are no error bars: the export has no uncertainties.
+- **Plot settings**: `plot.panels: [image, spectrum, composition]` chooses and orders the panels, `plot.width_in` (see `docs/settings/plots.md`).
+
 ## Settings (`config/eds.yaml`)
 
 | User says | Setting |

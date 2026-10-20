@@ -39,6 +39,13 @@ Status: APPROVED 2026-10-17 (gallery picks across both series). Implemented.
 - Methods without an analyst: `notes todo` skips them; `labpipe automation run` analyses them with code before deciding whether an AI run is needed; `methods check` accepts `subagent: null`; `methods new --no-analyst`.
 - Report: a per-sample section; SEM appears there as the gallery instead of one card per image.
 
+## Reading the plot
+- **The picture** is the SEM image itself, in greyscale, titled sample · image name · magnification (e.g. `S-10 · S-10 a001 · ×110,000`). There are no axes and no labels added by labpipe.
+- **The black strip at the bottom** is JEOL's info bar: signal, kV, magnification, working distance and the scale bar. The scale bar is the instrument's own; labpipe draws none. `plot.scale_bar: false` cuts the strip off.
+- **Size**: use that scale bar. The pixel size (nm/px) and field of view in `results.json` come from it. Look again if the scale bar label and the pixel size disagree, or the checks say it could not be read.
+- **In the report** a sample shows a gallery instead of one card per image: the images closest to the magnifications in `gallery.magnifications` (default ×10k, ×50k, ×100k), small versions, one at a time with arrows, each captioned with magnification, kV, WD and the measurement. All images of the sample stay in `analysis/`. `gallery.include` and `gallery.exclude` change the choice.
+- **Plot settings**: `plot.width_in`, `plot.scale_bar` (see `docs/settings/plots.md`). The figure is for looking at; it is not a measurement of particle size.
+
 ## Settings (`config/sem.yaml`)
 
 | User says | Setting |

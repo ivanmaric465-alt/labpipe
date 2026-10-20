@@ -36,6 +36,8 @@ labpipe replot             # redraw every plot whose settings changed
 labpipe replot --entry ID  # one measurement (also --method M, --all)
 ```
 
+What each figure shows, how to tell a good one from one to look at again, and which of these keys change it: the "Reading the plot" section of the method's page (`docs/methods/<method>.md`, a lab method's `README.md`).
+
 ## You say → setting
 
 | You say | Setting |

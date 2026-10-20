@@ -53,6 +53,13 @@ labpipe xrd refs list | build
 - COD is open data. ICSD/ICDD CIFs are licensed and must not be committed.
 - `fcc` and `rocksalt` references also take part in the lattice-parameter comparison.
 
+## Reading the plot
+- **Top panel**: x is the diffraction angle 2θ in degrees, y the intensity in counts as recorded (`Intensity (10ⁿ counts)` when the numbers are large). Black thin line = the measured data; red line = the fitted model; dashed grey = the fitted background; dotted blue (only when broad bands such as a support were fitted) = background plus those bands. Faint red vertical lines mark the fitted peak positions. The numbers (peak positions, widths, lattice parameter, size) are in `results.json`; the figure only draws them.
+- **Tick rows** (middle): one row per candidate phase, each tick a reflection expected at the fitted lattice parameter, labelled at the right (`fcc-1 a=3.8898` is the lattice parameter in Å, `(std)` the internal standard, `(cand.)` a reference candidate, `(tent.)` a tentative phase). Ticks that sit on a peak are what "consistent with" means; a row is a candidate, never an identification.
+- **Residual** (bottom, `Res.`): data minus fit, with a grey zero line. Good: flat noise around zero, no larger at the peaks. Look again: a wave, a step or a spike at a peak (missed peak, wrong background, a holder or support peak); then check the review checks and steer with `background.*`, `peaks.*` or `exclude_ranges_deg` above.
+- **Look again** also when the red fit leaves the data away from peaks (background too high or low: `background.anchor_ranges_deg`), or a clear peak has no red line or tick near it.
+- **Plot settings** (`plot:`, see `docs/settings/plots.md`; they redraw only): `y_scale: sqrt | log` makes small peaks visible (the axis label says so), `residual_panel: false` and `phase_ticks: false` remove those panels, `zoom_deg: [lo, hi]` adds `zoom.png` (same panels, cut to that window; the title says "zoom"), `width_in`, `height_in`.
+
 ## Conventions
 - **Units**: 2θ in degrees; d and lattice parameters in Å; intensity in counts (as recorded); peak areas in counts·degree; crystallite size in nm; strain dimensionless (also given in %).
 - **Plot**: full measured range; axis labels `2θ (°)` and `Intensity (counts)`, or `Intensity (10ⁿ counts)` when scaled; fit in red, background dashed grey, background + broad components dotted blue, one tick row per phase, residual panel.

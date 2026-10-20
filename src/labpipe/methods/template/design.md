@@ -22,6 +22,10 @@ Status: DRAFT, not yet agreed with the user. No code beyond the scaffold until i
 | code | severity | when |
 |---|---|---|
 
+## Reading the plot
+<!-- Fill in before the method is used: 3 to 5 bullets for someone seeing the figure for the first time: the axes and their units, what each line, marker, colour, panel and label is, what a good figure looks like and what means "look again", where the numbers come from (results.json), and which `plot:` settings change it. Be true to the plot code. `labpipe methods check` warns while this section is missing or still this comment. -->
+-
+
 ## Settings (what the user can change)
 | User says | Setting |
 |---|---|

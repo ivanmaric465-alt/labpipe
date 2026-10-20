@@ -157,6 +157,21 @@ def new(name: str, example: Path, description: str, analyst: bool = True) -> dic
                      "labpipe project sync; labpipe scan" if lab else "labpipe agents sync; labpipe scan"]}
 
 
+def reading_the_plot_missing(page: Path) -> str | None:
+    """Why the method page has no filled-in "Reading the plot" section (None when it has one):
+    the section is absent, or has no bullet with text (the template's HTML comment and an
+    empty `-` do not count)."""
+    if not page.is_file():
+        return f"{page.name} not found"
+    text = re.sub(r"<!--.*?-->", "", page.read_text(encoding="utf-8"), flags=re.S)
+    match = re.search(r"^## Reading the plot[ \t]*\n(.*?)(?=^## |\Z)", text, re.M | re.S)
+    if not match:
+        return "no \"Reading the plot\" section"
+    if not re.search(r"^[-*] +\S", match.group(1), re.M):
+        return "\"Reading the plot\" has no bullets yet"
+    return None
+
+
 def _check(results: list, name: str, ok: bool, detail: str = "") -> bool:
     results.append({"check": name, "ok": bool(ok), "detail": detail})
     return bool(ok)
@@ -276,5 +291,12 @@ def check(name: str, example: Path, config: dict | None = None,
     _check(results, "raw file and its folder untouched", after == before)
     stray = sorted({p.name for p in work.iterdir()} - {"run1", "run2"})
     _check(results, "writes only into the output folder", not stray, f"unexpected: {stray}")
+    page = (PROJECT_ROOT / "lab" / "methods" / name / "README.md" if lab
+            else CODE_ROOT / "docs" / "methods" / f"{name}.md")
+    warnings = []
+    if reason := reading_the_plot_missing(page):     # a warning: the method works without it
+        warnings.append(f"{reason} in {page.name}: write 3-5 bullets on how to read the figure "
+                        "(axes, lines, colours, good vs look again); agents explain the plot "
+                        "from it")
     return {"method": name, "ok": all(r["ok"] for r in results), "checks": results,
-            "work_dir": str(work)}
+            **({"warnings": warnings} if warnings else {}), "work_dir": str(work)}
