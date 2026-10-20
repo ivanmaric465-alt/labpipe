@@ -277,11 +277,27 @@ def _raw_roots(config: dict) -> tuple[list[dict[str, Any]], list[tuple[str, Path
     return items, usable
 
 
-def _files(config: dict, usable: list[tuple[str, Path]]) -> list[dict[str, Any]]:
+def _inventory(config: dict) -> dict[str, Any]:
+    """What is recognised in the data folders. On a host that only forwards into the container,
+    the container lists it: recognising a file imports the method's code, which needs the
+    analysis libraries that only the image has."""
+    if _host_only():
+        from labpipe.container import forward_json
+        return forward_json(["inventory"])
     from labpipe.inventory import inventory
+    return inventory(config)
+
+
+def _files(config: dict, usable: list[tuple[str, Path]]) -> list[dict[str, Any]]:
+    from labpipe.container import ContainerError
     items = []
     usable_ids = {root_id for root_id, _ in usable}
-    for root in inventory(config)["roots"]:
+    try:
+        listed = _inventory(config)
+    except ContainerError as exc:
+        return [_item("files", "warn", f"the files are listed by the container: {exc}",
+                      "labpipe container start, then labpipe doctor again")]
+    for root in listed["roots"]:
         if root["id"] not in usable_ids:
             continue
         folders = (f"add new files to {root['data_folder']}; " if root["data_folder"] else "") \

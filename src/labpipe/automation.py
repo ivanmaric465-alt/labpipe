@@ -174,6 +174,16 @@ def _statuses(config: dict) -> dict[str, tuple]:
             for eid, e in mf.load(config)["entries"].items()}
 
 
+def _stale_reasons(stale: list[dict]) -> dict[str, int]:
+    """How many analyses are out of date for which reason (scanner.py words them)."""
+    reasons = [str(e.get("status_reason")) for e in stale]
+    why = {"calculation changed": sum("calculation changed" in r for r in reasons),
+           "code updated": sum("current code is" in r or "before per-method versions" in r
+                               for r in reasons)}
+    why["settings changed"] = len(stale) - why["calculation changed"] - why["code updated"]
+    return why
+
+
 def _notify_news(config: dict, before: dict[str, tuple],
                  unrecognised: list[str] | None = None) -> dict[str, tuple]:
     """Notify about what newly needs the user since `before`; returns the new state."""
@@ -205,9 +215,7 @@ def _notify_news(config: dict, before: dict[str, tuple],
                        + ". " + _ask_agent(config, "check the failed analyses"),
                kind="failed")
     if stale:
-        why = {"code updated": sum("current code is" in str(e.get("status_reason"))
-                                   for e in stale)}
-        why["settings changed"] = len(stale) - why["code updated"]
+        why = _stale_reasons(stale)
         notify(config, f"labpipe: {len(stale)} analysis(es) out of date ("
                        + ", ".join(f"{k}: {n}" for k, n in why.items() if n)
                        + f"; e.g. {_listed([e['relative_path'] for e in stale], 2)}). Their "

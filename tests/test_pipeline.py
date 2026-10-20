@@ -517,3 +517,12 @@ def test_a_failed_ai_run_is_reported_as_an_error(tmp_path):
                        .splitlines() if '"event": "notify"' in line][-1])["message"]
     assert "AI run stopped with an error (Error: something broke)" in last
     assert "1 of 1 measurement(s) still waiting" in last and "Open Claude Code in" in last
+
+
+def test_out_of_date_notifications_name_the_reason():
+    from labpipe.automation import _stale_reasons
+    stale = [{"status_reason": "the eds calculation changed (version a → b)"},
+             {"status_reason": "analysed before per-method versions; redo to be sure"},
+             {"status_reason": "analysis settings changed since the last run"}]
+    assert _stale_reasons(stale) == {"calculation changed": 1, "code updated": 1,
+                                     "settings changed": 1}

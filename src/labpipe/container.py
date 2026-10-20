@@ -465,6 +465,33 @@ def forward(argv: list[str]) -> int | None:
     return subprocess.run(command).returncode
 
 
+def forward_json(argv: list[str]) -> dict:
+    """Run `labpipe argv` in the project's container and return its JSON output: for host-side
+    commands (doctor) that need what only the container can compute (the method modules import
+    the analysis libraries). ContainerError when container mode is off, the container is not
+    running or the output is not JSON."""
+    block = local_container_block()
+    if block is None:
+        raise ContainerError("container mode is off")
+    engine = detect_engine(block.get("engine"))
+    name = container_config({"container": pipeline_container_block()})["name"]
+    if not running(engine, name):
+        raise ContainerError(f"container {name} is not running")
+    uid, gid = host_ids()
+    command = forward_argv(argv, Path.cwd(), _root(), engine, name, uid, gid, False)
+    if command is None:
+        raise ContainerError(f"labpipe {' '.join(argv)} does not run in the container")
+    result = subprocess.run(command, capture_output=True, text=True, encoding="utf-8")
+    try:
+        data = json.loads(result.stdout)
+    except ValueError:
+        raise ContainerError(f"labpipe {' '.join(argv)} in the container gave no JSON: "
+                             f"{(result.stderr or result.stdout).strip()[-300:]}") from None
+    if not isinstance(data, dict):
+        raise ContainerError(f"labpipe {' '.join(argv)} in the container gave no JSON object")
+    return data
+
+
 def pipeline_container_block() -> dict:
     try:
         text = (_code() / "config" / "pipeline.yaml").read_text(encoding="utf-8")

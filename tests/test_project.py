@@ -153,6 +153,7 @@ def test_project_new_creates_the_structure(tmp_path):
     assert meta["created_utc"].endswith("Z") and meta["labpipe_version"]
     local = yaml.safe_load((folder / "config" / "local.yaml").read_text(encoding="utf-8"))
     assert local["raw_roots"] == [{"id": "data", "path": (tmp_path / "data").as_posix()}]
+    assert local["protected_paths"] == [(tmp_path / "data").as_posix()]   # doctor: not a todo
     assert local["agents"]["harness"] == "claude-code"          # from the example
     assert "labpipe project sync" in (folder / "lab" / "LAB.md").read_text(encoding="utf-8")
     assert result["next"][0] == f"cd {folder}" and "labpipe doctor" in result["next"]
@@ -171,6 +172,29 @@ def test_project_new_takes_the_agents_from_the_users_defaults(tmp_path, _home):
     assert [r["id"] for r in local["raw_roots"]] == ["d1", "d2", "d1-2"]
     assert (Path(result["project"]) / ".codex" / "agents" / "supervisor.toml").exists()
 
+
+
+def test_doctor_asks_the_container_for_the_files_when_this_host_only_forwards(tmp_path,
+                                                                              monkeypatch):
+    from labpipe import container
+    config = {"raw_roots": [{"id": "data", "path": str(tmp_path)}]}
+    monkeypatch.setattr(doctor, "_host_only", lambda: True)
+    asked = []
+    listed = {"roots": [{"id": "data", "data_folder": None, "reads_from": "/data/data",
+                         "recognised": {"eds": {"files": {".htm (analysed)": 2}}},
+                         "not_recognised": {},
+                         "no_sample_id": {"files": 0, "pattern": "p", "examples": []}}]}
+    monkeypatch.setattr(container, "forward_json", lambda argv: asked.append(argv) or listed)
+    items = doctor._files(config, [("data", tmp_path)])
+    assert asked == [["inventory"]]          # the method code needs the analysis libraries
+    assert [i["check"] for i in items] == ["data_folder:data", "files:data", "sample_ids:data"]
+    assert items[1]["status"] == "ok"
+
+    def stopped(argv):
+        raise container.ContainerError("container labpipe-p is not running")
+    monkeypatch.setattr(container, "forward_json", stopped)
+    [item] = doctor._files(config, [("data", tmp_path)])
+    assert item["check"] == "files" and item["status"] == "warn" and "not running" in item["message"]
 
 def test_project_new_refuses_a_synced_folder(tmp_path):
     for name in ("Dropbox", "OneDrive - Lab", "Google Drive", "Nextcloud", "Koofr", "iCloud Drive",

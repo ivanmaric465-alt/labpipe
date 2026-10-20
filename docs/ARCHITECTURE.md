@@ -189,7 +189,7 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | | `guard.py` | hook: refuses writes outside the allowed paths, to generated files, raw-data access, disallowed commands |
 | Automation | `automation.py` | watcher, one pass, nightly run, notifications, headless agent commands |
 | | `inbox.py` | notifications page (local, token, read-only) |
-| | `container.py` | build (staged context), start (name, port, mounts per project), stop, login, shell, pop-up proxy; forwarding of host commands |
+| | `container.py` | build (staged context), start (name, port, mounts per project), stop, login, shell, pop-up proxy; forwarding of host commands (and `forward_json`: the doctor's file list comes from the container, since recognising a file imports method code) |
 | Setup | `doctor.py` | setup state and next step (read-only; also `settings_migrations`) |
 | | `migrations.py` | settings migrations: `labpipe migrate`, old keys understood in memory for one release (host side, no numpy) |
 | | `update.py` | `labpipe update`: releases, backups, switching the code, the state file and the re-exec into the new code, settings, restart, what is out of date (host side) |

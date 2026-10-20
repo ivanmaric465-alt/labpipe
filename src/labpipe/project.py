@@ -325,7 +325,10 @@ def _root_id(folder: Path, taken: set[str]) -> str:
 def _local_yaml(data: list[Path]) -> str:
     taken: set[str] = set()
     roots = [{"id": _root_id(folder, taken), "path": folder.as_posix()} for folder in data]
-    blocks: dict[str, Any] = {"raw_roots": roots, "protected_paths": [],
+    # the data folders are the originals (the container mounts them read-only): agents on this
+    # computer stay out of them too
+    blocks: dict[str, Any] = {"raw_roots": roots,
+                              "protected_paths": [folder.as_posix() for folder in data],
                               "agents": _agents_block()}
     if _container_block():
         blocks["container"] = _container_block()
