@@ -36,33 +36,34 @@ def canonical_json(value: Any) -> bytes:
                       ensure_ascii=False, allow_nan=False).encode("utf-8")
 
 
-def _git(*args: str) -> str | None:
+def _git(*args: str, code: Path | None = None) -> str | None:
     try:
-        completed = subprocess.run(["git", "-C", str(CODE_ROOT), *args],
+        completed = subprocess.run(["git", "-C", str(code or CODE_ROOT), *args],
                                    capture_output=True, text=True, timeout=20, check=True)
     except (OSError, subprocess.SubprocessError):
         return None
     return completed.stdout.strip()
 
 
-def git_info() -> dict[str, Any]:
-    """Code identity. config/ is excluded from the dirty check: settings are
+def git_info(code: Path | None = None) -> dict[str, Any]:
+    """Code identity (of `code`, default the running code; `labpipe update` builds the image of
+    a release folder). config/ is excluded from the dirty check: settings are
     recorded in full (with file hashes) in every provenance.json instead.
     Untracked files count only under src/ and references/, the only places they
     could change results (the Claude Code sandbox creates empty placeholder
     files such as .bashrc in the repository while a command runs)."""
-    commit = _git("rev-parse", "HEAD")
+    commit = _git("rev-parse", "HEAD", code=code)
     if commit is None:     # the container's baked code has no .git: its identity is a file
         try:
-            baked = json.loads((CODE_ROOT / ".labpipe-code.json").read_text(encoding="utf-8"))
+            baked = json.loads(((code or CODE_ROOT) / ".labpipe-code.json").read_text(encoding="utf-8"))
             return {key: baked.get(key) for key in ("commit", "dirty", "dirty_files", "branch",
                                                     "remote")}
         except (OSError, ValueError):
             pass
     tracked = _git("status", "--porcelain", "--untracked-files=no", "--", ".",
-                   ":(exclude)config")
+                   ":(exclude)config", code=code)
     untracked = _git("status", "--porcelain", "--untracked-files=all", "--", "src",
-                     "references")
+                     "references", code=code)
     status = None if tracked is None or untracked is None else "\n".join(
         line for line in [tracked, *[row for row in untracked.splitlines()
                                      if row.startswith("??")]] if line)
@@ -70,8 +71,8 @@ def git_info() -> dict[str, Any]:
         "commit": commit,
         "dirty": bool(status) if status is not None else None,
         "dirty_files": status.splitlines()[:50] if status else [],
-        "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
-        "remote": _git("config", "--get", "remote.origin.url"),
+        "branch": _git("rev-parse", "--abbrev-ref", "HEAD", code=code),
+        "remote": _git("config", "--get", "remote.origin.url", code=code),
     }
 
 

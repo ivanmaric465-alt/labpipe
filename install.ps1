@@ -6,8 +6,9 @@
 # under $env:LABPIPE_HOME (default %LOCALAPPDATA%\labpipe): app\ (this code), venv\. It:
 #   0. in the installation's own clone (%LOCALAPPDATA%\labpipe\app): switches to the newest release
 #      (tag vX.Y.Z) and runs that release's installer; users get releases, never whatever is on
-#      main (-Main: stay on the clone's current state; no release yet or local changes in the
-#      clone: stays, says so),
+#      main (-Main: stay on the clone's current state; -KeepCheckout: stay on the release that is
+#      checked out, which is what `labpipe update` uses after it switched the release itself;
+#      no release yet or local changes in the clone: stays, says so),
 #   1. finds Python >= 3.10 (>= 3.14 with -Full),
 #   2. creates the virtual environment OUTSIDE synced folders,
 #   3. installs labpipe: the slim host part (PyYAML only; the analysis runs in the container).
@@ -18,13 +19,13 @@
 #   6. asks the first questions (`labpipe setup --first`): container engine and agent tool
 #      present?, models, login, your first project, the container. What needs admin rights is
 #      shown for you to run, never run by this script.
-# Options: -Main (the development state, not the newest release; or $env:LABPIPE_CHANNEL = "main"), -Full, -NoStart (no tool checks, login, build or start), -Answers FILE.yaml (CI, tests),
+# Options: -Main (the development state, not the newest release; or $env:LABPIPE_CHANNEL = "main"), -KeepCheckout (install what is checked out; or "keep"), -Full, -NoStart (no tool checks, login, build or start), -Answers FILE.yaml (CI, tests),
 #          -NoSetup (stop after the environment; $env:LABPIPE_NO_SETUP = "1" does the same).
 # Run:  powershell -ExecutionPolicy Bypass -File .\install.ps1
 # (Windows is untested on real machines apart from CI: the container needs Podman or Docker
 # Desktop with WSL2.)
 
-param([switch]$Main, [switch]$Full, [switch]$NoStart, [switch]$NoSetup, [string]$Answers = "")
+param([switch]$Main, [switch]$KeepCheckout, [switch]$Full, [switch]$NoStart, [switch]$NoSetup, [string]$Answers = "")
 
 $ErrorActionPreference = "Stop"
 $Repo = (Resolve-Path $PSScriptRoot).Path
@@ -33,9 +34,10 @@ $Venv = if ($env:LABPIPE_VENV) { $env:LABPIPE_VENV } else { Join-Path $HomeDir "
 if ($env:LABPIPE_FULL -eq "1") { $Full = $true }
 if ($env:LABPIPE_NO_SETUP -eq "1") { $NoSetup = $true }
 if ($env:LABPIPE_CHANNEL -eq "main") { $Main = $true }
+if ($env:LABPIPE_CHANNEL -eq "keep") { $KeepCheckout = $true }
 # The installation's own clone installs the newest release (CI and developers run the installer in
 # their own checkout, which is not LABPIPE_HOME\app: nothing is switched there).
-if ((-not $Main) -and (-not $env:LABPIPE_SWITCHED) -and (Test-Path (Join-Path $Repo ".git")) -and (Test-Path $HomeDir) -and
+if ((-not $Main) -and (-not $KeepCheckout) -and (-not $env:LABPIPE_SWITCHED) -and (Test-Path (Join-Path $Repo ".git")) -and (Test-Path $HomeDir) -and
     ($Repo -eq ((Resolve-Path $HomeDir).Path + "\app")) -and (Get-Command git -ErrorAction SilentlyContinue)) {
     & git -C $Repo fetch --tags --quiet 2>$null
     if ($LASTEXITCODE -ne 0) { Write-Host "note: could not fetch the release tags (offline?); using the tags already here" }
@@ -112,6 +114,8 @@ $LabPipe = Join-Path $Scripts "labpipe.exe"
 
 Say "5/6 Installation marker"
 New-Item -ItemType Directory -Force -Path $HomeDir | Out-Null
+# How this installation was made (`labpipe update` reinstalls the same way)
+Set-Content -Path (Join-Path $HomeDir "install.json") -Value "{`"mode`": `"$(if ($Full) { 'full' } else { 'host' })`"}" -Encoding utf8
 if ($Repo -eq ((Resolve-Path $HomeDir).Path + "\app")) {
     New-Item -ItemType File -Force -Path (Join-Path $Repo ".labpipe-installed") | Out-Null
     Write-Host "    $Repo is the installation's app folder"
