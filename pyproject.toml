@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "labpipe"
-version = "0.1.0"
+version = "0.2.0"
 description = "Deterministic, provenance-tracked analysis pipeline for materials lab data (XRD first)."
 requires-python = ">=3.10"   # the host part; the analysis extra needs more (below)
 license = "MIT"

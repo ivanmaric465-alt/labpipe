@@ -6,11 +6,13 @@ What changed in each release, in four fixed parts. How it is kept: [docs/RELEASI
 
 ### Changes results
 
-None.
-
 ### Settings migrated
 
-None.
+### New
+
+### Needs your action
+
+## v0.2.0 — 2026-10-20
 
 ### New
 
