@@ -81,9 +81,39 @@ LABPIPE_FULL=1 ~/.local/share/labpipe/app/install.sh      # or: install.sh --ful
 
 Optional extras go into labpipe's own environment, and only when a command asks for one. For example `labpipe xrd refs build` needs pymatgen and prints the exact command to run (it uses the environment's own Python and the pinned version).
 
-## Projects
+## Three folders
 
-One installation, several projects. A project is a folder (suggestion: `~/labpipe-projects/<name>`, never in a synced folder) with its own data, settings, context, results and container. labpipe finds the project from the folder you run it in.
+labpipe keeps three things apart:
+
+| Folder | Default | What is in it | Who writes there |
+|---|---|---|---|
+| **code** | `~/.local/share/labpipe/app` | labpipe itself: methods, default settings, docs, agent roles | updates only; never edit it |
+| **data** | yours, e.g. `~/labdata/pd` | your raw instrument files | you, the instrument PC or a sync client; labpipe only reads it |
+| **project** | `~/labpipe-projects/<name>` | one study: its settings, context, your additions and all results | you (settings, context, `lab/`) and labpipe (results) |
+
+- **One code folder per computer, one project per study.** Each project has its own settings, results, agents and container. Several projects can read the same data folder, and one project can read several.
+- **The project only points at the data**: `config/local.yaml` → `raw_roots`. Nothing is copied or moved. Results go into the project, never next to the raw files.
+- **You work in the project folder**: open Claude Code or Codex there, and run `labpipe` there (or in any folder below it).
+- **In the container**, the three folders show up as `/opt/labpipe` (the code, built into the image), `/data/<id>` (each data folder, read-only) and `/project` (the project, read-write).
+- **Updates** replace the code folder and the files marked "generated" in a project. They never touch your data, `config/`, `context/`, `lab/` or results.
+- **Back up** the project folder: at least `config/`, `context/` and `lab/`, which are only yours. The code comes back with a reinstall. The data you back up as you always do.
+
+### The project folder
+
+```
+~/labpipe-projects/pd-films/
+  labpipe.yaml            marks the folder as a project: its name, the labpipe release
+  config/                 your settings: data folders (local.yaml), plots and report (lab.yaml), samples
+  context/                what the study is about, for the postdoc: context.md, documents/
+  lab/                    your additions: conventions (LAB.md), agent roles, methods, XRD references
+  analysis/               results: report.html, one folder per measurement, postdoc runs
+  manifest.json           every file found and its state
+  logs/                   runs, notifications, replays
+  AGENTS.md  CLAUDE.md    generated for the agents: do not edit
+  .labpipe/  .claude/ …   generated: do not edit
+```
+
+More projects:
 
 ```bash
 labpipe project new ~/labpipe-projects/pd-films --data ~/labdata/pd
@@ -91,19 +121,12 @@ cd ~/labpipe-projects/pd-films
 labpipe doctor
 ```
 
-- The code (defaults, docs, agent roles) stays where it is; the project holds only your files. `AGENTS.md`, `CLAUDE.md` and `.labpipe/` in the project are generated: do not edit them. Your additions go in `lab/LAB.md` (for all agents) and `lab/agents/` (one role, or a role of your own), then `labpipe project sync`. Details: [docs/settings/project.md](docs/settings/project.md).
-- Working in the labpipe repository itself (to change the code) is "dev mode": the repository is its own project.
+- Change what the agents do with plain sentences in `lab/LAB.md` (all agents) or `lab/agents/` (one role, or a role of your own), then run `labpipe project sync`. Details: [docs/settings/project.md](docs/settings/project.md).
+- If you work on labpipe's own code, the repository is its own project ("dev mode"): there the code and the project folder are the same folder.
 
-## Your data folder
+### The data folder
 
-Two folders, the same files:
-
-| Folder | Example | Who writes |
-|---|---|---|
-| your **data folder** | `~/labdata` | you, the instrument PC or a sync client |
-| its **read-only view** | `/srv/labdata-ro` (Linux), `~/labdata-ro` (macOS), `//localhost/labdata-ro` (Windows) | nobody; labpipe only reads here |
-
-Put new files into the data folder; they appear in the view at once. Any layout works, for example:
+Put new files into the data folder; labpipe notices them (automatic processing, or `labpipe scan`). Any layout works, for example:
 
 ```
 by technique             by sample                by date
@@ -116,6 +139,7 @@ SEM/S-1 a001.txt         S-1/S-1 a001.txt         2026-03/S-1 a001.txt
 - The sample ID is read from the start of the file name; the rule is yours to change (`config/pipeline.yaml` → `sample_id.pattern`, or ask the agent).
 - `labpipe inventory` shows what it recognises and what it does not.
 - A folder that already holds data: setup asks whether to analyse it all, or only files added from now on (the existing ones are recorded as `baseline`; `labpipe requeue --baseline` queues them later).
+- **Read-only**: the container mounts the data folder read-only. With the full native install there is no container, so labpipe reads it through a **read-only view** of the same files, which you set up once (`labpipe setup --only raw-data` prints the commands): for example `/srv/labdata-ro` (Linux), `~/labdata-ro` (macOS), `//localhost/labdata-ro` (Windows).
 
 ## Set up
 

@@ -1,6 +1,6 @@
 # Data: folder, recognised files, sample IDs
 
-labpipe reads your instrument files from your **data folder** (through a read-only view, `docs/SAFETY.md`), decides which method each file belongs to, and takes the sample ID from the file name.
+labpipe reads your instrument files from your **data folder** (read-only: the container mounts it read-only; a full native install reads it through a read-only view, `docs/SAFETY.md`), decides which method each file belongs to, and takes the sample ID from the file name.
 
 ## Settings
 
