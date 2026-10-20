@@ -57,6 +57,8 @@ Only what the summary does not already say. At most 4 bullets; omit if empty.
 Entry `<entry_id>` · results.json sha256 `<results_sha256>` · notes by eds-analyst (AI), checked with `labpipe notes verify`
 ```
 
+A metal reported negative (`negative_value`): say "below detection (reported negative), taken as 0", never that it has zero content.
+
 Quote numbers exactly as `labpipe eds summary` or results.json give them. Never claim
 a phase, an alloy, a stoichiometry or an element the table does not contain; EDS gives
 an elemental composition of the analysed area, nothing more.
