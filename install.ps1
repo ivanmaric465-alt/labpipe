@@ -4,6 +4,10 @@
 #
 # Safe to rerun. Needs no administrator rights and never touches raw data. Everything lives
 # under $env:LABPIPE_HOME (default %LOCALAPPDATA%\labpipe): app\ (this code), venv\. It:
+#   0. in the installation's own clone (%LOCALAPPDATA%\labpipe\app): switches to the newest release
+#      (tag vX.Y.Z) and runs that release's installer; users get releases, never whatever is on
+#      main (-Main: stay on the clone's current state; no release yet or local changes in the
+#      clone: stays, says so),
 #   1. finds Python >= 3.10 (>= 3.14 with -Full),
 #   2. creates the virtual environment OUTSIDE synced folders,
 #   3. installs labpipe: the slim host part (PyYAML only; the analysis runs in the container).
@@ -14,13 +18,13 @@
 #   6. asks the first questions (`labpipe setup --first`): container engine and agent tool
 #      present?, models, login, your first project, the container. What needs admin rights is
 #      shown for you to run, never run by this script.
-# Options: -Full, -NoStart (no tool checks, login, build or start), -Answers FILE.yaml (CI, tests),
+# Options: -Main (the development state, not the newest release; or $env:LABPIPE_CHANNEL = "main"), -Full, -NoStart (no tool checks, login, build or start), -Answers FILE.yaml (CI, tests),
 #          -NoSetup (stop after the environment; $env:LABPIPE_NO_SETUP = "1" does the same).
 # Run:  powershell -ExecutionPolicy Bypass -File .\install.ps1
 # (Windows is untested on real machines apart from CI: the container needs Podman or Docker
 # Desktop with WSL2.)
 
-param([switch]$Full, [switch]$NoStart, [switch]$NoSetup, [string]$Answers = "")
+param([switch]$Main, [switch]$Full, [switch]$NoStart, [switch]$NoSetup, [string]$Answers = "")
 
 $ErrorActionPreference = "Stop"
 $Repo = (Resolve-Path $PSScriptRoot).Path
@@ -28,6 +32,30 @@ $HomeDir = if ($env:LABPIPE_HOME) { $env:LABPIPE_HOME } else { Join-Path $env:LO
 $Venv = if ($env:LABPIPE_VENV) { $env:LABPIPE_VENV } else { Join-Path $HomeDir "venv" }
 if ($env:LABPIPE_FULL -eq "1") { $Full = $true }
 if ($env:LABPIPE_NO_SETUP -eq "1") { $NoSetup = $true }
+if ($env:LABPIPE_CHANNEL -eq "main") { $Main = $true }
+# The installation's own clone installs the newest release (CI and developers run the installer in
+# their own checkout, which is not LABPIPE_HOME\app: nothing is switched there).
+if ((-not $Main) -and (-not $env:LABPIPE_SWITCHED) -and (Test-Path (Join-Path $Repo ".git")) -and (Test-Path $HomeDir) -and
+    ($Repo -eq ((Resolve-Path $HomeDir).Path + "\app")) -and (Get-Command git -ErrorAction SilentlyContinue)) {
+    & git -C $Repo fetch --tags --quiet 2>$null
+    if ($LASTEXITCODE -ne 0) { Write-Host "note: could not fetch the release tags (offline?); using the tags already here" }
+    $Latest = @(& git -C $Repo tag --list "v*" | Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } |
+        Sort-Object { [version]$_.Substring(1) }) | Select-Object -Last 1
+    if (-not $Latest) { Write-Host "no release yet: installing main" }
+    elseif (& git -C $Repo status --porcelain) { Write-Host "note: $Repo has local changes: not switching to $Latest, installing the current state" }
+    elseif ((& git -C $Repo rev-parse HEAD) -ne (& git -C $Repo rev-parse "$Latest^{commit}")) {
+        Write-Host "==> Switching to the newest release, $Latest"
+        & git -C $Repo -c advice.detachedHead=false checkout --quiet $Latest
+        if ($LASTEXITCODE -eq 0) {
+            $env:LABPIPE_SWITCHED = "1"
+            $Forward = @{ Full = $Full; NoStart = $NoStart; NoSetup = $NoSetup }.GetEnumerator() | Where-Object { $_.Value } | ForEach-Object { "-$($_.Key)" }
+            if ($Answers) { $Forward += @("-Answers", $Answers) }
+            & (Get-Process -Id $PID).Path -ExecutionPolicy Bypass -File (Join-Path $Repo "install.ps1") @Forward
+            exit $LASTEXITCODE
+        }
+        Write-Host "note: could not switch to ${Latest}: installing the current state"
+    }
+}
 $MinMinor = if ($Full) { 14 } else { 10 }
 function Say($text) { Write-Host "`n==> $text" }
 function Test-Py($exe, $extra) {

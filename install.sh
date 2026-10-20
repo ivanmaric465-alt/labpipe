@@ -5,6 +5,10 @@
 #
 # Safe to rerun. Never uses sudo and never touches raw data. Everything lives under
 # LABPIPE_HOME (default ~/.local/share/labpipe): app/ (this code), venv/. It:
+#   0. in the installation's own clone (LABPIPE_HOME/app): switches to the newest release (tag
+#      vX.Y.Z) and runs that release's installer; users get releases, never whatever is on main
+#      (--main: stay on the clone's current state; no release yet: stays, says so; local
+#      changes in the clone: stays, says so),
 #   1. finds Python >= 3.10 (>= 3.14 with --full),
 #   2. creates the virtual environment (OUTSIDE synced folders),
 #   3. installs labpipe: the slim host part (PyYAML only; the analysis runs in the
@@ -16,7 +20,9 @@
 #      present?, models, login, your first project, the container. What needs admin rights
 #      is shown for you to run, never run by this script.
 #
-# Options:  --full        also install the analysis libraries (native, Python 3.14)
+# Options:  --main        install the development state (main), not the newest release
+#                         (or LABPIPE_CHANNEL=main)
+#           --full        also install the analysis libraries (native, Python 3.14)
 #           --no-start    do not check tools, log in, build or start the container
 #           --answers F   answer the questions from a YAML file (CI, tests)
 #           --no-setup    stop after the environment (LABPIPE_NO_SETUP=1 does the same)
@@ -25,17 +31,21 @@
 
 set -euo pipefail
 
+ORIG_ARGS=("$@")
+
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 HOME_DIR="${LABPIPE_HOME:-$HOME/.local/share/labpipe}"
 VENV="${LABPIPE_VENV:-$HOME_DIR/venv}"
 BIN="${LABPIPE_BIN:-$HOME/.local/bin}"
 FULL="${LABPIPE_FULL:-}"
 NO_SETUP="${LABPIPE_NO_SETUP:-}"
+CHANNEL="${LABPIPE_CHANNEL:-release}"
 SETUP_ARGS=()
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --full) FULL=1 ;;
+        --main) CHANNEL=main ;;
         --no-setup) NO_SETUP=1 ;;
         --no-start) SETUP_ARGS+=(--no-start) ;;
         --answers)
@@ -47,6 +57,36 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
+
+# The installation's own clone installs the newest release. (CI and developers run the installer in
+# their own checkout, which is not LABPIPE_HOME/app: nothing is switched there.) A function, so that
+# bash has read all of it before the checkout replaces this very file; then it starts over from the tag.
+use_release() {
+    [ "$CHANNEL" != main ] && [ -z "${LABPIPE_SWITCHED:-}" ] && [ -e "$REPO/.git" ] &&
+        [ -d "$HOME_DIR" ] && [ "$REPO" = "$(cd "$HOME_DIR" && pwd -P)/app" ] || return 0
+    command -v git >/dev/null 2>&1 || return 0
+    git -C "$REPO" fetch --tags --quiet 2>/dev/null ||
+        echo "note: could not fetch the release tags (offline?); using the tags already here" >&2
+    local latest
+    latest="$(git -C "$REPO" tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' |
+              sort -t. -k1.2,1n -k2,2n -k3,3n | tail -n 1 || true)"
+    if [ -z "$latest" ]; then
+        echo "no release yet: installing main"
+        return 0
+    fi
+    if [ -n "$(git -C "$REPO" status --porcelain)" ]; then
+        echo "note: $REPO has local changes: not switching to $latest, installing the current state" >&2
+        return 0
+    fi
+    if [ "$(git -C "$REPO" rev-parse HEAD)" != "$(git -C "$REPO" rev-parse "$latest^{commit}")" ]; then
+        echo "==> Switching to the newest release, $latest"
+        git -C "$REPO" -c advice.detachedHead=false checkout --quiet "$latest" ||
+            { echo "note: could not switch to $latest: installing the current state" >&2; return 0; }
+        LABPIPE_SWITCHED=1 exec bash "$REPO/install.sh" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
+    fi
+    echo "    release $latest"
+}
+use_release
 
 if [ "$FULL" = 1 ]; then MIN_MINOR=14; else MIN_MINOR=10; fi
 

@@ -365,3 +365,99 @@ def test_install_sh_with_answers_makes_a_slim_installation_and_a_project(tmp_pat
     elsewhere = subprocess.run([str(bin_dir / "labpipe"), "status"], cwd=tmp_path, env=env,
                                capture_output=True, text=True)
     assert elsewhere.returncode == 2 and "labpipe project new" in elsewhere.stdout
+
+
+# ---- the installer installs releases -------------------------------------------------------
+
+GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.org",
+           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.org"}
+
+
+def _git(folder: Path, *args: str) -> str:
+    run = subprocess.run(["git", *args], cwd=folder, env={**os.environ, **GIT_ENV},
+                         capture_output=True, text=True, check=True)
+    return run.stdout.strip()
+
+
+def _clone_with_releases(home: Path, tags: tuple[str, ...] = ("v0.1.0", "v0.10.0", "v0.9.0")) -> Path:
+    """HOME/app: the installer, a git history with the given tags, and one commit after them."""
+    app = home / "app"
+    app.mkdir(parents=True)
+    shutil.copy(REPO / "install.sh", app / "install.sh")
+    _git(app, "init", "-q", "-b", "main")
+    for i, tag in enumerate(("v0.0.0", *tags)):
+        (app / "marker.txt").write_text(f"{tag}\n", encoding="utf-8")
+        _git(app, "add", "-A")
+        _git(app, "commit", "-q", "-m", f"release {i}")
+        if i:
+            _git(app, "tag", tag)
+    (app / "marker.txt").write_text("main\n", encoding="utf-8")
+    _git(app, "commit", "-q", "-am", "after the last release")
+    return app
+
+
+def _run_installer(tmp_path: Path, app: Path, *args: str, extra: dict | None = None):
+    """install.sh from `app`; stops right after the switch: a foreign `labpipe` link is refused
+    before anything is installed (so no network is needed)."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    if not (bin_dir / "labpipe").is_symlink():
+        (bin_dir / "labpipe").symlink_to("/bin/true")
+    env = _env(tmp_path, {"LABPIPE_HOME": str(app.parent), "LABPIPE_BIN": str(bin_dir),
+                          "LABPIPE_NO_SETUP": "1", **(extra or {})})
+    return subprocess.run(["bash", str(app / "install.sh"), *args], env=env, capture_output=True,
+                          text=True, timeout=120)
+
+
+@bash
+def test_install_sh_in_the_installations_clone_switches_to_the_newest_release(tmp_path):
+    app = _clone_with_releases(tmp_path / "lp")
+    run = _run_installer(tmp_path, app)
+    assert "Switching to the newest release, v0.10.0" in run.stdout     # 0.10 is newer than 0.9
+    assert "points elsewhere" in run.stderr             # the re-executed installer ran (and stopped)
+    assert _git(app, "describe", "--tags", "--exact-match") == "v0.10.0"
+    assert _git(app, "branch", "--show-current") == ""          # detached
+
+
+@bash
+def test_install_sh_main_stays_where_the_clone_is(tmp_path):
+    app = _clone_with_releases(tmp_path / "lp")
+    for args, extra in (("--main",), None), ((), {"LABPIPE_CHANNEL": "main"}):
+        run = _run_installer(tmp_path, app, *args, extra=extra)
+        assert "Switching" not in run.stdout
+        assert _git(app, "branch", "--show-current") == "main"
+
+
+@bash
+def test_install_sh_without_a_release_says_so_and_stays(tmp_path):
+    app = _clone_with_releases(tmp_path / "lp", tags=())
+    run = _run_installer(tmp_path, app)
+    assert "no release yet: installing main" in run.stdout
+    assert _git(app, "branch", "--show-current") == "main"
+
+
+@bash
+def test_install_sh_does_not_switch_a_clone_with_local_changes(tmp_path):
+    app = _clone_with_releases(tmp_path / "lp")
+    (app / "marker.txt").write_text("my change\n", encoding="utf-8")
+    run = _run_installer(tmp_path, app)
+    assert "local changes" in run.stderr and "Switching" not in run.stdout
+    assert _git(app, "branch", "--show-current") == "main"
+    assert (app / "marker.txt").read_text(encoding="utf-8") == "my change\n"
+
+
+@bash
+def test_install_sh_in_any_other_checkout_never_switches(tmp_path):
+    """CI and developers: the checkout is not LABPIPE_HOME/app."""
+    app = _clone_with_releases(tmp_path / "elsewhere")
+    env_home = tmp_path / "lp"
+    env_home.mkdir()
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "labpipe").symlink_to("/bin/true")
+    env = _env(tmp_path, {"LABPIPE_HOME": str(env_home), "LABPIPE_BIN": str(bin_dir),
+                          "LABPIPE_NO_SETUP": "1"})
+    run = subprocess.run(["bash", str(app / "install.sh")], env=env, capture_output=True,
+                         text=True, timeout=120)
+    assert "Switching" not in run.stdout and "no release" not in run.stdout
+    assert _git(app, "branch", "--show-current") == "main"
