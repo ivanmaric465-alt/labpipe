@@ -4,6 +4,10 @@ Used by `labpipe report` (the HTML report) and `labpipe xrd summary --entry ID`
 (what agents read before writing notes). Every number here is formatted by code
 from results.json; values with an uncertainty are rounded to the uncertainty
 (2 significant digits of σ).
+
+Two optional functions only lay numbers out for the report: `table(results)` (the card's key
+results) and `overview_tables(items)` (one row per measurement and fcc phase, value and σ in
+separate cells so the numbers line up).
 """
 
 from __future__ import annotations
@@ -12,13 +16,23 @@ import math
 from typing import Any
 
 
-def with_sigma(value: float | None, sigma: float | None, unit: str = "") -> str:
+CAPTION = ("measured data (black), fitted model (red), background (dashed grey), phase "
+           "reflection ticks and the residual; ± values are the σ of the least-squares fit.")
+
+
+def split_sigma(value: float | None, sigma: float | None) -> tuple[str, str | None]:
+    """(value, σ) as text, both rounded to the 2 significant digits of σ; σ is None without one."""
     if value is None:
-        return "–"
+        return "–", None
     if not sigma:
-        return f"{value:.4g}{unit}"
+        return f"{value:.4g}", None
     decimals = max(0, 1 - int(math.floor(math.log10(abs(sigma)))))
-    return f"{value:.{decimals}f} ± {sigma:.{decimals}f}{unit}"
+    return f"{value:.{decimals}f}", f"{sigma:.{decimals}f}"
+
+
+def with_sigma(value: float | None, sigma: float | None, unit: str = "") -> str:
+    text, error = split_sigma(value, sigma)
+    return f"{text}{unit}" if error is None else f"{text} ± {error}{unit}"
 
 
 def _hkl(hkl) -> str:
@@ -243,3 +257,97 @@ def quantities(results: dict[str, Any]) -> dict[str, dict[str, Any]]:
                     "key": f"size_strain[{j}].scherrer[{k}].size_nm", "note": note}
                 break
     return out
+
+
+# --- tables (layout only) --------------------------------------------------------------------
+
+def _scherrer(results: dict[str, Any], phase_id: Any) -> dict[str, Any] | None:
+    """The phase's first Scherrer size (as the overview), with its reflection."""
+    for row in results.get("size_strain") or []:
+        if row.get("phase") == phase_id:
+            for scherrer in row.get("scherrer") or []:
+                if scherrer.get("size_nm") is not None:
+                    return scherrer
+    return None
+
+
+def _sigma_cell(sigma: str | None, has_value: bool = True) -> dict[str, Any] | str:
+    if sigma is not None:
+        return f"± {sigma}"
+    return {"text": "no σ", "state": "missing"} if has_value else ""
+
+
+def _reference(phase: dict[str, Any]) -> tuple[str, str]:
+    nearest = (phase.get("reference_comparison") or [None])[0]
+    if not nearest:
+        return "–", "–"
+    delta = nearest.get("delta_a_percent")
+    return nearest["phase"], f"{delta:+.2f}".replace("-", "−") if delta is not None else "–"
+
+
+def overview_tables(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One table: per measurement and fcc phase the lattice parameter a ± σ, the closest
+    reference and Δa, the Scherrer size ± σ, the reflections; Rwp once per measurement."""
+    several = any(len((i["results"].get("phases") or {}).get("fcc_indexed") or []) > 1
+                  for i in items)
+    columns = ([{"label": "Phase", "align": "l"}] if several else []) + [
+        {"label": "a", "unit": "Å", "align": "r"}, {"label": "± σ", "unit": "Å", "align": "l"},
+        {"label": "Closest reference", "align": "l"}, {"label": "Δa", "unit": "%", "align": "r"},
+        {"label": "Size", "unit": "nm", "align": "r"}, {"label": "± σ", "unit": "nm", "align": "l"},
+        {"label": "Reflections", "unit": "n", "align": "r"}, {"label": "Rwp", "unit": "%", "align": "r"}]
+    rows = []
+    for i, item in enumerate(items):
+        results = item["results"]
+        rwp = f"{100 * results['fit']['global']['rwp']:.1f}"
+        phases = results["phases"]["fcc_indexed"]
+        for k, phase in enumerate(phases or [None]):
+            first = k == 0
+            if phase is None:
+                cells = ["–", "", {"text": "no fcc phase", "state": "missing"}, "–", "–", "",
+                         "–"]
+            else:
+                a, a_sigma = split_sigma(phase["a_angstrom"], phase.get("a_sigma_angstrom"))
+                reference, delta = _reference(phase)
+                scherrer = _scherrer(results, phase["id"])
+                size, size_sigma = (split_sigma(scherrer["size_nm"],
+                                                scherrer.get("size_sigma_nm_from_fwhm"))
+                                    if scherrer else ("–", None))
+                n = f"{phase['n_reflections']}" + (" (tent.)" if phase.get("tentative") else "")
+                cells = [a, _sigma_cell(a_sigma), reference, delta, size,
+                         _sigma_cell(size_sigma, scherrer is not None), n]
+            if several:
+                cells.insert(0, str(phase["id"]) if phase else "–")
+            rows.append({"item": i if first else None, "class": "" if first else "sub",
+                         "cells": cells + [rwp if first else ""]})
+    return [{"columns": columns, "rows": rows, "notes": [
+        "a: lattice parameter of the fcc phase; ± σ from the least-squares fit (\"no σ\": "
+        "none available). Closest reference: a candidate, never an identification; Δa its "
+        "difference in a.",
+        "Size: Scherrer size of the phase's first reflection, σ from the peak-width fit only; a "
+        "lower bound until an instrument calibration exists. (tent.): tentative phase."]}]
+
+
+def table(results: dict[str, Any]) -> dict[str, Any]:
+    """The card's key results: quantity, value, σ."""
+    phases = results["phases"]["fcc_indexed"]
+    rows: list[list[Any]] = []
+    for phase in phases:
+        name = f"Phase {phase['id']}: " if len(phases) > 1 else ""
+        a, a_sigma = split_sigma(phase["a_angstrom"], phase.get("a_sigma_angstrom"))
+        rows.append([f"{name}lattice parameter a (Å)", a, _sigma_cell(a_sigma)])
+        reference, delta = _reference(phase)
+        rows.append([f"{name}closest reference (Δa, %)", f"{reference} ({delta})", ""])
+        scherrer = _scherrer(results, phase["id"])
+        if scherrer:
+            size, size_sigma = split_sigma(scherrer["size_nm"],
+                                           scherrer.get("size_sigma_nm_from_fwhm"))
+            rows.append([f"{name}size, Scherrer {_hkl(scherrer['hkl'])} (nm)", size,
+                         _sigma_cell(size_sigma)])
+        rows.append([f"{name}reflections", f"{phase['n_reflections']}"
+                     + (" (tentative)" if phase.get("tentative") else ""), ""])
+    if not phases:
+        rows.append(["fcc phase", {"text": "none", "state": "missing"}, ""])
+    rows.append(["Rwp (%)", f"{100 * results['fit']['global']['rwp']:.1f}", ""])
+    return {"columns": [{"label": "Quantity", "align": "l"}, {"label": "Value", "align": "r"},
+                        {"label": "± σ", "align": "l"}], "rows": rows,
+            "notes": ["Size is a lower bound until an instrument calibration exists."]}
