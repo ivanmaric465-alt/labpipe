@@ -18,6 +18,7 @@ from typing import Any
 
 import yaml
 
+from labpipe import autostart
 from labpipe import manifest as mf
 from labpipe.labmethods import MethodsError
 from labpipe.registry import load_methods
@@ -226,10 +227,12 @@ def _container() -> list[dict[str, Any]]:
         state = status_record()
     except (ContainerError, SetupError) as exc:
         return [_item("container", "todo", str(exc), "labpipe container setup")]
+    status, message, step = autostart.check(state["engine"])
+    start = _item("autostart", status, message, step)
     if not state["running"]:
         return [_item("container", "todo", f"container {state['name']} is not running",
-                      state["next"] or "labpipe container start")]
-    items = [_item("container", "warn" if state["image_up_to_date"] is False else "ok",
+                      state["next"] or "labpipe container start"), start]
+    items = [start, _item("container", "warn" if state["image_up_to_date"] is False else "ok",
                    f"container {state['name']} running ({state['engine']}); notifications page: "
                    f"{state['page']}" + ("; its image is older than container/"
                                           if state["image_up_to_date"] is False else ""),
@@ -285,8 +288,8 @@ def _raw_roots(config: dict) -> tuple[list[dict[str, Any]], list[tuple[str, Path
         items.extend(_container())
     if in_container():
         items.append(_item("container", "ok", "inside the container: the raw data is the "
-                           "read-only mount, Claude Code's and Codex's own sandboxes and the "
-                           "systemd services are not used here"))
+                           "read-only mount, and Claude Code's and Codex's own sandboxes are not "
+                           "used here"))
     if os.environ.get("LABPIPE_RAW_ROOT"):
         items.append(_item("raw_root_override", "warn", "LABPIPE_RAW_ROOT is set and replaces "
                            "raw_roots for this run", "unset it for normal use"))
@@ -342,6 +345,18 @@ def _files(config: dict, usable: list[tuple[str, Path]]) -> list[dict[str, Any]]
     return items
 
 
+def _old_automation() -> list[dict[str, Any]]:
+    """The native systemd units of earlier versions: retired, the container replaces them."""
+    units = autostart.old_units()
+    if not units:
+        return []
+    return [_item("old_automation", "warn",
+                  "old native automation is still installed (" + ", ".join(p.name for p in units)
+                  + "); the container does this work now, and both together analyse twice",
+                  "the user runs `labpipe automation setup`, or: "
+                  + "; ".join(autostart.removal_commands(units)))]
+
+
 def _automation(config: dict) -> list[dict[str, Any]]:
     """Is automatic processing (if set up) running, and did its last run succeed?"""
     if in_container():
@@ -349,9 +364,10 @@ def _automation(config: dict) -> list[dict[str, Any]]:
         report = health(config)
         return [_item("automation", report["status"], report["message"], report["next"],
                       **report["details"])]
-    if not config.get("automation"):
-        return [_item("automation", "ok", "automatic processing not set up (optional: "
-                      "`labpipe automation setup` in your terminal)")]
+    if not container_mode():
+        return [_item("automation", "ok", "no automatic processing: it runs in the project's "
+                      "container (container mode: `labpipe container setup`); by hand: "
+                      "`labpipe automation run`")]
     from labpipe.automation import health
     report = health(config)
     return [_item("automation", report["status"], report["message"], report["next"],
@@ -456,6 +472,8 @@ def run() -> dict[str, Any]:
             else:
                 items.append(_item("codex", "ok", "codex installed; project trusted (rules, "
                                    "guard hook and agents in .codex/ apply)"))
+    if not in_container():
+        items += _old_automation()
     if config is not None and (PROJECT_ROOT / config["manifest"]).exists():
         counts = Counter(e["status"] for e in mf.load(config)["entries"].values())
         items.append(_item("manifest", "ok", f"manifest entries by status: {dict(counts)}"))

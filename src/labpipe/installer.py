@@ -6,7 +6,9 @@ in brackets (Enter takes it):
 1. checks: Podman or Docker, and the agent tool (Claude Code or Codex) are installed; if not,
    the exact install commands for this system are shown (never run: some need admin rights)
    and the installer stops: rerun it afterwards;
-2. which agent tool, which model per role, Linux desktop pop-ups;
+2. which agent tool, which model per role, Linux desktop pop-ups, whether the container
+   starts by itself at login (Podman on Linux: enables the user unit podman-restart.service
+   after the container starts; Docker: nothing to do; otherwise the guidance, autostart.py);
 3. writes defaults.yaml in the user's labpipe config folder (the base of every new project);
 4. the login: shows the one command, stores the token as the container's secret;
 5. the first project (`labpipe project new`), then the container (build, start), pop-ups,
@@ -22,6 +24,7 @@ build and the start. Only the host runs this: PyYAML and the standard library.
     models: {supervisor: haiku, analyst: sonnet, postdoc: opus}
     reasoning: {supervisor: low, ...}  # Codex only
     popups: false                      # Linux only
+    autostart: true                    # start the container at login (default yes)
     project: {name: my-project, folder: ~/labpipe-projects/my-project,
               data: [~/labdata], baseline: true}
 """
@@ -39,7 +42,7 @@ from typing import Any
 
 import yaml
 
-from labpipe import agents, container, project
+from labpipe import agents, autostart, container, project
 from labpipe.safety import CODE_ROOT, config_home, install_home
 
 HARNESSES = {"claude-code": "Claude Code", "codex": "Codex"}
@@ -227,13 +230,14 @@ def validate_agents(harness: str, models: dict[str, str], reasoning: dict[str, s
 
 
 def defaults_text(engine: str, harness: str, models: dict[str, str],
-                  reasoning: dict[str, str], popups: bool) -> str:
+                  reasoning: dict[str, str], popups: bool, autostart: bool = True) -> str:
     block: dict[str, Any] = {"harness": harness, "models": models}
     if reasoning:
         block["reasoning"] = reasoning
     return ("# labpipe's defaults for new projects (written by the installer; edit freely).\n"
             "# `labpipe project new` copies them into the new project's config/local.yaml.\n"
-            + yaml.safe_dump({"agents": block, "container": {"engine": engine, "popups": popups}},
+            + yaml.safe_dump({"agents": block, "container": {"engine": engine, "popups": popups,
+                                                   "autostart": autostart}},
                              sort_keys=False, allow_unicode=True, width=1000))
 
 
@@ -351,10 +355,12 @@ def _run(q: Questions, previous: dict[str, Any], family: str, start: bool, inter
         popups = q.yes("popups", "\nDesktop pop-ups when something needs you (a small user "
                        "service, installed only after you confirm it)",
                        bool((previous.get("container") or {}).get("popups")))
+    wish = q.yes("autostart", "\nStart the container by itself when you log in",
+                 (previous.get("container") or {}).get("autostart", True))
     # 3. defaults
     defaults = config_home() / "defaults.yaml"
     defaults.parent.mkdir(parents=True, exist_ok=True)
-    defaults.write_text(defaults_text(engine, harness, models, reasoning, popups),
+    defaults.write_text(defaults_text(engine, harness, models, reasoning, popups, wish),
                         encoding="utf-8")
     print(f"\nSaved your choices: {defaults}")
     # 4. login
@@ -370,7 +376,7 @@ def _run(q: Questions, previous: dict[str, Any], family: str, start: bool, inter
     print(f"\nProject created: {created['project']}")
     page = None
     if start:
-        page = _start(folder, harness, popups, info, interactive)
+        page = _start(folder, harness, popups, info, interactive, engine, wish)
     else:
         print("Not started (--no-start). Later, in the project folder:\n"
               f"      cd {folder}\n      labpipe container start")
@@ -383,8 +389,8 @@ def _run(q: Questions, previous: dict[str, Any], family: str, start: bool, inter
 
 
 def _start(folder: Path, harness: str, popups: bool, info: dict[str, Any],
-           interactive: bool) -> str | None:
-    """Pop-ups, build and start the container, the first scan, the Codex login."""
+           interactive: bool, engine: str = "podman", wish: bool = False) -> str | None:
+    """Pop-ups, build and start the container, autostart, the first scan, the Codex login."""
     if popups and sys.platform.startswith("linux"):
         if interactive:
             _labpipe(["container", "popups", "on"], folder)
@@ -402,6 +408,12 @@ def _start(folder: Path, harness: str, popups: bool, info: dict[str, Any],
         print(result.stdout or "")
         raise InstallError(f"the container did not start. Fix the error above, then rerun the "
                            f"installer (or `cd {folder} && labpipe container start`)")
+    if wish:   # the question above was the yes
+        print("\nStarting the container at login:")
+        autostart.offer(engine, lambda question: True)
+    else:
+        print("\nThe container does not start by itself at login (`labpipe automation setup` "
+              "changes that).")
     if info["data"] and info["baseline"]:
         print("Recording the files already there (not analysed) ...")
         if _labpipe(["scan", "--baseline"], folder, capture=True).returncode != 0:

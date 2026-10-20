@@ -13,7 +13,7 @@ Five steps, each optional and safe to rerun; current settings are the defaults:
 3. sandbox: are the prerequisites of the Claude Code sandbox present (needed
    for unattended runs)?
 4. agents: harness and a model per role → `agents:`, then `labpipe agents sync`.
-5. automation: `labpipe automation setup` (watcher + nightly run).
+5. automation: container mode and `labpipe automation setup` (the container starts at login).
 
 Needs a terminal, so agents cannot run it.
 """
@@ -332,9 +332,12 @@ def run(only: str | None = None) -> int:
                 sandbox()
             elif step == "agents":
                 agent_models(config)
-            elif only or _yes("Set up automatic processing now (a watcher for new files and a "
-                              "nightly run)?", False):
-                automation.setup(config)
+            else:
+                print("Automatic processing runs in the project's container: `labpipe "
+                      "container setup` (once), then `labpipe automation setup` (timings, start "
+                      "at login). Without the container: `labpipe automation run` by hand.")
+                if only or _yes("Run `labpipe automation setup` now?", False):
+                    automation.setup(config)
     except (KeyboardInterrupt, EOFError):
         print("\nStopped. Settings saved so far are kept; rerun `labpipe setup` to continue.")
         return 1

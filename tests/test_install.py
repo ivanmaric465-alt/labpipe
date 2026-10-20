@@ -53,14 +53,15 @@ def test_answers_file_writes_the_defaults_and_a_project_with_the_container_block
     answers = _answers(scratch, popups=True, models={"postdoc": "sonnet"})
     assert installer.run(str(answers), start=False) == 0
     defaults = yaml.safe_load((scratch / "config" / "defaults.yaml").read_text(encoding="utf-8"))
-    assert defaults["container"] == {"engine": "podman",
+    assert defaults["container"] == {"engine": "podman", "autostart": True,
                                      "popups": sys.platform.startswith("linux")}
     assert defaults["agents"]["harness"] == "claude-code"
     assert defaults["agents"]["models"] == {"supervisor": "haiku", "analyst": "sonnet",
                                             "postdoc": "sonnet"}       # recommended, one changed
     folder = scratch / "projects" / "demo"
     local = yaml.safe_load((folder / "config" / "local.yaml").read_text(encoding="utf-8"))
-    assert local["container"] == defaults["container"]
+    assert local["container"] == {"engine": "podman",           # autostart is a machine setting
+                                  "popups": defaults["container"]["popups"]}
     assert local["agents"] == defaults["agents"]
     assert local["raw_roots"][0]["path"] == (scratch / "data").resolve().as_posix()
     assert (folder / "labpipe.yaml").is_file() and (folder / ".claude" / "agents").is_dir()
@@ -118,7 +119,7 @@ def test_questions_are_asked_in_plain_words_and_enter_takes_the_defaults(scratch
     monkeypatch.setattr(installer, "prerequisites", lambda *a, **k: [])
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(sys.stdout, "isatty", lambda: True, raising=False)
-    blanks = [""] * (4 + sys.platform.startswith("linux"))   # tool, 3 models, (pop-ups)
+    blanks = [""] * (5 + sys.platform.startswith("linux"))   # tool, 3 models, (pop-ups), autostart
     replies = iter([*blanks, "proj", str(scratch / "p"), str(data), "", ""])
     asked = []
 
@@ -477,3 +478,16 @@ def test_install_sh_in_any_other_checkout_never_switches(tmp_path):
                          text=True, timeout=120)
     assert "Switching" not in run.stdout and "no release" not in run.stdout
     assert _git(app, "branch", "--show-current") == "main"
+
+
+def test_autostart_answer_is_saved_in_the_defaults_and_defaults_to_yes(scratch):
+    assert installer.run(str(_answers(scratch)), start=False) == 0
+    path = scratch / "config" / "defaults.yaml"
+    assert yaml.safe_load(path.read_text(encoding="utf-8"))["container"]["autostart"] is True
+    shutil.rmtree(scratch / "projects")
+    assert installer.run(str(_answers(scratch, autostart=False)), start=False) == 0
+    assert yaml.safe_load(path.read_text(encoding="utf-8"))["container"]["autostart"] is False
+    # a rerun without an answer keeps the earlier one
+    shutil.rmtree(scratch / "projects")
+    assert installer.run(str(_answers(scratch)), start=False) == 0
+    assert yaml.safe_load(path.read_text(encoding="utf-8"))["container"]["autostart"] is False
