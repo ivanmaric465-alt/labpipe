@@ -162,7 +162,7 @@ labpipe doctor                 # what is still missing
 labpipe project new ~/labpipe-projects/<other> --data <its data folder>     # another project
 ```
 
-Without a container (full native install) the guided setup is `labpipe setup`: data folder and its read-only view, what it recognises, sandbox, models per agent, automation.
+Without a container (full native install) the guided setup is `labpipe setup`: data folder and its read-only view, what it recognises, sandbox, models per agent, and a pointer to container mode for automatic processing.
 
 - Run a single step: `labpipe setup --only raw-data` (or `files`, `sandbox`, `agents`, `automation`).
 - For the read-only view, setup prints the commands for your system (e.g. a bind mount). **You run them**; setup waits, checks the result and saves it.
@@ -219,15 +219,20 @@ The report says when there is none yet, when it is out of date, or when it did n
 
 ## Automatic processing
 
+Automatic processing lives only in the project's container, which the installer starts and which starts by itself when you log in.
+
 ```bash
-labpipe automation setup         # asks the timings, shows the service files, installs after you confirm
+labpipe automation setup         # asks the timings; starts the container at login (shows each step, asks first)
 labpipe automation status
-loginctl enable-linger           # Linux: keep it running when you are logged out
 ```
 
-A watcher checks for new files; once they have stopped changing, it analyses them, at most 10 per AI run (the rest follow in the next runs). A nightly run catches anything missed. `labpipe doctor` reports whether the last run succeeded. Log: `logs/automation.log`.
+In the container a watcher checks for new files; once they have stopped changing, it analyses them, at most 10 per AI run (the rest follow in the next runs). A nightly run catches anything missed. `labpipe doctor` reports whether the last run succeeded and whether the container starts at login (`autostart`). Log: `logs/automation.log`.
 
-You get a desktop notification when analyses start and finish, and once for each new thing that needs you: files no method recognises, files needing a decision (e.g. no sample ID), failed analyses, analyses out of date after a code or settings change. Each message says what to do, e.g. *Open Claude Code in ~/labpipe and say: check the new files.* All of them are listed in `logs/review_queue.md`. Files you never want to hear about go into `config/ignore.yaml`:
+- **Start at login**: Podman on Linux: `systemctl --user enable podman-restart.service` (setup runs it after your yes). To start without logging in, an administrator runs `loginctl enable-linger $USER` (shown, never run for you). Docker: the container restarts when Docker starts (Docker Desktop: "Start Docker Desktop when you sign in"). Podman on macOS/Windows runs in a podman machine: start the machine at login; **untested**.
+- **Without a container** (full native install) nothing runs by itself: `labpipe automation run` does one pass by hand, or tell the agent "process the new data".
+- **Earlier versions** installed systemd units (`labpipe-watch.service`, `labpipe-nightly.*`). They are retired; `labpipe doctor` warns while they exist (`old_automation`), and `labpipe automation setup` removes them after you confirm.
+
+You get a notification on the notifications page when analyses start and finish, and on Linux a desktop pop-up (`labpipe container popups on`), and once for each new thing that needs you: files no method recognises, files needing a decision (e.g. no sample ID), failed analyses, analyses out of date after a code or settings change. Each message says what to do, e.g. *Open Claude Code in ~/labpipe and say: check the new files.* All of them are listed in `logs/review_queue.md`. Files you never want to hear about go into `config/ignore.yaml`:
 
 ```yaml
 ignore: ["TEM/**", "EDS/*.docx"]
@@ -235,11 +240,7 @@ ignore: ["TEM/**", "EDS/*.docx"]
 
 Test the notification: `labpipe automation notify-test`.
 
-Stop it:
-
-```bash
-systemctl --user disable --now labpipe-watch.service labpipe-nightly.timer
-```
+Stop it: `labpipe container stop` (it stays stopped until `labpipe container start`).
 
 ## Settings
 
@@ -325,8 +326,10 @@ cd ~/labpipe-projects/<name> && labpipe container stop
 podman rm -f labpipe-<name>; podman volume rm labpipe-<name>-home   # check names: podman ps -a / podman volume ls
 podman image rm localhost/labpipe                                   # all tags: podman images
 podman secret rm labpipe-claude-token
-# automatic processing, if you set it up natively (Linux)
-systemctl --user disable --now labpipe-watch.service labpipe-nightly.timer labpipe-dbus-proxy.service
+# start at login (Podman, Linux), and the pop-up proxy; for installations that still have the
+# old native units (labpipe-watch/-nightly, retired) the same rm removes them
+systemctl --user disable --now podman-restart.service labpipe-dbus-proxy.service
+systemctl --user disable --now labpipe-watch.service labpipe-nightly.timer   # only if they exist
 rm -f ~/.config/systemd/user/labpipe-*
 # labpipe itself: the code, the environment, the link, your defaults
 rm -r ~/.local/share/labpipe
@@ -343,6 +346,9 @@ Docker: the same with `docker`. A read-only view: `sudo umount <view>`, then rem
 | `labpipe: command not found` | Open a new terminal, or `export PATH="$HOME/.local/bin:$PATH"` |
 | doctor: raw root is writable | `labpipe setup --only raw-data` |
 | automatic runs fail (sandbox) | `labpipe setup --only sandbox` |
+| doctor: `autostart` warns (the container does not start at login) | `labpipe automation setup` |
+| doctor: `old_automation` warns (old native units) | `labpipe automation setup` removes them after you confirm, or the commands it shows |
+| nothing is analysed by itself | `labpipe container status`; if it is stopped, `labpipe container start` |
 | doctor: agent files out of date | `labpipe agents sync` |
 | doctor: generated files out of date | `labpipe project sync` |
 | `not in a labpipe project` | `cd` into your project folder, or `labpipe project new <folder>` |

@@ -61,8 +61,9 @@ areas:
     code: [src/labpipe/guard.py, hooks/guard.py, ".claude/*.json", "src/labpipe/roview.py"]
     docs: [docs/SAFETY.md, CLAUDE.md, AGENTS.md]
   automation:
-    code: [src/labpipe/automation.py, src/labpipe/inbox.py]
-    docs: [docs/settings/automation.md, README.md, AGENTS.md, .agents/skills/labpipe-pass/SKILL.md]
+    code: [src/labpipe/automation.py, src/labpipe/autostart.py, src/labpipe/inbox.py]
+    docs: [docs/settings/automation.md, docs/settings/container.md, docs/SETUP.md, README.md,
+           AGENTS.md, .agents/skills/labpipe-pass/SKILL.md]
   container:
     code: [src/labpipe/container.py, "container/*"]
     docs: [docs/settings/container.md, docs/ARCHITECTURE.md, README.md]

@@ -27,6 +27,8 @@ labpipe container status | logs | stop
 labpipe shell                        # a session inside the container
 ```
 
+The container is started with the restart policy `unless-stopped`, so it comes back by itself when the engine does: `labpipe automation setup` makes that happen at login (Podman on Linux: `podman-restart.service`; Docker: Docker's own start; Podman on macOS/Windows: the podman machine, untested; [automation.md](automation.md) → Start at login). `labpipe container stop` keeps it stopped until the next `labpipe container start`. The installer's answer (`autostart`) is kept in `~/.config/labpipe/defaults.yaml` → `container`; it is a setting of your computer, not of one project.
+
 ## You say → setting
 
 | You say | Setting |

@@ -26,10 +26,13 @@ None.
 - `labpipe doctor` says when a project was set up with another release than the installed one (`project_release`).
 - `labpipe replay` needs the same analysis and plot version, not the same commit.
 - Every method page has a "Reading the plot" section (what each line, panel and colour is, good versus look again, which plot settings change it), and so does the template for your own methods (`labpipe methods check` warns while it is missing). The report starts with a collapsed "How to read this report" box, generated from the report settings (`how_to_read: false` hides it).
+- The container starts by itself when you log in. The installer asks ("Start the container by itself when you log in?", default yes) and `labpipe automation setup` sets it up: Podman on Linux enables the user unit `podman-restart.service` (after your yes; starting without logging in needs `loginctl enable-linger $USER`, which is shown and never run), Docker restarts the container when Docker starts, Podman on macOS/Windows needs the podman machine to start at login (untested). `labpipe doctor` has an `autostart` item.
+- Automatic processing runs only in the container. The native systemd watcher and nightly timer, and the native macOS/Windows pop-ups, are removed; `labpipe automation watch` refuses outside the container. `labpipe automation run` (one pass by hand) and the notifications page stay; Linux pop-ups go through `labpipe container popups on`.
 - XRD quantities use a generic fcc name in every sample, with the closest reference as "possibly X"; no AI cost limit unless you set one.
 
 ### Needs your action
 
+- Old native automation: if you set it up with an earlier version, remove its units: `labpipe automation setup` (shows them and asks first), or `systemctl --user disable --now labpipe-watch.service labpipe-nightly.service labpipe-nightly.timer`, then `rm ~/.config/systemd/user/labpipe-watch.service ~/.config/systemd/user/labpipe-nightly.service ~/.config/systemd/user/labpipe-nightly.timer` and `systemctl --user daemon-reload` (`labpipe doctor` warns as `old_automation` until then). Then run `labpipe automation setup` once to start the container at login.
 - Existing clones and test setups: reinstall with the new installer and create a project with `labpipe project new <folder> --data <data folder>`. There is no adopt of an old layout.
 
 ## v0.1.0 — 2026-10-16

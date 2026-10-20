@@ -1,6 +1,6 @@
 # Automatic processing and notifications
 
-A watcher (inside the container) looks for new files, waits until they stop changing, analyses them (code), lets the analysts write notes (AI) in batches, rebuilds the report and tells you what needs you: on the notifications page and, on Linux, as desktop pop-ups. A nightly run is the safety net. The AI starts only when there is work.
+Automatic processing lives only in the project's container (the native systemd watcher of earlier versions is retired). A watcher inside it looks for new files, waits until they stop changing, analyses them (code), lets the analysts write notes (AI) in batches, rebuilds the report and tells you what needs you: on the notifications page and, on Linux, as desktop pop-ups. A nightly run is the safety net. The AI starts only when there is work.
 
 ## Settings
 
@@ -14,8 +14,36 @@ automation:
   max_measurements_per_run: 10   # the rest follow in the next run
   max_budget_usd: null           # none: your subscription's own limits apply;
                                  # a USD limit per AI run only when paying per use (API key)
+  notify:
+    desktop: true                # Linux pop-ups (notify-send) when the container has `popups`
+    command: null                # optional program: ["prog", "{message}"]
 container:
   popups: true                   # Linux desktop pop-ups
+```
+
+The container reads `automation:` once, when it starts: after a change run `labpipe container start --replace` (`labpipe automation setup` offers it). On macOS and Windows there are no pop-ups: the notifications page is the channel (it can ask the browser to show notifications). `claude:` / `codex:` (a path to the command) only matter for `labpipe automation run` by hand on the host.
+
+## Start at login
+
+```bash
+labpipe automation setup             # timings, then the steps below (asks before each)
+labpipe doctor                       # `autostart`: does the container start by itself at login?
+```
+
+| Your system | What makes the container start at login |
+|---|---|
+| Podman on Linux | `systemctl --user enable podman-restart.service` (setup runs it after your yes). Without logging in, an administrator runs `loginctl enable-linger $USER`: shown, never run by labpipe |
+| Docker | nothing: Docker restarts the container when it starts (Docker Desktop: "Start Docker Desktop when you sign in") |
+| Podman on macOS, Windows | start the podman machine at login (Podman Desktop: "Start at login"); untested |
+
+Without container mode nothing runs by itself: `labpipe automation run`, or tell the agent "process the new data".
+
+Old native units (`labpipe-watch.service`, `labpipe-nightly.service`, `labpipe-nightly.timer`) from earlier versions: `labpipe automation setup` removes them after you confirm (not `labpipe-dbus-proxy.service`, which belongs to pop-ups), or:
+
+```bash
+systemctl --user disable --now labpipe-watch.service labpipe-nightly.service labpipe-nightly.timer
+rm ~/.config/systemd/user/labpipe-watch.service ~/.config/systemd/user/labpipe-nightly.service ~/.config/systemd/user/labpipe-nightly.timer
+systemctl --user daemon-reload
 ```
 
 ```bash
@@ -34,8 +62,9 @@ The notifications page: `http://127.0.0.1:8765/?token=…` (`labpipe container s
 | "my instrument writes slowly, it picks up half files" | a larger `settle_minutes` |
 | "run fewer AI notes at a time" | a smaller `max_measurements_per_run` |
 | "no pop-ups" | `labpipe container popups off` |
+| "start the container when I log in" | `labpipe automation setup` |
 | "nightly run at 23:00" | `nightly_at: "23:00"`, then `labpipe container start --replace` |
 
 ## After a change
 
-`labpipe container start --replace` restarts the watcher with the new settings.
+`labpipe container start --replace` restarts the watcher with the new settings (the watcher reads them only at its start).

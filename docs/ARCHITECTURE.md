@@ -43,6 +43,14 @@ data folder (read-only)
 3. If there is AI work, it starts the supervisor agent, which hands entries to the analysts.
 4. It rebuilds the report and notifies (`logs/notifications.jsonl`, page, pop-ups).
 
+The container starts at login by itself (`autostart.py`): it is run with `--restart
+unless-stopped`, and the engine restarts it (Podman on Linux: the user unit
+`podman-restart.service`, enabled by `labpipe automation setup` or the installer after a yes;
+Docker: when the Docker daemon starts; Podman on macOS/Windows: with the podman machine,
+untested). There are no native services and no native pop-ups any more; `automation watch`
+refuses outside the container. Old native units of earlier versions are removed by
+`automation setup` (after a yes) and reported by doctor (`old_automation`).
+
 ## Code and projects
 
 Two roots (`safety.py`). The code is replaced by updates and never holds anyone's data; a
@@ -187,7 +195,8 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | Agents | `agents.py` | `agents/*.md` (+ the lab's overlays and extra roles) → harness files, models per role |
 | | `project.py` | `project new`; `project sync`: the generated files of a project, `generated.json`, status for doctor |
 | | `guard.py` | hook: refuses writes outside the allowed paths, to generated files, raw-data access, disallowed commands |
-| Automation | `automation.py` | watcher, one pass, nightly run, notifications, headless agent commands |
+| Automation | `automation.py` | one pass, the watcher (the container's entry point; refuses elsewhere), nightly run, notifications (`notifications.jsonl`, Linux `notify-send`), `setup` (timings, autostart, removing old native units), headless agent commands |
+| | `autostart.py` | the container starts at login: `podman-restart.service` (Podman, Linux), Docker, podman machine guidance (untested); the old native units (host side, no numpy) |
 | | `inbox.py` | notifications page (local, token, read-only) |
 | | `container.py` | build (staged context), start (name, port, mounts per project), stop, login, shell, pop-up proxy; forwarding of host commands (and `forward_json`: the doctor's file list comes from the container, since recognising a file imports method code) |
 | Setup | `doctor.py` | setup state and next step (read-only; also `settings_migrations`, and the non-blocking `onboarding` warning while steps of `docs/ONBOARDING.md` remain) |
@@ -459,6 +468,7 @@ One container per project.
 - `tests/test_release.py`: version equality, the changelog format, entries between versions, release tags, the check for announced changes (also on a copy of the code), the release script's changelog change, the dependency updater (no network). The installer's switch to the newest release is in `tests/test_install.py`.
 - `tests/test_migrations.py`: the plan, comments kept, apply and backups, old keys for one release
   in the loaders, the command, doctor and the CI check (host-side: runs on Python 3.10 without numpy).
+- `tests/test_autostart.py` (host-side): `automation setup` per engine and system (enables `podman-restart.service` only after a yes, shows the linger command, Docker and podman machine messages, old units removed after a yes with the pop-up proxy kept, native mode), `watch` refused outside the container, the installer's autostart step, doctor's `autostart` and `old_automation`, notify. `systemctl` and the unit folder are fakes (`tests/conftest.py`): no test touches the real ones.
 - `tests/test_onboarding.py` (host-side: runs on Python 3.10 without numpy): the steps against `docs/ONBOARDING.md`, the record, the command, the doctor item, the guard.
 - `tests/test_update.py` (host-side: runs on Python 3.10 without numpy) and `tests/test_update_flow.py`:
   `labpipe update`, with the fake origin and the fake engine described under Updates.

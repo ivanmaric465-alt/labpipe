@@ -15,7 +15,7 @@ Raw data is irreplaceable. Everything in this repository can be regenerated. Sev
 
 **Interactive** (you talk to the agent): `.claude/settings.json` pre-approves `labpipe` commands and edits of steering files and notes. Everything else asks you first. Destructive commands (`rm`, `mv`, `sudo`, `chmod`, forced git operations…) are denied outright. Edits of `config/local.yaml`, `config/pipeline.yaml` and `.claude/` always ask; in a project the generated settings also make edits of `lab/` ask and deny the generated files (`labpipe project sync` writes them; the lab's additions go in `lab/LAB.md` and `lab/agents/`).
 
-**Unattended** (automatic): `labpipe automation setup` installs a watcher and a nightly run (Linux: systemd user services; you confirm before anything is installed). Each pass scans first and starts the AI only if there is work. The command it uses is:
+**Unattended** (automatic): the watcher and the nightly run live in the project's container (`labpipe automation setup` makes the container start at login; you confirm every step). Each pass scans first and starts the AI only if there is work. The command it uses is:
 
 ```bash
 LABPIPE_AGENT_MODE=unattended claude -p "Run one pipeline pass." \
@@ -59,7 +59,7 @@ LABPIPE_AGENT_MODE=unattended codex exec --json --ephemeral -s workspace-write \
 - `--dangerously-bypass-hook-trust` makes the labpipe guard run even if you never approved it in Codex's `/hooks`; it also runs hooks you enabled in `~/.codex` yourself. Your normal Codex home is used (MCP servers and plugins you enabled there are available to the run).
 - Codex has no separate read tool and reads files through the shell, so unattended mode also allows `cat`, `head`, `tail`, `sed -n`, `ls`, `wc`, `grep`, `rg`, `nl` on paths inside the project (no shell operators, nothing outside the project, never the raw data).
 - Codex has no cost limit: the batch size (`max_measurements_per_run`) is the cap, and the run logs tokens (`logs/automation.log`). The token count covers the supervisor session; tokens used by the analyst agents it starts may not be included.
-- Scheduling stays with labpipe's watcher and nightly run: the Codex app's Scheduled tasks do not watch for new files and need the app running.
+- Scheduling stays with labpipe's watcher and nightly run in the container: the Codex app's Scheduled tasks do not watch for new files and need the app running.
 
 Tested on Linux with Codex CLI 0.163. Codex on Windows uses its own native sandbox (untested here).
 

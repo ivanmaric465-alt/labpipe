@@ -64,7 +64,7 @@ All commands print JSON.
 | `labpipe replay PROVENANCE.json` | Regenerate outputs and compare hashes (needs the same analysis version as the record) |
 | `labpipe project new FOLDER [--data PATH]... [--name NAME]` / `project sync` | Create a project folder (the user runs it) / regenerate its generated files (`AGENTS.md`, `CLAUDE.md`, `.labpipe/`, harness files) after `lab/LAB.md`, `lab/agents/` or a labpipe update changed |
 | `labpipe agents sync` | Generate the harness's agent files from `agents/` and `lab/agents/` (in a project: the whole `project sync`) |
-| `labpipe automation run \| status` | One automatic pass / state of the watcher and nightly run |
+| `labpipe automation run \| status` | One automatic pass (by hand; in container mode the container's watcher does this) / settings and last events. `automation setup` (timings, container at login, removes old native units) is run by the user; `automation watch` is the container's own entry point |
 | `labpipe methods new \| check` | New method (only in a method-design task with the user): in a project into `lab/` (the lab's own), in the repository into the code |
 | `labpipe methods versions` | Per method: analysis version, plot version, the modules in each (read-only) |
 | `labpipe container setup \| start [--replace] \| stop \| status \| logs \| login \| popups` | Container mode (`docs/settings/container.md`); the user runs `setup`, `login` and `popups` (they ask questions or install a service) |

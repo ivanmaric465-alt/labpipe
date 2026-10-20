@@ -33,7 +33,8 @@ agents:
   #   supervisor: low
   #   analyst: high
 
-# Automatic processing is added here by `labpipe automation setup` (automation: ...).
+# The timings of automatic processing (in the container) are added here by `labpipe automation
+# setup` (automation: ...).
 
 # Container mode: run labpipe commands and the automatic processing inside a Podman or
 # Docker container (docs/design/container.md). `labpipe container setup` writes this block;

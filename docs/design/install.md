@@ -229,6 +229,9 @@ short, uses the user's own data and can be skipped. Progress is recorded with
    `labpipe onboarding`, the report's "How to read" box. **Built**: `docs/ONBOARDING.md`, the doctor
    item and `labpipe onboarding` (`src/labpipe/onboarding.py`); "Reading the plot" and the box
    follow.
-5. Retire native automation (container plan, step 4).
+5. Retire native automation (container plan, step 4). **Built** (`src/labpipe/autostart.py`,
+   `automation setup`, the installer's `autostart` question, doctor's `autostart` and
+   `old_automation`), except real Windows and macOS testing (autostart of the podman machine
+   is untested).
 
 Each step is a branch with tests, and stops for review.

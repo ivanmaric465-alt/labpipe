@@ -5,7 +5,7 @@ Status: DRAFT, for approval. No code until approved. (Implemented; since superse
 ## Goal
 Run labpipe's automatic processing (watcher, nightly pass, AI runs) in a container (Podman or Docker), the same way on Linux, macOS and Windows, and offer interactive agent sessions in the same container. The container replaces the OS-specific parts: the read-only view (`sudo mount` / SMB share), the agent tool's own sandbox, and systemd / Task Scheduler.
 
-**Native automation is retired** once container mode works on this machine (user's decision, 2026-10-19): the systemd units, the Task Scheduler plan and the native-notification code go; `labpipe automation setup` installs the container only.
+**Native automation is retired** once container mode works on this machine (user's decision, 2026-10-19): the systemd units, the Task Scheduler plan and the native-notification code go; `labpipe automation setup` now sets up starting the container at login (`src/labpipe/autostart.py`; built in install step 5): Podman on Linux enables `podman-restart.service`, Docker restarts it with the daemon, Podman on macOS/Windows needs the podman machine to start at login (untested), and it removes the old native units after a yes.
 
 Interactive work: in the container (`labpipe shell`, the same protections as automatic runs), or with the user's installed apps on the host (Claude desktop, Codex app, an IDE), which work on the same repository folder.
 
