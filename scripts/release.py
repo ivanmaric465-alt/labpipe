@@ -24,8 +24,6 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from labpipe import __version__, release   # noqa: E402
 
-TRAILERS = ("Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
-            "Claude-Session: https://claude.ai/code/session_01JbpkfwyPhnapfkDoLumdy8")
 EMPTY_UNRELEASED = "## Unreleased\n\n" + "".join(f"### {p}\n\n" for p in release.PARTS)
 
 
@@ -94,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
         file.write_text(bump(file.read_text(encoding="utf-8"), pattern, version),
                         encoding="utf-8", newline="\n")
     _git("add", "CHANGELOG.md", "src/labpipe/__init__.py", "pyproject.toml")
-    _git("commit", "-m", f"Release v{version}\n\n{TRAILERS}")
+    _git("commit", "-m", f"Release v{version}")
     print(f"Committed 'Release v{version}'. Nothing is tagged or pushed. Run:\n\n"
           f"git tag -a v{version} -m \"labpipe v{version}\"\n"
           f"git push origin main v{version}\n"
