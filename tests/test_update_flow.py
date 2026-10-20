@@ -27,6 +27,13 @@ import yaml
 
 pytest.importorskip("numpy")           # the analyses run natively here (the slim host job has none)
 
+
+# The stub installer is a shell script, and the fake releases are commits of a Windows checkout
+# whose line endings git converts, so the clone looks changed there. On Windows the update runs
+# install.ps1, which is untested on a real Windows machine (README, docs/RELEASING.md).
+pytestmark = pytest.mark.skipif(sys.platform == "win32",
+                                reason="the fake world of this test is POSIX-only")
+
 from tests.test_eds import make_example as make_eds                      # noqa: E402
 from tests.test_sem import make_example as make_sem                      # noqa: E402
 

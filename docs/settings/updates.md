@@ -63,6 +63,8 @@ Agents quote these numbers; they never calculate them.
 
 `backups/<release>/` (and `backups/migrate-<time>/` from `labpipe migrate`) are plain copies in the project. Nothing deletes them; remove old ones yourself when you are sure. To undo by hand, copy the files back. Keep `backups/` out of the sync folder and out of git if the project is in one.
 
+Windows: `labpipe update` runs the release's `install.ps1`; this is not yet tested on a real Windows machine.
+
 ## You say → do
 
 | You say | Do |
