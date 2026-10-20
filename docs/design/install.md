@@ -156,17 +156,30 @@ More projects later: `labpipe project new <folder>`, which asks the same project
 
 ### `labpipe update`, step by step
 
-1. Show the changelog since the installed release. Ask.
-2. Optional (recommended when "Changes results" is not empty): the preview.
-3. Back up the project's settings and `manifest.json` to `backups/<release>/`.
-4. Install the new release and build the new image. The old release and image are kept.
-5. Migrate settings, with the diff shown and asked for.
-6. Regenerate the generated files (and the agent files with the lab's additions).
-7. Restart the container. Run `labpipe doctor`.
-8. Say what is out of date now, and what to do.
+(Built: `docs/settings/updates.md` for users, `docs/ARCHITECTURE.md` → Updates for the flow.)
 
-`labpipe update --to v0.2.1` goes back: the code and image of that release, plus the settings
-backup made before the update.
+1. Show the changelog between the project's release and the target (the newest, or `--to`), in
+   the four parts. Ask. `--check` stops here.
+2. Optional (offered when "Changes results" is not empty; `--preview`): the preview, in a scratch
+   copy, by code, with the target's code (`$LABPIPE_HOME/releases/<tag>/`).
+3. Before switching: record the passes of the notes (`notes verify`, with the current rules);
+   back up `labpipe.yaml`, `config/`, `manifest.json` and `lab/methods.yaml` to
+   `backups/<release>/` (never deleted).
+4. Switch the installation's code to the release (`git checkout --detach`, refused with local
+   changes) and reinstall the host part with the release's own installer (`--keep-checkout`).
+   Then `labpipe update --resume` continues **in the new code**; its state is in
+   `logs/update/<time>.json`. The old image is kept.
+5. Migrate settings, with the diff shown and asked for (a rollback offers to restore `config/` from
+   the backup made when the project left that release).
+6. Regenerate the generated files (and the agent files with the lab's additions).
+7. Restart the container (this builds the new image); native mode: nothing. Record the release in
+   `labpipe.yaml`; run `labpipe doctor`.
+8. Say what is out of date now (`labpipe scan`), and what to do.
+
+`labpipe update --to v0.2.1` goes back: the code of that release (the image is built when the
+container restarts; the old one is kept), plus the settings backup made when the project left it.
+When the installation is already at the target (another project updated it), only the project
+steps run.
 
 ## Onboarding (the first conversation)
 
@@ -210,7 +223,8 @@ short, uses the user's own data and can be skipped. Progress is recorded with
 2. The installer (Linux; Windows script with the same questions, untested on real Windows),
    the slim host part.
 3. Releases, changelog with CI checks, settings migrations, versioned checks, `labpipe update`
-   with preview and rollback.
+   with preview and rollback. **Built** (`src/labpipe/update.py`, `preview.py`; user page
+   `docs/settings/updates.md`).
 4. Onboarding: `docs/ONBOARDING.md`, "Reading the plot" per method, the doctor item,
    `labpipe onboarding`, the report's "How to read" box.
 5. Retire native automation (container plan, step 4).

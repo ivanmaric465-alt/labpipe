@@ -237,6 +237,19 @@ def test_a_changed_calculation_marks_stale_with_the_reason(project):
     assert scan["changes"][0]["to"] == "stale"
 
 
+
+def test_a_stale_entry_is_done_again_when_the_calculation_is_back(project):
+    fitting = project.src / "methods" / "xrd" / "fitting.py"
+    original = fitting.read_bytes()
+    _append(fitting)
+    project.run("scan")
+    assert project.entry()["status"] == "stale"
+    fitting.write_bytes(original)                 # e.g. labpipe update --to the older release
+    scan = project.run("scan")
+    entry = project.entry()
+    assert entry["status"] == "done" and entry["status_reason"].startswith("current again")
+    assert scan["changes"][0]["from"] == "stale" and scan["changes"][0]["to"] == "done"
+
 def test_a_changed_plot_module_marks_the_plot_out_of_date_not_stale(project):
     _append(project.src / "methods" / "xrd" / "plot.py")
     project.run("scan")

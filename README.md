@@ -97,14 +97,15 @@ labpipe keeps three things apart:
 - **The project only points at the data**: `config/local.yaml` → `raw_roots`. Nothing is copied or moved. Results go into the project, never next to the raw files.
 - **You work in the project folder**: open Claude Code or Codex there, and run `labpipe` there (or in any folder below it).
 - **In the container**, the three folders show up as `/opt/labpipe` (the code, built into the image), `/data/<id>` (each data folder, read-only) and `/project` (the project, read-write).
-- **Updates** replace the code folder and the files marked "generated" in a project. They never touch your data, `config/`, `context/`, `lab/` or results.
+- **Updates** (`labpipe update`) replace the code folder and the files marked "generated" in a project. They never touch your data, `context/`, `lab/` or results; a settings file in `config/` changes only when a release renamed something in it and you agree after seeing the diff, with a backup.
 - **Back up** the project folder: at least `config/`, `context/` and `lab/`, which are only yours. The code comes back with a reinstall. The data you back up as you always do.
 
 ### The project folder
 
 ```
 ~/labpipe-projects/pd-films/
-  labpipe.yaml            marks the folder as a project: its name, the labpipe release
+  labpipe.yaml            marks the folder as a project: its name, the labpipe release, the updates
+  backups/                what `labpipe update` and `labpipe migrate` saved before they changed something
   config/                 your settings: data folders (local.yaml), plots and report (lab.yaml), samples
   context/                what the study is about, for the postdoc: context.md, documents/
   lab/                    your additions: conventions (LAB.md), agent roles, methods, XRD references
@@ -275,21 +276,31 @@ In a project, the references you add are kept in `lab/references/xrd/` (updates 
 
 ## Update
 
-Updates go from release to release; [CHANGELOG.md](CHANGELOG.md) says what changes (results, settings, what needs your action). `labpipe --version` shows what is installed.
+Updates go from release to release, with the installation and every project kept in step; [CHANGELOG.md](CHANGELOG.md) says what changes (results, settings, what needs your action). You run `labpipe update` in your terminal, in a project folder; agents never run it. `labpipe --version` shows what is installed. All of it: [docs/settings/updates.md](docs/settings/updates.md).
 
 ```bash
-git -C ~/.local/share/labpipe/app pull
-~/.local/share/labpipe/app/install.sh --no-setup
 cd ~/labpipe-projects/<name>
-labpipe project sync
-labpipe migrate                      # settings an update renamed or moved: shows the change, changes nothing
-labpipe container start --replace    # rebuilds the image if the code changed
-labpipe doctor
+labpipe update --check                # what is new and what it changes; changes nothing
+labpipe update --check --preview      # also: what would change in YOUR numbers (by code, nothing is changed)
+labpipe update                        # asks, then updates (the preview is offered when a release changes results)
+labpipe update --to v0.2.0            # back to an older release (rollback)
 ```
 
-If `labpipe migrate` lists changes, `labpipe migrate --apply` makes them after asking, with a backup in `backups/migrate-<time>/` ([docs/settings/migrations.md](docs/settings/migrations.md)); old names keep working, with a warning, for one release. Notes and postdoc analyses that passed the checks stay valid when a release makes the checks stricter; the report then says "checked with the rules of labpipe <version>".
+What `labpipe update` does, each step said as it happens:
 
-An update marks `stale` only the analyses of methods whose calculation changed (`labpipe methods versions` shows each method's version); docs, report, agent or other-method changes leave them alone. Stale analyses stay valid. Redo them only if you want to:
+1. Shows the changelog between your release and the new one, in four parts: changes results, settings migrated, new, needs your action. You say yes or no.
+2. Preview (when you ask, or when a release changes results): your measurements are analysed again with the new code in a scratch copy, by code alone, and it says per method what would change, e.g. *"xrd: 12 measurements; a.fcc changes up to 0.0004 Å (within σ for all). eds: unchanged."*
+3. Records the passes of your notes with today's rules, and backs up `labpipe.yaml`, `config/`, `manifest.json` and `lab/methods.yaml` to `backups/<release>/` in the project. Backups are never deleted.
+4. Switches the installation's code to the release and reinstalls; the old container image stays.
+5. Settings an update renamed or moved: shows each file's diff, asks, changes it (the original is kept).
+6. Regenerates the generated files, restarts the container, runs `labpipe doctor`.
+7. Says what is out of date now and what to do. Nothing is reanalysed by itself.
+
+Going back (`--to` an older release) does the same for the older code, and offers to restore your settings from the backup made when the project left that release. Another project on the same computer: when the installation is already at the new release, `labpipe update` in that project only does its own steps (backup, settings, regenerate, restart, scan); `labpipe doctor` reminds you (*"this project was set up with labpipe X; the installation is Y: run labpipe update here"*). If the code folder has local changes, `labpipe update` refuses and names the files.
+
+Old settings names keep working, with a warning, for one release; `labpipe migrate` ([docs/settings/migrations.md](docs/settings/migrations.md)) shows them any time. Notes and postdoc analyses that passed the checks stay valid when a release makes the checks stricter; the report then says "checked with the rules of labpipe <version>".
+
+An update marks `stale` only the analyses of methods whose calculation changed (`labpipe methods versions` shows each method's version); docs, report, agent or other-method changes leave them alone. Stale analyses stay valid. Redo them only if you want to (or tell your agent: *redo the out-of-date analyses*):
 
 ```bash
 labpipe requeue --stale

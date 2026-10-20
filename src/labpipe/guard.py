@@ -203,6 +203,8 @@ def _shell_decision(command: Any, config: dict | None, mode: str,
             return "unattended runs may not retire notes (a user decision)"
         if "--baseline" in words:
             return "unattended runs may not mark files as baseline (a user decision)"
+        if words[:1] == ["update"]:
+            return "unattended runs may not update labpipe (the user runs `labpipe update`)"
         if mode == "postdoc":
             if not words or not (words[0] in POSTDOC_COMMANDS or (len(words) > 1 and (
                     words[1] in POSTDOC_ACTIONS[words[0]] if words[0] in POSTDOC_ACTIONS

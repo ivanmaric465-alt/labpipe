@@ -21,6 +21,8 @@ None.
 - Settings pages (`docs/settings/`) and your own preferences file `lab.yaml`; plot and report settings with layouts, grouping, sections, filters and extra reports; `labpipe replot` redraws figures after a plot setting changed.
 - Every method has its own analysis version and plot version (`labpipe methods versions`): only a change in the calculation marks analyses stale; a plot change only marks the plot out of date.
 - The lab's own methods and references live in the project (`lab/methods.yaml`, `lab/methods/<name>/`, `lab/references/xrd`); updates never touch them. `labpipe methods new` scaffolds into `lab/`, `labpipe methods check` runs in the container.
+- `labpipe update` goes from release to release, and back (`--to`): it shows the changelog first, can preview what the release would change in your own numbers (`--preview`, by code, nothing is changed), backs up your settings (`backups/<release>/`), switches the code, migrates renamed settings (diff shown, asked), regenerates the generated files, restarts the container and lists the analyses that are out of date (nothing is redone by itself). Settings migrations (`labpipe migrate`; old names keep working for one release) and versioned note checks (notes that passed stay valid when the rules get stricter) come with it. [docs/settings/updates.md](docs/settings/updates.md)
+- `labpipe doctor` says when a project was set up with another release than the installed one (`project_release`).
 - `labpipe replay` needs the same analysis and plot version, not the same commit.
 - XRD quantities use a generic fcc name in every sample, with the closest reference as "possibly X"; no AI cost limit unless you set one.
 

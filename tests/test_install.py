@@ -349,6 +349,7 @@ def test_install_sh_with_answers_makes_a_slim_installation_and_a_project(tmp_pat
                              cwd=tmp_path)
         assert run.returncode == 0, run.stdout + run.stderr
     assert (home / "app" / ".labpipe-installed").is_file()
+    assert json.loads((home / "install.json").read_text(encoding="utf-8")) == {"mode": "host"}
     assert (bin_dir / "labpipe").readlink() == home / "venv" / "bin" / "labpipe"
     python = home / "venv" / "bin" / "python"
     heavy = subprocess.run([str(python), "-c", "import numpy"], capture_output=True)
@@ -426,6 +427,21 @@ def test_install_sh_main_stays_where_the_clone_is(tmp_path):
         run = _run_installer(tmp_path, app, *args, extra=extra)
         assert "Switching" not in run.stdout
         assert _git(app, "branch", "--show-current") == "main"
+
+
+@bash
+def test_install_sh_keep_checkout_installs_what_is_checked_out(tmp_path):
+    """What `labpipe update` uses after it switched the release itself (also for a rollback to an
+    older release: the installer must not move to the newest one)."""
+    app = _clone_with_releases(tmp_path / "lp")
+    _git(app, "-c", "advice.detachedHead=false", "checkout", "--detach", "v0.1.0")
+    for args, extra in (("--keep-checkout",), None), ((), {"LABPIPE_CHANNEL": "keep"}):
+        run = _run_installer(tmp_path, app, *args, extra=extra)
+        assert "Switching" not in run.stdout and "no release yet" not in run.stdout
+        assert "points elsewhere" in run.stderr                    # it went on to install, and stopped
+        assert _git(app, "describe", "--tags", "--exact-match") == "v0.1.0"
+    assert "--keep-checkout" in (REPO / "install.sh").read_text(encoding="utf-8")
+    assert "KeepCheckout" in (REPO / "install.ps1").read_text(encoding="utf-8")
 
 
 @bash

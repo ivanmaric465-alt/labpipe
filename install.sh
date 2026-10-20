@@ -7,8 +7,9 @@
 # LABPIPE_HOME (default ~/.local/share/labpipe): app/ (this code), venv/. It:
 #   0. in the installation's own clone (LABPIPE_HOME/app): switches to the newest release (tag
 #      vX.Y.Z) and runs that release's installer; users get releases, never whatever is on main
-#      (--main: stay on the clone's current state; no release yet: stays, says so; local
-#      changes in the clone: stays, says so),
+#      (--main: stay on the clone's current state; --keep-checkout: stay on the release that is
+#      checked out, which is what `labpipe update` uses after it switched the release itself;
+#      no release yet: stays, says so; local changes in the clone: stays, says so),
 #   1. finds Python >= 3.10 (>= 3.14 with --full),
 #   2. creates the virtual environment (OUTSIDE synced folders),
 #   3. installs labpipe: the slim host part (PyYAML only; the analysis runs in the
@@ -22,6 +23,7 @@
 #
 # Options:  --main        install the development state (main), not the newest release
 #                         (or LABPIPE_CHANNEL=main)
+#           --keep-checkout   install what is checked out, switch nothing (or LABPIPE_CHANNEL=keep)
 #           --full        also install the analysis libraries (native, Python 3.14)
 #           --no-start    do not check tools, log in, build or start the container
 #           --answers F   answer the questions from a YAML file (CI, tests)
@@ -46,6 +48,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --full) FULL=1 ;;
         --main) CHANNEL=main ;;
+        --keep-checkout) CHANNEL=keep ;;
         --no-setup) NO_SETUP=1 ;;
         --no-start) SETUP_ARGS+=(--no-start) ;;
         --answers)
@@ -62,7 +65,7 @@ done
 # their own checkout, which is not LABPIPE_HOME/app: nothing is switched there.) A function, so that
 # bash has read all of it before the checkout replaces this very file; then it starts over from the tag.
 use_release() {
-    [ "$CHANNEL" != main ] && [ -z "${LABPIPE_SWITCHED:-}" ] && [ -e "$REPO/.git" ] &&
+    [ "$CHANNEL" != main ] && [ "$CHANNEL" != keep ] && [ -z "${LABPIPE_SWITCHED:-}" ] && [ -e "$REPO/.git" ] &&
         [ -d "$HOME_DIR" ] && [ "$REPO" = "$(cd "$HOME_DIR" && pwd -P)/app" ] || return 0
     command -v git >/dev/null 2>&1 || return 0
     git -C "$REPO" fetch --tags --quiet 2>/dev/null ||
@@ -169,6 +172,8 @@ esac
 
 say "5/6 Installation marker"
 mkdir -p "$HOME_DIR"
+# How this installation was made (`labpipe update` reinstalls the same way)
+if [ "$FULL" = 1 ]; then printf '{"mode": "full"}\n' > "$HOME_DIR/install.json"; else printf '{"mode": "host"}\n' > "$HOME_DIR/install.json"; fi
 if [ "$REPO" = "$(cd "$HOME_DIR" && pwd -P)/app" ]; then
     touch "$REPO/.labpipe-installed"
     echo "    $REPO is the installation's app folder"

@@ -73,6 +73,9 @@ project is one lab folder and is never written by an update.
 $LABPIPE_HOME/              default ~/.local/share/labpipe (Windows %LOCALAPPDATA%\labpipe)
   app/                      the code: a git clone, marked `.labpipe-installed`; install.sh is run from it
   venv/                     the host environment
+  install.json              how it was installed: {"mode": "full" | "host"} (install.sh writes it)
+  releases/<tag>/           code of a release for the update preview (kept as a cache)
+  preview/<project>-<tag>/  the preview's scratch project (made fresh each time)
 ~/.local/bin/labpipe        link to venv/bin/labpipe (LABPIPE_BIN: the folder)
 ~/.config/labpipe/          defaults.yaml (the installer's choices for new projects), claude.env (Docker only)
                             (LABPIPE_CONFIG_HOME)
@@ -98,7 +101,7 @@ $LABPIPE_HOME/              default ~/.local/share/labpipe (Windows %LOCALAPPDAT
 
 ## Releases
 
-Users install releases, never `main`: `install.sh` / `install.ps1` in the installation's own clone (`$LABPIPE_HOME/app`) switch to the newest `vX.Y.Z` tag (detached HEAD) and start over from it; `--main` or `LABPIPE_CHANNEL=main` stays on the current state, as do a clone with local changes and a repository without release tags. Any other checkout (CI, developers) is never switched.
+Users install releases, never `main`: `install.sh` / `install.ps1` in the installation's own clone (`$LABPIPE_HOME/app`) switch to the newest `vX.Y.Z` tag (detached HEAD) and start over from it; `--main` or `LABPIPE_CHANNEL=main` stays on the current state, as do a clone with local changes and a repository without release tags. `--keep-checkout` (`LABPIPE_CHANNEL=keep`; PowerShell `-KeepCheckout`) installs whatever is checked out: `labpipe update` has switched the release itself (also back to an older one) and does not want the installer to move it. Moving between releases later is `labpipe update` (Updates, below). Any other checkout (CI, developers) is never switched.
 
 - `__version__` in `src/labpipe/__init__.py` is the version; `pyproject.toml` repeats it (a test keeps them equal). `labpipe --version` prints it with the tag at HEAD, or the commit.
 - `CHANGELOG.md` has four fixed parts per release (changes results, settings migrated, new, needs your action); `release.py` parses it for `labpipe update`.
@@ -189,6 +192,8 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | | `container.py` | build (staged context), start (name, port, mounts per project), stop, login, shell, pop-up proxy; forwarding of host commands |
 | Setup | `doctor.py` | setup state and next step (read-only; also `settings_migrations`) |
 | | `migrations.py` | settings migrations: `labpipe migrate`, old keys understood in memory for one release (host side, no numpy) |
+| | `update.py` | `labpipe update`: releases, backups, switching the code, the state file and the re-exec into the new code, settings, restart, what is out of date (host side) |
+| | `preview.py` | `labpipe update --preview`: the release's code folder, the scratch project, the comparison of the numbers (host side; the analyses run in a subprocess or a throwaway container) |
 | | `wizard.py` | `labpipe setup` (asks in the terminal) |
 | | `installer.py` | `labpipe setup --first`: the installer's questions (tools present, agent tool, models, login, first project, start) |
 | | `release.py` | the version, `CHANGELOG.md` (parse, entries between two versions), release tags and the state of a git checkout; `labpipe --version` |
@@ -270,8 +275,10 @@ characters, stored per entry in `manifest.json` and in `provenance.json` → `co
 - **Scanner**: a done entry whose analysis version differs is stale ("the <method> calculation
   changed (version a → b)"). A failed entry is retried when it changes. An entry from before
   versions existed adopts the current ones if its `code_version` is the current clean commit,
-  otherwise it is stale ("analysed before per-method versions; redo to be sure").
-- **Replay** still compares the git commit; the versions show whether a commit changed anything.
+  otherwise it is stale ("analysed before per-method versions; redo to be sure"). A stale entry
+  whose analysis version and analysis settings are the current ones again (a rollback, a setting
+  changed back) is done again ("current again").
+- **Replay** needs the same analysis and plot versions; another commit is only noted.
 
 ## Settings migrations and versioned checks
 
@@ -317,6 +324,64 @@ Two things a release must not do to an existing project: refuse its settings, or
 **For developers**: renaming or removing a settings key needs a migration with a test; making
 the notes or postdoc rules stricter needs a `CHECKS_VERSION` bump.
 
+## Updates
+
+`labpipe update` (`update.py`, `preview.py`; host side, Python 3.10, no numpy) moves the
+installation and one project to a release. For users: `docs/settings/updates.md`.
+
+- **What is kept.** `$LABPIPE_HOME/app` is a clone at a release tag (detached); `venv/` is the host
+  environment; `install.json` records whether the installation is `full` (native analysis) or
+  `host`, so an update reinstalls the same kind. Projects only point at it; each records the
+  release it was last set up or updated with (`labpipe.yaml` → `labpipe_version`, `updates:`).
+  Images are tagged by the hash of the code, so an older release's image stays.
+- **The steps** (in order; `update.py` docstring has them with numbers):
+  1. `git fetch --tags`, the target (newest tag or `--to`), `git show <tag>:CHANGELOG.md` →
+     `release.parse_changelog` → `release.between(project's release, target)`; `--check` stops.
+  2. `--preview` (`preview.run`, below).
+  3. Before switching: `notes verify` of every analysed entry with notes (the current code records
+     `notes_check` with today's rules), then the backup of `labpipe.yaml`, `config/`,
+     `manifest.json`, `lab/methods.yaml` to `backups/<release>/` (`-2`, `-3`; never deleted).
+  4. `git checkout --detach <tag>` in `app/` (refused with local changes), then the target's own
+     installer: `install.sh --no-setup --keep-checkout` with `LABPIPE_CHANNEL=keep`,
+     `LABPIPE_SWITCHED=1` (also stops installers that predate the option from switching),
+     `LABPIPE_FULL` as recorded, `LABPIPE_VENV`/`LABPIPE_BIN` as running (`install.ps1`:
+     `-NoSetup -KeepCheckout`).
+  5. **Re-exec into the new code**: `python -m labpipe.cli update --resume <state>`. The state is
+     `<project>/logs/update/<UTC>.json` (`labpipe.update/1`: from, to, direction, backup, whether a
+     preview ran, `yes`, the last step done, a report). Everything after the switch (`finish()`)
+     runs in the target's code, in order, each step recorded: `settings` (migrations plan with
+     diffs and a question; a rollback first offers to restore `config/` from the newest
+     `backups/<target>*`), `sync` (`project.sync`), `restart` (container mode: `container start
+     --replace`; native: nothing), `scan` (then the stale count per method and what to do), `record`
+     (`labpipe.yaml`), `doctor` (after the record, so `project_release` is gone). A failing step
+     prints `labpipe update --resume <state>` and stops; the finished ones are not redone.
+  6. Another project of the same installation: when `app/` is already at the target, only the
+     project steps run, in the same process (no switch, no re-exec, no preview).
+- **Targets must contain `update.py`** (a release that cannot do the steps after the switch is
+  refused). Dev mode (the code folder is the project, or not an installation) refuses with
+  "dev mode: use git".
+- **Output**: the narrative is plain words on stderr; stdout is one JSON summary (`--check`: the
+  versions and the changelog parts; the end: from, to, backup, migrated files, stale per method,
+  doctor items). Questions default to no; `--yes` answers yes and prints what it did; without a
+  terminal and without `--yes` it asks for one.
+- **Preview** (`preview.run`): the release's code goes to `$LABPIPE_HOME/releases/<tag>/` (`git
+  worktree add --detach`, else `git archive`; reused). The analysis versions of the installed and the
+  release code are computed in subprocesses (`versions.describe`, as `scripts/check_release.py`
+  does for its base); only methods that differ are run. A scratch project
+  `$LABPIPE_HOME/preview/<project>-<tag>/` gets `labpipe.yaml`, `config/`, `lab/`, `manifest.json`
+  (made fresh each time), runs `scan`, `requeue --stale` (entries that were pending are first set to
+  `baseline` in the scratch manifest, so only the changed methods' analyses are redone) and
+  `analyze --pending --method M [--limit N]`: container mode builds the release's image and runs
+  each command in a throwaway container, native mode runs the venv's Python with
+  `PYTHONPATH=<release>/src`, `LABPIPE_CODE`, `LABPIPE_PROJECT=<scratch>`. `compare_method` compares
+  `labpipe dataset` of both (per quantity: n, largest absolute change, within σ; failures; results
+  hashes for methods without quantities); `preview.json` holds it. Nothing is written in the project.
+- **Agents never run it**: AGENTS.md says so; `guard.py` refuses `labpipe update` in unattended
+  runs and the harness asks otherwise (`.claude/settings.json` `ask`, `.codex/rules`).
+- Tests: `tests/test_update.py` (host-side parts and the command lines of container mode, with a fake
+  engine) and `tests/test_update_flow.py` (a fake origin with two releases, an installation and
+  projects, as subprocesses).
+
 ## Agents and the harness
 
 - **Roles**: `agents/*.md` hold the roles, harness-neutral: supervisor, `<m>`-analyst, postdoc.
@@ -338,7 +403,12 @@ One container per project.
   - `container.py` stages the build context: exactly the files the image hash covers (the code
     listed under "Read from the code", the default settings but never the lab's files, and the
     commit of the code as `.labpipe-code.json`, because the image has no `.git`);
-  - the image tag is the hash of those files.
+  - the image tag is the hash of those files; `container.build(code=)`, `image_tag(code=)` and
+    `container_hash(code=)` do the same for another code folder (the update preview builds a
+    release's image from `$LABPIPE_HOME/releases/<tag>/`);
+  - `run_args(command=[...], project=)` is the throwaway form (`--rm`, no name, port, volume or
+    login) that runs one `labpipe` command on another project folder, with the data mounted
+    read-only as usual.
   - the lab's own methods are not in the image: they are in the mounted project, and run with the
     image's packages (`container/requirements.lock`: numpy, scipy, matplotlib, PyYAML, Pillow, …).
     A lab method needing another package needs the lab's own image (not supported yet).
@@ -353,7 +423,7 @@ One container per project.
   the listed hosts. The entrypoint drops privileges.
 - **Host side**: `labpipe` on the host, anywhere inside a project, forwards commands into that
   project's container (`exec`, the working folder mapped under `/project`). Local-only
-  commands: container, shell, setup, init, doctor, agents, project, guard, methods (`new`,
+  commands: container, shell, setup, init, doctor, agents, project, migrate, update, guard, methods (`new`,
   `versions`; `methods check` runs an analysis, so it goes into the container), readonly-view,
   and method subcommands listed in `methods.yaml` → `run_on_host` (`xrd refs`: building
   references needs the optional pymatgen, which the image does not have).
@@ -388,6 +458,8 @@ One container per project.
 - `tests/test_release.py`: version equality, the changelog format, entries between versions, release tags, the check for announced changes (also on a copy of the code), the release script's changelog change, the dependency updater (no network). The installer's switch to the newest release is in `tests/test_install.py`.
 - `tests/test_migrations.py`: the plan, comments kept, apply and backups, old keys for one release
   in the loaders, the command, doctor and the CI check (host-side: runs on Python 3.10 without numpy).
+- `tests/test_update.py` (host-side: runs on Python 3.10 without numpy) and `tests/test_update_flow.py`:
+  `labpipe update`, with the fake origin and the fake engine described under Updates.
 - `tests/test_checks_versions.py`: the rule fingerprints and the versions of the notes checks
   (the postdoc's and the report's side are in `tests/test_postdoc.py` and `tests/test_report.py`).
 - `tests/test_encoding.py`: every text read and write names UTF-8 (Windows would otherwise use

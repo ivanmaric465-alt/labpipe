@@ -44,7 +44,7 @@ SECRET_NAME = "labpipe-claude-token"
 SAFE_ID = re.compile(r"[A-Za-z0-9_.-]+")
 # Commands that always run on the host (the guard must be fast; the rest are host tasks).
 LOCAL_COMMANDS = {"guard", "container", "shell", "setup", "init", "doctor", "agents",
-                  "readonly-view", "methods", "project", "migrate"}
+                  "readonly-view", "methods", "project", "migrate", "update"}
 # Of `methods`, only `new` and `versions` stay on the host (they write or read files); `check`
 # runs an analysis (numpy, scipy, matplotlib are in the image only) and goes into the container.
 FORWARDED_SUBCOMMANDS = {"methods": {"check"}}
@@ -172,15 +172,16 @@ def code_identity(code: Path | None = None) -> bytes | None:
     from labpipe import provenance
     if not (Path(code or _code()) / ".git").exists():
         return None
-    info = provenance.git_info()
+    info = provenance.git_info(Path(code) if code else None)
     if not info.get("commit"):
         return None
     return (json.dumps(info, sort_keys=True, indent=1) + "\n").encode("utf-8")
 
 
-def container_hash() -> str:
-    """12 hex chars over every file copied into the image (paths + contents)."""
-    code = _code()
+def container_hash(code: Path | None = None) -> str:
+    """12 hex chars over every file copied into the image (paths + contents). `code`: another
+    code folder than the running one (`labpipe update` builds the image of a release)."""
+    code = Path(code or _code())
     digest = hashlib.sha256()
     for relative in image_files(code):
         digest.update(relative.encode() + b"\0" + (code / relative).read_bytes() + b"\0")
@@ -190,9 +191,9 @@ def container_hash() -> str:
     return digest.hexdigest()[:12]
 
 
-def stage_context(target: Path) -> Path:
+def stage_context(target: Path, code: Path | None = None) -> Path:
     """Copy exactly the files of the image into `target` (the build context)."""
-    code = _code()
+    code = Path(code or _code())
     for relative in image_files(code):
         destination = Path(target) / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -203,8 +204,8 @@ def stage_context(target: Path) -> Path:
     return Path(target)
 
 
-def image_tag(cfg: dict) -> str:
-    return f"{cfg['image']}:{container_hash()}"
+def image_tag(cfg: dict, code: Path | None = None) -> str:
+    return f"{cfg['image']}:{container_hash(code)}"
 
 
 # ---- the run command -----------------------------------------------------------------
@@ -285,15 +286,23 @@ def page_url(port, token: str) -> str:
 
 def run_args(config: dict, engine: str, *, image_id: str = "", engine_text: str = "",
              claude_login: bool = False, tag: str | None = None,
-             runtime_dir: str | None = None, dev: bool | None = None) -> list[str]:
+             runtime_dir: str | None = None, dev: bool | None = None,
+             project: Path | None = None, command: list[str] | None = None) -> list[str]:
     """The full `<engine> run` command line (pure: all machine facts come in as arguments).
     `dev`: mount the code folder at /opt/labpipe, so code edits take effect without a rebuild
-    (default: yes when the repository is its own project)."""
+    (default: yes when the repository is its own project).
+    `command`: a throwaway container (`--rm`) that runs `labpipe <command>` once, with the
+    folder `project` at /project and the raw data mounted read-only as usual: no name, port,
+    home volume, login, pop-ups or code mount (`labpipe update --preview`)."""
     cfg = config.get("container") or DEFAULTS
-    dev = safety.is_dev(_root()) if dev is None else dev
+    once = command is not None
+    root = Path(project) if project is not None else _root()
+    dev = False if once else safety.is_dev(_root()) if dev is None else dev
     uid, gid = host_ids()
     mounts = raw_mounts(config)
-    args = [engine, "run", "-d", "--name", cfg["name"], "--restart", "unless-stopped",
+    args = [engine, "run", "--rm"] if once else [
+        engine, "run", "-d", "--name", cfg["name"], "--restart", "unless-stopped"]
+    args += [
             # a minimal init as PID 1: passes the stop signal on (PID 1 itself ignores
             # SIGTERM) and reaps exited children such as the proxy
             "--init",
@@ -305,13 +314,13 @@ def run_args(config: dict, engine: str, *, image_id: str = "", engine_text: str 
         args += ["--userns=keep-id", "--user", "0:0"]
     env = {"LABPIPE_UID": uid, "LABPIPE_GID": gid,
            "LABPIPE_ROOT_PATHS": ",".join(f"{i}=/data/{i}" for i, _ in mounts),
-           "LABPIPE_ALLOWED_HOSTS": ",".join(allowed_hosts(config)),
+           "LABPIPE_ALLOWED_HOSTS": "" if once else ",".join(allowed_hosts(config)),
            "LABPIPE_IMAGE_ID": image_id, "LABPIPE_ENGINE": engine_text,
            "LABPIPE_PROJECT": PROJECT_MOUNT, "LABPIPE_CODE": CODE_MOUNT,
-           "LABPIPE_HOST_ROOT": _host_path(_root()),   # the project folder, for messages
+           "LABPIPE_HOST_ROOT": _host_path(root),   # the project folder, for messages
            "LABPIPE_PORT": cfg["port"], "LABPIPE_PAGE_TOKEN": cfg.get("page_token") or ""}
     bus_dir = runtime_dir if runtime_dir is not None else bus_runtime_dir()
-    popups = bool(cfg.get("popups")) and bool(bus_dir)
+    popups = bool(cfg.get("popups")) and bool(bus_dir) and not once
     if popups:   # the proxy's socket folder: only the notification service is reachable
         env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={BUS_MOUNT}/bus"
     zone = host_timezone()
@@ -319,13 +328,15 @@ def run_args(config: dict, engine: str, *, image_id: str = "", engine_text: str 
         env["TZ"] = zone
     for key, value in env.items():
         args += ["-e", f"{key}={value}"]
-    args += ["-v", f"{_root()}:{PROJECT_MOUNT}", "-w", PROJECT_MOUNT]
+    args += ["-v", f"{root}:{PROJECT_MOUNT}", "-w", PROJECT_MOUNT]
     if dev:
         args += ["-v", f"{_code()}:{CODE_MOUNT}", "--label", f"{DEV_LABEL}=1"]
     if popups:
         args += ["-v", f"{bus_dir}/{BUS_DIR}:{BUS_MOUNT}"]
     for root_id, folder in mounts:
         args += ["-v", f"{folder}:/data/{root_id}:ro"]
+    if once:
+        return [*args, tag or image_tag(cfg), "labpipe", *command]
     args += ["-v", f"{cfg['name']}-home:{HOME_MOUNT}",
              "-p", f"127.0.0.1:{cfg['port']}:{cfg['port']}"]
     if claude_login:
@@ -477,11 +488,12 @@ def image_exists(engine: str, tag: str) -> bool:
                           ).returncode == 0
 
 
-def build(engine: str, cfg: dict) -> str:
-    """Build the image (the engine's output goes to stderr); return its tag."""
-    tag, digest = image_tag(cfg), container_hash()
+def build(engine: str, cfg: dict, code: Path | None = None) -> str:
+    """Build the image of the running code, or of the code folder `code` (a release's folder,
+    for the update preview); the engine's output goes to stderr. Returns the tag."""
+    tag, digest = image_tag(cfg, code), container_hash(code)
     with tempfile.TemporaryDirectory(prefix="labpipe-build-") as folder:
-        context = stage_context(Path(folder))     # exactly the files the hash covers
+        context = stage_context(Path(folder), code)     # exactly the files the hash covers
         command = [engine, "build", "-f", "container/Dockerfile", "-t", tag,
                    "--label", f"{HASH_LABEL}={digest}", str(context)]
         if subprocess.run(command, cwd=context, stdout=sys.stderr).returncode != 0:

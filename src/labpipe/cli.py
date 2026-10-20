@@ -18,6 +18,7 @@
   labpipe <method> summary --entry ID       compact human-readable summary (if the method has one)
   labpipe report                            write analysis/report.html (overview for people)
   labpipe migrate [--apply [--yes]]         settings files that use old names: show the change, or apply it (backup first)
+  labpipe update [--check|--preview|--to vX.Y.Z] [--yes]   update (or roll back) the installation and this project to a release
   labpipe project new FOLDER [--data PATH]... [--name NAME]   create a project (a folder with labpipe.yaml)
   labpipe project sync                      regenerate AGENTS.md, CLAUDE.md, .labpipe/, harness files
   labpipe agents sync|status                generate the harness's agent files from agents/*.md (+ lab/agents/)
@@ -187,6 +188,12 @@ def cmd_migrate(args, config) -> int:
             "next": ["`labpipe doctor`", "results are not changed; settings that mean something "
                      "else now may make entries out of date (`labpipe status`)"]})
     return 0
+
+
+def cmd_update(args, config) -> int:
+    """`labpipe update` (labpipe.update): interactive, runs in the user's terminal."""
+    from labpipe import update
+    return update.main(args)
 
 
 def cmd_inventory(args, config) -> int:
@@ -586,6 +593,18 @@ def build_parser() -> argparse.ArgumentParser:
     migrate.add_argument("--apply", action="store_true", help="make the change (asks first)")
     migrate.add_argument("--yes", action="store_true", help="with --apply: do not ask")
     migrate.set_defaults(func=cmd_migrate, needs_config=False)
+    update = sub.add_parser("update", help="update the installation and this project to a release "
+                            "(or go back to an older one); the user runs it, with questions")
+    update.add_argument("--check", action="store_true", help="only say what is available")
+    update.add_argument("--preview", action="store_true", help="analyse copies of your "
+                        "measurements with the new release, by code only, and show what would change")
+    update.add_argument("--to", metavar="vX.Y.Z", help="this release instead of the newest "
+                        "(an older one = rollback)")
+    update.add_argument("--yes", action="store_true", help="no questions (it still prints everything)")
+    update.add_argument("--limit", type=int, metavar="N", help="with --preview: at most N "
+                        "measurements per method")
+    update.add_argument("--resume", metavar="STATE", help=argparse.SUPPRESS)
+    update.set_defaults(func=cmd_update, needs_config=False)
     sub.add_parser("inventory", help="what labpipe recognises in the data folder(s)"
                    ).set_defaults(func=cmd_inventory)
     methods_parser = sub.add_parser("methods", help="scaffold a new analysis method, check one, show versions"

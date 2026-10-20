@@ -16,6 +16,8 @@
       "Edit(**/src/**)",
       "Edit(**/references/**)",
       "Edit(**/context/**)",
+      "Bash(labpipe update)",
+      "Bash(labpipe update *)",
       "Bash(git *)",
       "Bash(python *)",
       "Bash(python3 *)",
