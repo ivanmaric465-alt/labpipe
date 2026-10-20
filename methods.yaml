@@ -19,6 +19,7 @@ methods:
     cli: "labpipe xrd analyze --entry {entry_id}"
     module: labpipe.methods.xrd.analyze        # must provide run(...) — see docs/ADDING_A_METHOD.md
     cli_extension: labpipe.methods.xrd.refbuild  # optional: adds `labpipe xrd refs ...`
+    run_on_host: [refs]                        # optional: subcommands never sent into the container
     plot_modules: [labpipe.methods.xrd.plot]   # drawing only: a change marks "plot out of date", not stale
     # data the numbers depend on, part of the analysis version ("lab/…": in the project)
     analysis_data: ["references/xrd/patterns/*.json", "lab/references/xrd/patterns/*.json"]

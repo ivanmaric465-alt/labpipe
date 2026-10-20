@@ -12,6 +12,8 @@ Reproducible analysis of lab data, driven by AI agents.
 | `sem` | JEOL `.tif` + `.txt` | metadata, pixel size, field of view; per-sample gallery (code only, no AI) |
 | `eds` | Oxford INCA `.htm` + linked images | composition as recorded, metal-only composition, vs. nominal |
 
+These methods are one lab's formulation, for its instruments: use them as they are, steer them with settings, or treat them as worked examples for methods of your own ([docs/ADDING_A_METHOD.md](docs/ADDING_A_METHOD.md)).
+
 Details: [docs/SAFETY.md](docs/SAFETY.md) (safety), [docs/ADDING_A_METHOD.md](docs/ADDING_A_METHOD.md) (new methods), [docs/methods/](docs/methods/) (method designs).
 
 ## Requirements
@@ -131,7 +133,7 @@ Results:
 - `analysis/<sample>/<method>/<measurement>/`: `results.json`, `plot.png`, `plot.pdf`, `provenance.json`, `notes.md`.
 
 ```bash
-labpipe replay analysis/<sample>/<method>/<measurement>/provenance.json   # regenerate and compare hashes
+labpipe replay analysis/<sample>/<method>/<measurement>/provenance.json   # regenerate and compare hashes (needs the same analysis version, not the same commit)
 ```
 
 ## The postdoc
@@ -218,7 +220,7 @@ labpipe xrd refs add my_phase.cif --id NiO --structure-type rocksalt
 labpipe xrd refs build
 ```
 
-In a project, the references you add are kept in `lab/references/xrd/` (updates never touch them). Do not commit licensed CIFs (ICSD, ICDD).
+In a project, the references you add are kept in `lab/references/xrd/` (updates never touch them). `xrd refs` runs on your computer, not in the container; building needs the optional pymatgen (`pip install -e ".[refbuild]"`). Do not commit licensed CIFs (ICSD, ICDD).
 
 ## Update
 

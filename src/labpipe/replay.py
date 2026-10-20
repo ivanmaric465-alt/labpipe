@@ -1,8 +1,10 @@
 """Regenerate an analysis from its provenance.json alone and compare output hashes.
 
-Uses: the input path + sha256, the resolved settings (stored in full), the recorded code
-commit (must equal the current clean HEAD unless --force) and the reference
-files (checked by sha256). Output goes to logs/replay/<stamp>/.
+Uses: the input path + sha256, the resolved settings (stored in full), the code that made it
+and the reference files (checked by sha256). The code must match: the method's analysis and
+plot version (records made since per-method versions), else the recorded commit, clean
+(older records). A different commit with equal versions is only noted. --force compares
+anyway. Output goes to logs/replay/<stamp>/.
 """
 
 from __future__ import annotations
@@ -36,15 +38,27 @@ def _input_path(recorded: dict, config: dict) -> Path:
 
 def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[str, Any]:
     record = json.loads(provenance_path.read_text(encoding="utf-8"))
-    problems = []
+    problems, notes = [], []
     code = git_info()
-    if code["commit"] != record["code"]["commit"]:
-        problems.append(f"code commit differs: recorded {record['code']['commit']}, "
-                        f"current {code['commit']}")
-    if code["dirty"]:
-        problems.append("working tree has uncommitted changes")
-    if record["code"].get("dirty"):
-        problems.append("the original run was made from a dirty working tree")
+    recorded = record["code"]
+    if recorded.get("analysis_version"):
+        from labpipe import versions
+        now = versions.describe(record["method"])
+        for key in ("analysis_version", "plot_version"):
+            if recorded.get(key) != now[key]:
+                problems.append(f"{record['method']} {key.replace('_', ' ')} differs: recorded "
+                                f"{recorded.get(key)}, current {now[key]}")
+        if code["commit"] != recorded["commit"]:
+            notes.append(f"made with commit {recorded['commit']}, now {code['commit']}; the "
+                         f"{record['method']} analysis and plot versions are the same")
+    else:   # records from before per-method versions: the commit, clean
+        if code["commit"] != recorded["commit"]:
+            problems.append(f"code commit differs: recorded {recorded['commit']}, "
+                            f"current {code['commit']}")
+        if code["dirty"]:
+            problems.append("working tree has uncommitted changes")
+        if recorded.get("dirty"):
+            problems.append("the original run was made from a dirty working tree")
     input_path = _input_path(record["input"], config)
     if not input_path.exists():
         return {"error": f"input not found: {input_path}"}
@@ -57,7 +71,8 @@ def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[
             problems.append(f"reference {reference['file']} differs from the recorded hash")
     if problems and not force:
         return {"error": "replay refused", "problems": problems,
-                "hint": "check out the recorded commit, or pass --force to compare anyway"}
+                "hint": "use the code that made it (its release or commit), or pass --force to "
+                        "compare anyway"}
 
     stamp = utc_now().replace(":", "").replace("-", "")
     work = PROJECT_ROOT / config["logs_dir"] / "replay" / stamp
@@ -76,5 +91,6 @@ def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[
         comparison[name] = {"recorded": recorded, "regenerated": regenerated,
                             "identical": recorded == regenerated}
     return {"replay_dir": work.relative_to(PROJECT_ROOT).as_posix(), "problems": problems,
+            "notes": notes,
             "comparison": comparison,
             "all_outputs_identical": all(item["identical"] for item in comparison.values())}

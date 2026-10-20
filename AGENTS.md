@@ -52,7 +52,7 @@ All commands print JSON.
 | `labpipe dataset` / `dataset compare --quantity Q (--reference S \| --against P) [--run RUN]` | All samples with the named quantities of their measurements / differences and trends across samples, done by code |
 | `labpipe context init \| index` | Create `context/` from the templates / extract the text of `context/documents/` |
 | `labpipe postdoc start "Q" \| verify RUN \| list \| run "Q"` | A run for the postdoc / check its `analysis.md` / past runs / the whole thing without a conversation |
-| `labpipe replay PROVENANCE.json` | Regenerate outputs and compare hashes |
+| `labpipe replay PROVENANCE.json` | Regenerate outputs and compare hashes (needs the same analysis version as the record) |
 | `labpipe project new FOLDER [--data PATH]... [--name NAME]` / `project sync` | Create a project folder (the user runs it) / regenerate its generated files (`AGENTS.md`, `CLAUDE.md`, `.labpipe/`, harness files) after `lab/LAB.md`, `lab/agents/` or a labpipe update changed |
 | `labpipe agents sync` | Generate the harness's agent files from `agents/` and `lab/agents/` (in a project: the whole `project sync`) |
 | `labpipe automation run \| status` | One automatic pass / state of the watcher and nightly run |

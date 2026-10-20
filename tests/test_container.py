@@ -355,3 +355,9 @@ def test_forward_from_a_subfolder_of_the_project(tmp_path, monkeypatch):
     command = calls[0]
     assert command[command.index("-w") + 1] == "/project/analysis/S-1"
     assert command[-2:] == ["labpipe", "status"] and "labpipe-pd-films" in command  # its container
+
+
+def test_method_subcommands_marked_run_on_host_stay_on_the_host(tmp_path):
+    args = (tmp_path, tmp_path, "podman", "labpipe", 1000, 1000, False, {"xrd": ["refs"]})
+    assert ct.forward_argv(["xrd", "refs", "add", "x.cif", "--id", "X"], *args) is None
+    assert ct.forward_argv(["xrd", "analyze", "--entry", "e"], *args) is not None

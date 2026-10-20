@@ -200,10 +200,22 @@ def test_manifest_and_provenance_record_both_versions(project):
 
 def test_replay_still_reproduces_with_versions_recorded(project):
     entry = project.entry()
-    # --force: the commit check is replay's own (a clean tree); here only the outputs matter
-    out = project.run("replay", str(project.root / entry["output_dir"] / "provenance.json"),
-                      "--force")
-    assert out["all_outputs_identical"] is True, out
+    out = project.run("replay", str(project.root / entry["output_dir"] / "provenance.json"))
+    assert out["all_outputs_identical"] is True and out["problems"] == [], out
+
+
+def test_replay_accepts_another_commit_with_equal_versions_and_refuses_another_version(project):
+    path = project.root / project.entry()["output_dir"] / "provenance.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["code"]["commit"] = "0" * 40
+    path.write_text(json.dumps(record), encoding="utf-8")
+    out = project.run("replay", str(path))
+    assert out["all_outputs_identical"] is True and out["problems"] == []
+    assert "the xrd analysis and plot versions are the same" in out["notes"][0]
+    record["code"]["analysis_version"] = "0" * 16
+    path.write_text(json.dumps(record), encoding="utf-8")
+    out = project.run("replay", str(path))
+    assert out["error"] == "replay refused" and "analysis version differs" in out["problems"][0]
 
 
 def test_unrelated_code_changes_leave_the_entry_done(project):

@@ -198,6 +198,9 @@ characters, stored per entry in `manifest.json` and in `provenance.json` → `co
   version: a change to it marks their analyses out of date.
 - **Plot version**: the method's `plot_modules` plus `labpipe.plotting`. A change marks done
   entries "plot out of date" (`labpipe replot`), never stale.
+- **Replay** needs the same analysis and plot version as the record, not the same commit (a
+  different commit is noted). Records from before per-method versions need the recorded
+  commit, clean.
 - **Scanner**: a done entry whose analysis version differs is stale ("the <method> calculation
   changed (version a → b)"). A failed entry is retried when it changes. An entry from before
   versions existed adopts the current ones if its `code_version` is the current clean commit,
@@ -237,7 +240,9 @@ One container per project.
   the listed hosts. The entrypoint drops privileges.
 - **Host side**: `labpipe` on the host, anywhere inside a project, forwards commands into that
   project's container (`exec`, the working folder mapped under `/project`). Local-only
-  commands: container, shell, setup, init, doctor, agents, project, guard, methods, readonly-view.
+  commands: container, shell, setup, init, doctor, agents, project, guard, methods, readonly-view,
+  and method subcommands listed in `methods.yaml` → `run_on_host` (`xrd refs`: building
+  references needs the optional pymatgen, which the image does not have).
 
 ## Where things are written
 

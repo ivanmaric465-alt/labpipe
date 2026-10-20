@@ -2,6 +2,8 @@
 
 Status: implemented (before design notes existed; this page records how it works and how to steer it). Code taken from earlier projects and what changed: `docs/PORTING.md`.
 
+This is one lab's formulation of an XRD analysis (its choices: model, background, indexing, sizing). It works as it is, but it is mainly a worked example: steer it with settings first; if your analysis needs to work differently, build your own method from it (`docs/ADDING_A_METHOD.md`).
+
 ## Input
 - PANalytical `.xrdml` (wavelengths and Kα2/Kα1 ratio read from the file); `.xy` two- or three-column exports (wavelength from `config/xrd.yaml` → `input.default_wavelength`). When both exist for one scan, the `.xy` is recorded as a duplicate of the `.xrdml`.
 - From the user: expected phases (reference CIFs), internal standard and its certificate value, sample-holder or support peaks.
@@ -46,7 +48,7 @@ labpipe xrd refs list | build
 
 - Two sets: the references that come with labpipe (code folder, `root: code` in `provenance.json`) and the lab's own, which `refs add` puts in the project's `lab/references/xrd/` (`root: project`; updates never touch them). A lab reference may not reuse a shipped id. `refs list` shows each one's `source`.
 - Adding or rebuilding a reference changes the XRD analysis version: existing XRD analyses become out of date (`labpipe requeue --stale` redoes them; old results kept).
-- Building needs pymatgen (`pip install -e ".[refbuild]"`).
+- `labpipe xrd refs` runs on your computer, never in the container (also in container mode). Building needs the optional pymatgen there: `pip install -e ".[refbuild]"` in labpipe's environment. Whether you add references, and which, is your choice.
 - Check the CIF first: cell edges in Å, not kX; ambient conditions; not a theoretical or hydrogen-loaded structure. `references/xrd/phases.yaml` → `excluded` lists examples of what to reject.
 - COD is open data. ICSD/ICDD CIFs are licensed and must not be committed.
 - `fcc` and `rocksalt` references also take part in the lattice-parameter comparison.

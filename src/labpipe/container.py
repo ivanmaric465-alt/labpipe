@@ -377,12 +377,17 @@ def _map_arg(arg: str, cwd: Path, repo: Path) -> str:
 
 
 def forward_argv(argv: list[str], cwd: Path | str, repo_root: Path | str, engine: str,
-                 name: str, uid: int, gid: int, tty: bool) -> list[str] | None:
+                 name: str, uid: int, gid: int, tty: bool,
+                 on_host: dict[str, list[str]] | None = None) -> list[str] | None:
     """The engine command that runs `labpipe argv` in the container; None = run locally.
-    `repo_root` is the project folder: the working folder is mapped under /project."""
+    `repo_root` is the project folder: the working folder is mapped under /project.
+    `on_host`: method subcommands that run on the host (methods.yaml → `run_on_host`, e.g.
+    xrd refs, which needs the optional pymatgen the image does not have)."""
     words = [a for a in argv if not a.startswith("-")]
     command = words[0] if words else None
     if command is None or command in LOCAL_COMMANDS or "--help" in argv or "-h" in argv:
+        return None
+    if words[1:2] and words[1] in (on_host or {}).get(command, []):
         return None
     if command == "automation" and words[1:2] and words[1] in ("watch", "setup"):
         raise ForwardError("container mode is on: the container runs the watcher and the "
@@ -424,7 +429,9 @@ def forward(argv: list[str]) -> int | None:
         name = container_config({"container": pipeline_container_block()})["name"]  # + local.yaml
         uid, gid = host_ids()
         tty = sys.stdin.isatty() and sys.stdout.isatty()
-        command = forward_argv(argv, Path.cwd(), _root(), engine, name, uid, gid, tty)
+        from labpipe.registry import load_methods
+        on_host = {m: spec.get("run_on_host") or [] for m, spec in load_methods().items()}
+        command = forward_argv(argv, Path.cwd(), _root(), engine, name, uid, gid, tty, on_host)
         if command is None:
             return None
         if not running(engine, name):

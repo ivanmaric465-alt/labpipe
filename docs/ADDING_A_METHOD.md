@@ -46,6 +46,7 @@ Versions (`labpipe methods versions`): the analysis version covers `module` and 
 ```yaml
     plot_modules: [labpipe.methods.sem.plot]     # drawing only: a change means "plot out of date", not stale
     analysis_data: ["references/sem/*.json"]     # data the numbers depend on (globs in the code folder; "lab/…": in the project)
+    run_on_host: [refs]                           # subcommands of `cli_extension` that never go into the container
 ```
 
 If other methods use the same file type (`.txt`, `.jpg`), add a content check:
