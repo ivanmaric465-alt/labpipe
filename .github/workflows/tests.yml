@@ -45,6 +45,13 @@ jobs:
           base=origin/main
           if [ "$GITHUB_REF" = "refs/heads/main" ]; then base="${{ github.event.before }}"; fi
           "$LABPIPE_VENV/bin/python" scripts/check_docs.py "$base"
+      # A method's numbers changed without a CHANGELOG.md line (Unreleased → Changes results)?
+      - name: Changes to results are announced
+        if: runner.os != 'Windows'
+        run: |
+          base=origin/main
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then base="${{ github.event.before }}"; fi
+          "$LABPIPE_VENV/bin/python" scripts/check_release.py "$base"
       - name: Test
         if: runner.os == 'Windows'
         shell: pwsh

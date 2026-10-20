@@ -1,5 +1,6 @@
 """labpipe command line.
 
+  labpipe --version                         the version, and the release tag or commit of a git checkout
   labpipe doctor                            setup state of this installation (read-only)
   labpipe init                              create config/local.yaml (this machine's paths)
   labpipe setup [--only STEP]               guided setup in your terminal (data folder, files, sandbox, agents, automation)
@@ -51,6 +52,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from labpipe import __version__
 from labpipe import manifest as mf
 from labpipe import container, pipeline, scanner
 from labpipe.labmethods import MethodsError
@@ -495,6 +497,8 @@ def register_context_postdoc(sub) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="labpipe", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--version", action="version",
+                        version=f"labpipe {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("doctor").set_defaults(func=cmd_doctor, needs_config=False)
     sub.add_parser("guard").set_defaults(func=cmd_guard, needs_config=False)
@@ -651,11 +655,28 @@ def _add_json_flag(parser: argparse.ArgumentParser) -> None:
             leaf.add_argument("--json", action="store_true", help="JSON output (the default)")
 
 
+def cmd_version() -> int:
+    """`labpipe --version`: the version, and the release tag (or commit) of a git checkout."""
+    from labpipe import release
+    info = release.current(CODE_ROOT)
+    line = f"labpipe {info['version']}"
+    if info["tag"]:
+        line += f" ({info['tag']})"
+    elif info["commit"]:
+        line += f" (commit {info['commit']}, not at a release)"
+    if info["dirty"]:
+        line += ", with local changes"
+    print(line)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     # JSON output contains Å, ±, Δ...: always UTF-8 (Windows consoles default to cp1252).
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
+    if (sys.argv[1:] if argv is None else argv) == ["--version"]:
+        return cmd_version()
     forwarded = container.forward(sys.argv[1:] if argv is None else argv)
     if forwarded is not None:  # container mode: the command ran inside the container
         return forwarded
