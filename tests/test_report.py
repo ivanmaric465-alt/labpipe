@@ -228,14 +228,67 @@ def test_building_changes_nothing_else(project, config):
     assert all(after[p] == before[p] for p in before)
 
 
+def _cards(page):
+    """The page without the how-to-read box (it explains these phrases, too)."""
+    return re.sub(r"<details class=howto>.*?</details>", "", page, flags=re.S)
+
+
 def test_notes_that_passed_under_older_rules_are_shown_as_passed_with_a_line(
         project, config, monkeypatch):
     monkeypatch.setattr(report, "verify_entry", lambda config, eid: {
         "ok": True, "checked_with": {"rules": 1, "labpipe": "v0.3.0"}})
-    _, page = build(project, config)
+    page = _cards(build(project, config)[1])
     assert "PLAINWORDS" in page and "did not pass" not in page
     assert page.count("checked with the rules of labpipe v0.3.0") == 1      # the one with notes
     monkeypatch.setattr(report, "verify_entry", lambda config, eid: {"ok": False})
-    assert "did not pass" in build(project, config)[1]
+    assert "did not pass" in _cards(build(project, config)[1])
     monkeypatch.setattr(report, "verify_entry", lambda config, eid: {"ok": True})
-    assert "checked with the rules" not in build(project, config)[1]
+    assert "checked with the rules" not in _cards(build(project, config)[1])
+
+
+def _howto(page):
+    match = re.search(r"<details class=howto>.*?</details>", page, re.S)
+    return match.group(0) if match else None
+
+
+def test_how_to_read_box_is_collapsed_by_default_and_says_what_this_report_shows(project, config):
+    _, page = build(project, config)
+    box = _howto(page)
+    assert box and "<details class=howto>" in box and "open" not in box.split(">")[0]
+    assert page.index("generated") < page.index("class=howto") < page.index("id=postdoc")
+    for text in ("grouped by sample", "Overview tables", "N to check", "Check before using",
+                 "In plain words", "The postdoc", "results.json", "labpipe replay",
+                 "gallery of images", "how_to_read: false"):
+        assert text in box
+    assert "stale</span>" not in box and "waiting" not in box      # none here
+    assert "checked with the rules of labpipe X" in box            # full cards
+
+
+def test_how_to_read_follows_group_by_sections_and_cards(project, config):
+    lab(project, "report: {group_by: method, sections: [measurements], cards: compact}\n")
+    box = _howto(build(project, config)[1])
+    assert "grouped by method" in box and "grouped by sample" not in box
+    assert "Overview tables" not in box and "The postdoc" not in box and "In plain words" not in box
+    assert "notes are left out" in box
+    lab(project, "report: {group_by: none, sections: [overview]}\n")
+    box = _howto(build(project, config)[1])
+    assert "Overview tables" in box and "<b>Cards</b>" not in box and "<b>Check before using</b>" not in box
+
+
+def test_how_to_read_mentions_stale_and_the_waiting_line_only_when_present(project, config):
+    data = json.loads((project / "manifest.json").read_text(encoding="utf-8"))
+    data["entries"]["xrd:lab:S-1_a"]["status"] = "stale"
+    data["entries"]["x:lab:w"] = {"entry_id": "x:lab:w", "method": "xrd", "status": "failed"}
+    (project / "manifest.json").write_text(json.dumps(data), encoding="utf-8")
+    box = _howto(build(project, config)[1])
+    assert "<span class=flag>stale</span>" in box and "logs/review_queue.md" in box
+
+
+def test_how_to_read_can_be_switched_off_also_per_extra_report(project, config):
+    lab(project, "report: {how_to_read: false, extra: {again: {how_to_read: true}}}\n")
+    _, page = build(project, config)
+    assert _howto(page) is None and "How to read this report" not in page
+    assert _howto(build(project, config, "report-again")[1])
+    lab(project, "report: {how_to_read: maybe}\n")
+    with pytest.raises(settings_mod.SettingsError, match="how_to_read must be true or false"):
+        report.build(config)

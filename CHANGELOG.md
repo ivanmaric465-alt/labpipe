@@ -24,6 +24,7 @@ None.
 - `labpipe update` goes from release to release, and back (`--to`): it shows the changelog first, can preview what the release would change in your own numbers (`--preview`, by code, nothing is changed), backs up your settings (`backups/<release>/`), switches the code, migrates renamed settings (diff shown, asked), regenerates the generated files, restarts the container and lists the analyses that are out of date (nothing is redone by itself). Settings migrations (`labpipe migrate`; old names keep working for one release) and versioned note checks (notes that passed stay valid when the rules get stricter) come with it. [docs/settings/updates.md](docs/settings/updates.md)
 - `labpipe doctor` says when a project was set up with another release than the installed one (`project_release`).
 - `labpipe replay` needs the same analysis and plot version, not the same commit.
+- Every method page has a "Reading the plot" section (what each line, panel and colour is, good versus look again, which plot settings change it), and so does the template for your own methods (`labpipe methods check` warns while it is missing). The report starts with a collapsed "How to read this report" box, generated from the report settings (`how_to_read: false` hides it).
 - XRD quantities use a generic fcc name in every sample, with the closest reference as "possibly X"; no AI cost limit unless you set one.
 
 ### Needs your action
