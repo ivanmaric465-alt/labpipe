@@ -6,7 +6,7 @@ What changed in each release, in four fixed parts. How it is kept: [docs/RELEASI
 
 ### Changes results
 
-- `eds`: a negative element value (INCA can report e.g. Ru −0.1 wt% after background subtraction) now counts as 0 in the metal basis instead of inflating the other metals when renormalised to 100. The element stays with 0 (`metal_basis.taken_as_zero` lists it; the bar chart and summary show it as n.d.), the table as recorded is unchanged, and a new review check `negative_value` asks you to look at the spectrum. Reports without negative values give the same numbers, but are marked out of date.
+- `eds`: a negative element value (INCA can report e.g. Ru −0.1 wt% after background subtraction) now counts as 0 in the metal basis instead of inflating the other metals when renormalised to 100. The element stays with 0 (`metal_basis.taken_as_zero` lists it; the bar chart and summary show it as n.d.), the table as recorded is unchanged, and a new review check `negative_value` asks you to look at the spectrum. The `low_concentration` check now also lists its elements (`elements`), which the report's tables use. Reports without negative values give the same numbers, but are marked out of date.
 
 ### Settings migrated
 

@@ -89,9 +89,14 @@ def quantities(results: dict[str, Any]) -> dict[str, dict[str, Any]]:
 # --- tables (layout only) --------------------------------------------------------------------
 
 def _low_elements(results: dict[str, Any]) -> set[str]:
-    """Elements the `low_concentration` check lists (its message is the only record of them)."""
-    return {symbol for c in results.get("checks") or [] if c.get("code") == "low_concentration"
-            for symbol in re.findall(r"\b([A-Z][a-z]?) [-−]?\d[\d.]* wt%", c.get("message", ""))}
+    """Elements the `low_concentration` check lists: its `elements`, or (results from before
+    that field) the symbols in its message."""
+    found: set[str] = set()
+    for check in results.get("checks") or []:
+        if check.get("code") == "low_concentration":
+            found.update(check.get("elements") or re.findall(
+                r"\b([A-Z][a-z]?) [-−]?\d[\d.]* wt%", check.get("message", "")))
+    return found
 
 
 def _zeroed(results: dict[str, Any]) -> tuple[dict[str, float], str]:

@@ -180,3 +180,19 @@ def test_eds_images_from_settings_replace_the_links(tmp_path):
     assert [f["file"] for f in results["figures"]] == [
         "panel_electron_image.jpg", "panel_spectrum.jpg", "panel_composition.png"]
     assert set(summary["outputs"]) >= {f["file"] for f in results["figures"]}
+
+
+def test_low_concentration_lists_its_elements(tmp_path):
+    report = make_example(tmp_path / "raw")
+    text = report.read_text(encoding="latin-1").replace(
+        "<TR><TD>Pt M<TD>3.00<TD>0.20</TR>",
+        "<TR><TD>Pt M<TD>3.00<TD>0.20</TR>\n<TR><TD>Rh L<TD>0.40<TD>0.10</TR>")
+    report.write_text(text, encoding="latin-1")
+    out = tmp_path / "out"
+    analyze.run(report, out, settings=settings_mod.resolve("eds", None, None)[0], context={},
+                pipeline=False)
+    results = json.loads((out / "results.json").read_text(encoding="utf-8"))
+    [low] = [c for c in results["checks"] if c["code"] == "low_concentration"]
+    assert "Rh" in low["elements"] and "Rh 0.4 wt%" in low["message"]
+    from labpipe.methods.eds import summary
+    assert "Rh" in summary._low_elements(results)

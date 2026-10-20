@@ -336,7 +336,8 @@ def run(input_path: Path, out_dir: Path, *, settings: dict | None = None,
         checks.append({"code": "low_concentration", "severity": "warning",
                        "message": "near the detection limit (< "
                                   f"{settings['low_concentration_wt_percent']} wt%): "
-                                  + ", ".join(f"{e['element']} {e['weight_percent']} wt%" for e in low)})
+                                  + ", ".join(f"{e['element']} {e['weight_percent']} wt%" for e in low),
+                       "elements": [e["element"] for e in low]})
     non_metal_wt = sum(e["weight_percent"] for e in elements if e["element"] in set(non_metals))
     metal_wt = sum(e["weight_percent"] for e in elements if e["element"] not in set(non_metals))
     if non_metal_wt > metal_wt:

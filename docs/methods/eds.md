@@ -31,7 +31,7 @@ Status: APPROVED 2026-10-17 with changes (below). Implemented.
 |---|---|---|
 | `normalised_totals` | info | processing normalised to 100%: the analytical total is unknown |
 | `no_uncertainty_reported` | warning | the export has no σ; small differences cannot be judged |
-| `low_concentration` | warning | an element below `low_concentration_wt_percent` (near the detection limit) |
+| `low_concentration` | warning | an element below `low_concentration_wt_percent` (near the detection limit); the check's `elements` lists them |
 | `negative_value` | review | a metal reported negative (below detection after background subtraction); taken as 0 in the metal basis; check the spectrum for a peak. Not also `low_concentration` |
 | `support_dominates` | info | non-metals are most of the signal (e.g. C 82 wt%): metal ratios rest on small peaks |
 | `no_nominal` | info | no nominal composition given for this sample |
