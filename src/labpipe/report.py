@@ -217,8 +217,14 @@ def _embedded(png: Path, alt: str = "plot") -> str:
             f'src="data:image/{kind};base64,{base64.b64encode(data).decode()}">')
 
 
+def _rules_line(labpipe_version: str | None) -> str:
+    """The small line under notes or an analysis that passed the checks of an older release."""
+    which = f"labpipe {html.escape(labpipe_version)}" if labpipe_version else "an older labpipe"
+    return f"<p class=meta>checked with the rules of {which}</p>"
+
+
 def _card(entry: dict, results: dict, summary: dict, notes_text: str | None,
-          notes_ok: bool | None) -> tuple[str, str]:
+          notes_ok: bool | None, checked_with: dict | None = None) -> tuple[str, str]:
     """(full card, compact card: plot, key numbers and checks only)"""
     out = PROJECT_ROOT / entry["output_dir"]
     figures = [_figure(out / f["file"], f.get("caption")) for f in results.get("figures") or []
@@ -245,6 +251,8 @@ def _card(entry: dict, results: dict, summary: dict, notes_text: str | None,
         if notes_ok is False:
             plain = ('<p class=warnbox>These notes did not pass <code>labpipe notes verify'
                      '</code>; read them with care.</p>') + plain
+        elif checked_with:
+            plain += _rules_line(checked_with.get("labpipe"))
     settings_used = _settings_used(out)
     steer_html = ("<h3>Settings beyond the defaults</h3><ul class=know>" + "".join(
         f"<li>{html.escape(line)}</li>" for line in settings_used) + "</ul>") if settings_used else ""
@@ -362,6 +370,8 @@ def _postdoc_section(config: dict, anchors: dict[str, str]) -> str:
             verified.get("model") and f"model {verified['model']}", verified.get("harness"),
             f"run {verified['run']}") if x)
         parts.append(f"<p class=meta>{_date(verified)} · {meta}</p>")
+        if verified.get("older_rules"):
+            parts.append(_rules_line(verified.get("labpipe")))
         if not fresh["up_to_date"]:
             changes = []
             if fresh["changed_results"]:
@@ -575,8 +585,9 @@ def build(config: dict) -> dict[str, Any]:
             "check_before_using": [{"code": c["code"], "text": c["message"]}
                                    for c in results.get("checks", []) if c["severity"] == "review"]}
         notes_text = _notes_summary(out / "notes.md")
-        notes_ok = verify_entry(config, entry["entry_id"])["ok"] if notes_text is not None else None
-        card, compact = _card(entry, results, summary, notes_text, notes_ok)
+        checked = verify_entry(config, entry["entry_id"]) if notes_text is not None else {}
+        card, compact = _card(entry, results, summary, notes_text,
+                              checked["ok"] if checked else None, checked.get("checked_with"))
         n_checks = len(summary.get("check_before_using") or [])
         flag = (f'<span class="flag r">{n_checks} to check</span>' if n_checks
                 else '<span class="flag o">ok</span>')

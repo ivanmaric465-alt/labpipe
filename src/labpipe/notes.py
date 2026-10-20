@@ -10,6 +10,12 @@ Not checked as numbers: identifiers glued to letters (S-9, Kα1, RuO2, P03),
 hkl in parentheses, ISO dates, list markers, and inline code containing a
 letter (key paths, entry IDs). A number checked here is "found somewhere in
 the results", not "used in the right place"; a human still reads the notes.
+
+The rules are versioned (CHECKS_VERSION, bumped when they get stricter; tests/test_checks_versions.py
+fails when the rule code changed without it). A passing `labpipe notes verify` records the version
+in the manifest entry (`notes_check`). Notes that passed under older rules, with the same text and
+the same results, still count as passed, say "checked with the rules of labpipe X", and are never
+queued for rewriting only because the rules changed.
 """
 
 from __future__ import annotations
@@ -21,9 +27,13 @@ import re
 from pathlib import Path
 from typing import Any, Iterator
 
+from labpipe import __version__
 from labpipe import manifest as mf
+from labpipe.provenance import sha256_file, utc_now
 from labpipe.registry import load_methods
 from labpipe.safety import PROJECT_ROOT
+
+CHECKS_VERSION = 1      # bump when the rules above get stricter (see the module text)
 
 _NUMBER = re.compile(r"(?<![\w.\-−])[-−]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![0-9A-Za-z_])")
 _EXEMPT = [
@@ -119,7 +129,7 @@ def verify(notes_path: Path, results: dict[str, Any], provenance: dict[str, Any]
                         "(they may describe an older analysis)")
     return {"notes": notes_path.relative_to(PROJECT_ROOT).as_posix() if notes_path.is_relative_to(
                 PROJECT_ROOT) else str(notes_path),
-            "ok": not problems, "problems": problems, "numbers_checked": len(matched) + len(unmatched),
+            "ok": not problems, "rules": CHECKS_VERSION, "problems": problems, "numbers_checked": len(matched) + len(unmatched),
             "unmatched": unmatched, "review_codes_required": review_codes,
             "matched": [{"text": m["text"], "line": m["line"], "source": m["source"]}
                         for m in matched]}
@@ -139,8 +149,39 @@ def verify_entry(config: dict, eid: str) -> dict[str, Any]:
     spec = load_methods().get(entry["method"], {})
     summary = (importlib.import_module(spec["summary"]).summarize(results)
                if spec.get("summary") else None)
-    return {"entry_id": eid, **verify(out / "notes.md", results, provenance,
-                                      described_shas(entry), summary)}
+    result = {"entry_id": eid, **verify(out / "notes.md", results, provenance,
+                                        described_shas(entry), summary),
+              "notes_sha256": sha256_file(out / "notes.md"),
+              "results_sha256": entry.get("results_sha256")}
+    earlier = None if result["ok"] else passed_earlier(entry, result["notes_sha256"])
+    if earlier:     # the rules got stricter since: these notes stay valid
+        return {**result, "ok": True, "problems": [], "checked_with": {
+            "rules": earlier["rules"], "labpipe": earlier.get("labpipe")},
+            "problems_under_current_rules": result["problems"]}
+    return result
+
+
+def passed_earlier(entry: dict[str, Any], notes_sha256: str) -> dict[str, Any] | None:
+    """The `notes_check` of the entry if this very text passed, for the same results, under
+    older rules than the current ones."""
+    check = entry.get("notes_check") or {}
+    if (int(check.get("rules") or 0) and check["rules"] < CHECKS_VERSION
+            and check.get("notes_sha256") == notes_sha256
+            and check.get("results_sha256") in described_shas(entry)):
+        return check
+    return None
+
+
+def record_check(config: dict, result: dict[str, Any]) -> None:
+    """Remember in the manifest that these notes passed under the current rules (what
+    `labpipe notes verify` does after a pass)."""
+    with mf.locked(config) as data:
+        entry = data["entries"].get(result["entry_id"])
+        if entry is not None:
+            entry["notes_check"] = {"rules": CHECKS_VERSION, "labpipe": __version__,
+                                    "notes_sha256": result["notes_sha256"],
+                                    "results_sha256": result["results_sha256"],
+                                    "utc": utc_now()}
 
 
 def todo(config: dict) -> list[dict[str, Any]]:
