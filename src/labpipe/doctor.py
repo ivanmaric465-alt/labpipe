@@ -170,6 +170,22 @@ def _project() -> list[dict[str, Any]]:
                   + "; ".join(detail) + ")", "run `labpipe project sync`", mode="project")]
 
 
+def _project_release() -> list[dict[str, Any]]:
+    """The project was set up or updated with another labpipe release than the installed one
+    (not blocking: `labpipe update` in the project brings it up; the user runs it)."""
+    from labpipe import __version__, project
+    if in_container() or safety.dev_mode():
+        return []
+    recorded = project.read_project().get("labpipe_version")
+    if not recorded or str(recorded).lstrip("v") == __version__:
+        return []
+    return [_item("project_release", "warn",
+                  f"this project was set up with labpipe {str(recorded).lstrip('v')}; the "
+                  f"installation is {__version__}: run labpipe update here",
+                  "show the user `labpipe update --check` (what changed); they run `labpipe "
+                  "update` in their terminal (never you)")]
+
+
 def _settings_migrations() -> list[dict[str, Any]]:
     """Settings files that still use names an update has changed (not blocking: old names keep
     working for one release)."""
@@ -362,6 +378,7 @@ def run() -> dict[str, Any]:
                 "ready": False, "next": {"check": "lab_methods", "do": items[-1]["next"]},
                 "checks": items}
     items += _project()
+    items += _project_release()
     items += _settings_migrations()
     local = PROJECT_ROOT / "config" / "local.yaml"
     try:

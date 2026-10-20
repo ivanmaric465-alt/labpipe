@@ -10,6 +10,13 @@ prefix_rule(
     match = [["labpipe", "doctor"], ["labpipe", "xrd", "analyze", "--entry", "x"]],
 )
 
+prefix_rule(
+    pattern = ["labpipe", "update"],
+    decision = "prompt",
+    justification = "labpipe update changes the installed code and the project's settings: the user runs it",
+    match = [["labpipe", "update", "--check"]],
+)
+
 prefix_rule(pattern = ["sudo"], decision = "forbidden", justification = "admin commands are run by the user")
 prefix_rule(pattern = ["su"], decision = "forbidden", justification = "admin commands are run by the user")
 prefix_rule(pattern = ["rm"], decision = "forbidden", justification = "nothing is deleted; labpipe moves old outputs to _superseded/")

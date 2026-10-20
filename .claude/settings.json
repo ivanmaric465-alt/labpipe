@@ -34,6 +34,8 @@
       "Edit(/context/.text/**)"
     ],
     "ask": [
+      "Bash(labpipe update)",
+      "Bash(labpipe update *)",
       "Edit(/config/local.yaml)",
       "Edit(/config/pipeline.yaml)",
       "Edit(/context/context.md)",

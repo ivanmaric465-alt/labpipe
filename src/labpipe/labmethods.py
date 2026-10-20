@@ -36,7 +36,7 @@ RESERVED = frozenset({
     "agents", "analyze", "automation", "container", "context", "dataset", "doctor", "guard",
     "init", "inventory", "methods", "migrate", "notes", "pending", "postdoc", "project", "readonly-view",
     "replay", "replot", "report", "requeue", "review", "roots", "scan", "setup", "shell",
-    "status", "template", "lab",
+    "status", "template", "update", "lab",
 })
 NAME = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
 # Entries of the registry that name a Python module (or module:function).
