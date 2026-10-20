@@ -131,8 +131,18 @@ def _fwd(argv, cwd, repo, tty=False):
 
 def test_local_commands_not_forwarded(tmp_path):
     for argv in (["guard"], ["container", "start"], ["shell"], ["doctor"], ["setup"], ["init"],
-                 ["agents", "sync"], ["methods", "check", "x"], ["scan", "--help"], []):
+                 ["agents", "sync"], ["methods", "new", "x"], ["methods", "versions"],
+                 ["methods", "check", "--help"], ["scan", "--help"], []):
         assert _fwd(argv, tmp_path, tmp_path) is None
+
+
+def test_methods_check_runs_in_the_container(tmp_path):
+    """`methods check` runs an analysis (numpy, scipy, matplotlib are in the image only); `new`
+    and `versions` only write or read files and stay on the host."""
+    (tmp_path / "scan.dat").write_text("1 2\n", encoding="utf-8")
+    command = _fwd(["methods", "check", "demo", "--example", "scan.dat"], tmp_path, tmp_path)
+    assert command[-6:] == ["labpipe", "methods", "check", "demo", "--example",
+                            "/project/scan.dat"]
 
 
 def test_forward_cwd_and_paths(tmp_path):

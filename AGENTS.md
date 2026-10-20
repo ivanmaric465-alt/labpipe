@@ -8,7 +8,7 @@ labpipe turns raw instrument files into reproducible analyses:
 
 The numerics are deterministic Python. **Agents run commands, read results, write notes and edit settings files. They never compute numbers themselves.** Human-facing overview: `README.md`. The code's skeleton (modules, data flow, what is written where): `docs/ARCHITECTURE.md`. Read `docs/SAFETY.md` before changing anything that touches paths or permissions.
 
-Everything specific to one method (its settings, how to word its results, its conventions) is in `docs/methods/<method>.md`. Read it before steering or explaining that method's results. Everything else the user can change (data, samples, plots, report, agents, automation, context, container) has a page in `docs/settings/`, with a "You say → setting" table: find the page there before changing anything.
+Everything specific to one method (its settings, how to word its results, its conventions) is in `docs/methods/<method>.md` (the lab's own methods: `lab/methods/<method>/README.md`, listed in the generated section "This lab's own methods"). Read it before steering or explaining that method's results. Everything else the user can change (data, samples, plots, report, agents, automation, context, container) has a page in `docs/settings/`, with a "You say → setting" table: find the page there before changing anything.
 
 ## Start of every session: `labpipe doctor`
 
@@ -57,7 +57,7 @@ All commands print JSON.
 | `labpipe project new FOLDER [--data PATH]... [--name NAME]` / `project sync` | Create a project folder (the user runs it) / regenerate its generated files (`AGENTS.md`, `CLAUDE.md`, `.labpipe/`, harness files) after `lab/LAB.md`, `lab/agents/` or a labpipe update changed |
 | `labpipe agents sync` | Generate the harness's agent files from `agents/` and `lab/agents/` (in a project: the whole `project sync`) |
 | `labpipe automation run \| status` | One automatic pass / state of the watcher and nightly run |
-| `labpipe methods new \| check` | New method (only in a method-design task with the user) |
+| `labpipe methods new \| check` | New method (only in a method-design task with the user): in a project into `lab/` (the lab's own), in the repository into the code |
 | `labpipe methods versions` | Per method: analysis version, plot version, the modules in each (read-only) |
 | `labpipe container setup \| start [--replace] \| stop \| status \| logs \| login \| popups` | Container mode (`docs/settings/container.md`); the user runs `setup`, `login` and `popups` (they ask questions or install a service) |
 | `labpipe shell` | An agent session inside the container (the user runs it) |
@@ -114,7 +114,7 @@ analysis/<sample_id>/<method>/<measurement_id>/   results.json, plot.png, plot.p
 analysis/<sample_id>/<method>/_superseded|_failed/ older or failed outputs (never deleted)
 analysis/_postdoc/<run>/                           the postdoc's runs: request.md, inputs.json, dataset.json, compare-N.json, analysis.md, verify.json
 context/                                           the user's project context and documents (git-ignored)
-lab/                                               the lab's own additions: LAB.md (all agents), agents/<role>.md
+lab/                                               the lab's own additions: LAB.md (all agents), agents/<role>.md, methods.yaml + methods/<name>/ (its own methods)
 manifest.json                                      one entry per raw file: hash, status, output, versions; unrecognised files
 logs/                                              automation.log, runs/, review_queue.md
 config/                                            settings (docs/settings/): local.yaml = this machine; lab.yaml = the lab's preferences; ignore.yaml = files to leave alone
@@ -177,7 +177,10 @@ A separate task with the user, never during analysis work, never unattended.
 
 ## Adding a new analysis method
 
-A code change: a separate task with the user, tests and a commit; never during analysis work, never unattended. Design it with the user, write the design note, **stop until the user approves it**, then implement and check. The steps: `docs/ADDING_A_METHOD.md`.
+A code change: a separate task with the user, never during analysis work, never unattended. Design it with the user, write the design note, **stop until the user approves it**, then implement and check. The steps: `docs/ADDING_A_METHOD.md`.
+
+- **In a project** (the usual case): a method of the lab's own goes in `lab/` (`lab/methods.yaml`, `lab/methods/<name>/`, its page `lab/methods/<name>/README.md`, its role `lab/agents/<name>-analyst.md`), made by `labpipe methods new`. Updates never touch it. Then `labpipe methods check`, `labpipe project sync`.
+- **In the labpipe repository** (dev mode): a method for everyone, with tests and a commit.
 
 ## Conventions
 

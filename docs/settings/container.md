@@ -4,6 +4,8 @@ labpipe runs its commands and the automatic processing inside a Podman or Docker
 
 Each project has its own container. The project folder is mounted read-write at `/project`; the labpipe code is in the image (`/opt/labpipe`). The container is named `labpipe-<project name>` with its own home volume, and its port is the first free one from 8765, saved in the project's `config/local.yaml`. `labpipe` typed anywhere inside the project runs in that project's container.
 
+The lab's own methods (`lab/methods/`) are in the project, so they run in the container too, with the image's packages only (`container/requirements.lock`: numpy, scipy, matplotlib, Pillow, PyYAML, …). A method needing another package needs the lab's own image, which labpipe does not support yet. `labpipe methods check` runs in the container; `methods new` and `methods versions` on the host.
+
 ## Settings
 
 `config/local.yaml` (written by `labpipe project new` from the engine and pop-up choices of the installer, kept in `~/.config/labpipe/defaults.yaml`; or by `labpipe container setup`):

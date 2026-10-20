@@ -26,7 +26,8 @@ from typing import Any
 
 import yaml
 
-from labpipe import __version__, agents
+from labpipe import __version__, agents, labmethods
+from labpipe.registry import shipped_methods
 from labpipe.provenance import utc_now
 from labpipe.safety import (CODE_ROOT, FIXED_GENERATED, GENERATED_DIR, GENERATED_RECORD, PROJECT_FILE, PROJECT_ROOT, atomic_write_bytes,
                             atomic_write_text, config_home, default_config_files, find_project, is_dev,
@@ -92,6 +93,26 @@ def _header(source: str) -> str:
             "go in lab/LAB.md (or lab/agents/)")
 
 
+def lab_methods_section(project: Path) -> str:
+    """For the agents: where the lab's own methods and their pages are ("" without any)."""
+    lab = labmethods.load(shipped_methods(), project)
+    if not lab:
+        return ""
+    rows = []
+    for name, spec in lab.items():
+        analyst = spec.get("subagent")
+        rows.append(f"| `{name}` | {spec.get('description', '')} | `lab/methods/{name}/README.md` "
+                    f"| `{spec['config']}` | {f'`lab/agents/{analyst}.md`' if analyst else 'none'} |")
+    return agents.readable_code_paths("\n\n## This lab's own methods (lab/methods.yaml)\n\n"
+            "Not part of labpipe's code and not in `docs/methods/`: the lab wrote them, in its "
+            "project. Read a method's page (design, settings, how to word its results) before "
+            "steering or explaining it, as for the methods above. Commands are the same "
+            "(`labpipe <method> analyze|summary|check`). Changing a lab method's code is a "
+            "code task with the user (`docs/ADDING_A_METHOD.md`).\n\n"
+            "| Method | What | Page | Default settings | Analyst role |\n|---|---|---|---|---|\n"
+            + "\n".join(rows) + "\n")
+
+
 def _with_additions(source: str, project: Path) -> bytes:
     text = agents.readable_code_paths((CODE_ROOT / source).read_text(encoding="utf-8"))
     try:
@@ -100,7 +121,8 @@ def _with_additions(source: str, project: Path) -> bytes:
             lab = ""         # only the template's heading: nothing written yet
     except OSError:
         lab = ""
-    section = f"\n\n{ADDITIONS}\n\n{lab or '(nothing yet)'}\n"
+    methods = lab_methods_section(project) if source == "AGENTS.md" else ""
+    section = f"{methods}\n\n{ADDITIONS}\n\n{lab or '(nothing yet)'}\n"
     return (_comment(_header(source), "md") + text.rstrip("\n") + section).encode("utf-8")
 
 

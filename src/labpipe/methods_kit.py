@@ -1,10 +1,14 @@
 """`labpipe methods new | check`: scaffold a new analysis method and check its contract.
 
-`new NAME --example FILE` creates, from src/labpipe/methods/template/:
-  src/labpipe/methods/NAME/  (analyze.py with METHOD set, __init__.py)
-  config/NAME.yaml, agents/NAME-analyst.md, tests/test_NAME.py,
-  docs/methods/NAME.md (design note, if missing) and a methods.yaml entry
-  (patterns from the example's extension). It never overwrites anything.
+`new NAME --example FILE` creates, from src/labpipe/methods/template/, and never overwrites:
+  in a project (the lab's own method, docs/ADDING_A_METHOD.md):
+    lab/methods/NAME/  (analyze.py with METHOD set, __init__.py, config.yaml, README.md = the
+    design note), lab/agents/NAME-analyst.md and an entry in lab/methods.yaml
+  in the labpipe repository (dev mode, a method for labpipe itself):
+    src/labpipe/methods/NAME/  (analyze.py with METHOD set, __init__.py),
+    config/NAME.yaml, agents/NAME-analyst.md, tests/test_NAME.py,
+    docs/methods/NAME.md (design note, if missing) and a methods.yaml entry
+  (patterns from the example's extension).
 
 `check NAME --example FILE` runs the method on the example (outputs under
 logs/method-check/, the example is only read) and verifies the contract that
@@ -22,10 +26,11 @@ import re
 from pathlib import Path
 from typing import Any
 
+from labpipe import labmethods, safety
 from labpipe.naming import measurement_id
 from labpipe.provenance import sha256_file, utc_now
 from labpipe.registry import classify, load_methods
-from labpipe.safety import CODE_ROOT, PROJECT_ROOT, atomic_write_text
+from labpipe.safety import CODE_ROOT, PROJECT_ROOT, atomic_write_text, is_dev
 
 TEMPLATE = CODE_ROOT / "src" / "labpipe" / "methods" / "template"
 NAME = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
@@ -42,70 +47,114 @@ def _fill(text: str, name: str, description: str, extension: str) -> str:
             .replace("{{extension}}", extension))
 
 
+def _entry(name: str, description: str, extension: str, agent: str | None, *, lab: bool) -> str:
+    package = f"labpipe_lab.{name}" if lab else f"labpipe.methods.{name}"
+    return (f"\n  {name}:\n"
+            f"    description: {json.dumps(description, ensure_ascii=False)}\n"
+            f'    patterns: ["**/*{extension}"]      # narrow this if other methods use {extension}\n'
+            f"    ignore: []\n"
+            f"    # recognise: {package}.analyze:recognise   # optional content check\n"
+            + (f"    subagent: {agent}\n" if agent else
+               "    subagent: null                     # analysed by code alone\n"
+               "    notes: false\n")
+            + f'    cli: "labpipe {name} analyze --entry {{entry_id}}"\n'
+            f"    module: {package}.analyze\n"
+            f"    config: {'lab/methods/' + name + '/config.yaml' if lab else 'config/' + name + '.yaml'}\n"
+            f"    outputs: [results.json, plot.png, plot.pdf, provenance.json, notes.md]\n")
+
+
+def _analyze_text(name: str, description: str, page: str, package: str) -> str:
+    return ((TEMPLATE / "analyze.py").read_text(encoding="utf-8")
+            .replace('METHOD = "template"', f'METHOD = "{name}"')
+            .replace('"labpipe.template.results/1"', f'"labpipe.{name}.results/1"')
+            .replace("labpipe.methods.template.analyze.run", f"{package}.analyze.run")
+            .replace('"""Template method: a minimal, complete example of the method contract.',
+                     f'"""{description}: method `{name}` (design: {page}).\n\n'
+                     "Scaffolded from the template; replace the reading and numerics sections.\n"
+                     "Original template text follows."))
+
+
 def new(name: str, example: Path, description: str, analyst: bool = True) -> dict[str, Any]:
-    if not NAME.match(name) or name in ("template", "methods"):
+    """In a project: the lab's own method in lab/. In the repository (dev mode): a shipped one."""
+    if not NAME.match(name) or name in ("template", "methods") or name in labmethods.RESERVED:
         raise MethodKitError(f"method name must be lower-case letters/digits/_ "
                              f"(e.g. sem, echem), not {name!r}")
+    if safety.NO_PROJECT:
+        raise MethodKitError(safety.NO_PROJECT_MESSAGE)
     if name in load_methods():
-        raise MethodKitError(f"{name} is already in methods.yaml")
+        raise MethodKitError(f"{name} is already in methods.yaml or lab/methods.yaml")
     extension = example.suffix.lower()
     if not extension:
         raise MethodKitError("the example file needs an extension (it becomes the pattern)")
-    package = CODE_ROOT / "src" / "labpipe" / "methods" / name
+    lab = not is_dev(PROJECT_ROOT)
     agent = f"{name}-analyst" if analyst else None
-    targets = {
-        package / "__init__.py": f'"""{description}"""\n',
-        package / "analyze.py": (TEMPLATE / "analyze.py").read_text(encoding="utf-8")
-            .replace('METHOD = "template"', f'METHOD = "{name}"')
-            .replace('"labpipe.template.results/1"', f'"labpipe.{name}.results/1"')
-            .replace("labpipe.methods.template.analyze.run", f"labpipe.methods.{name}.analyze.run")
-            .replace('"""Template method: a minimal, complete example of the method contract.',
-                     f'"""{description}: method `{name}` (design: docs/methods/{name}.md).\n\n'
-                     "Scaffolded from the template; replace the reading and numerics sections.\n"
-                     "Original template text follows."),
-        CODE_ROOT / "config" / f"{name}.yaml": (TEMPLATE / "config.example.yaml")
-            .read_text(encoding="utf-8").replace("labpipe.template.config/1",
-                                                 f"labpipe.{name}.config/1"),
-        CODE_ROOT / "tests" / f"test_{name}.py": _fill(
-            (TEMPLATE / "test_method.py.txt").read_text(encoding="utf-8"), name, description,
-            extension),
-    }
-    if agent:
-        targets[CODE_ROOT / "agents" / f"{agent}.md"] = _fill(
-            (TEMPLATE / "analyst.md").read_text(encoding="utf-8"), name, description, extension)
-    design = CODE_ROOT / "docs" / "methods" / f"{name}.md"
-    if not design.exists():
-        targets[design] = _fill((TEMPLATE / "design.md").read_text(encoding="utf-8"), name,
-                                description, extension)
-    existing = [p.relative_to(CODE_ROOT).as_posix() for p in targets if p.exists()]
+    base = PROJECT_ROOT if lab else CODE_ROOT
+    template = lambda file: (TEMPLATE / file).read_text(encoding="utf-8")  # noqa: E731
+    if lab:
+        folder = PROJECT_ROOT / "lab" / "methods" / name
+        page = f"lab/methods/{name}/README.md"
+        targets = {
+            folder / "__init__.py": f'"""{description}"""\n',
+            folder / "analyze.py": _analyze_text(name, description, page, f"labpipe_lab.{name}"),
+            folder / "config.yaml": template("config.example.yaml").replace(
+                "labpipe.template.config/1", f"labpipe.{name}.config/1").replace(
+                "Copy to config/<method>.yaml.", f"The defaults of {name}.").replace(
+                "(config/samples.yaml)", "(config/samples.yaml), or for all samples in "
+                f"config/lab.yaml → {name}"),
+            folder / "README.md": _fill(template("design.md"), name, description, extension)
+                .replace(f"`config/{name}.yaml`", f"`lab/methods/{name}/config.yaml`"),
+        }
+        if agent:
+            targets[PROJECT_ROOT / "lab" / "agents" / f"{agent}.md"] = _fill(
+                template("analyst.md"), name, description, extension).replace(
+                f"docs/methods/{name}.md", page)
+    else:
+        package = CODE_ROOT / "src" / "labpipe" / "methods" / name
+        page = f"docs/methods/{name}.md"
+        targets = {
+            package / "__init__.py": f'"""{description}"""\n',
+            package / "analyze.py": _analyze_text(name, description, page, f"labpipe.methods.{name}"),
+            CODE_ROOT / "config" / f"{name}.yaml": template("config.example.yaml").replace(
+                "labpipe.template.config/1", f"labpipe.{name}.config/1"),
+            CODE_ROOT / "tests" / f"test_{name}.py": _fill(template("test_method.py.txt"), name,
+                                                           description, extension),
+        }
+        if agent:
+            targets[CODE_ROOT / "agents" / f"{agent}.md"] = _fill(
+                template("analyst.md"), name, description, extension)
+        design = CODE_ROOT / "docs" / "methods" / f"{name}.md"
+        if not design.exists():
+            targets[design] = _fill(template("design.md"), name, description, extension)
+    existing = [p.relative_to(base).as_posix() for p in targets if p.exists()]
     if existing:
         raise MethodKitError(f"would overwrite {existing}; nothing created")
     for path, text in targets.items():
         atomic_write_text(path, text, pipeline=False)
-    entry = (f"\n  {name}:\n"
-             f"    description: {json.dumps(description, ensure_ascii=False)}\n"
-             f'    patterns: ["**/*{extension}"]      # narrow this if other methods use {extension}\n'
-             f"    ignore: []\n"
-             f"    # recognise: labpipe.methods.{name}.analyze:recognise   # optional content check\n"
-             + (f"    subagent: {agent}\n" if agent else
-                "    subagent: null                     # analysed by code alone\n"
-                "    notes: false\n")
-             + f'    cli: "labpipe {name} analyze --entry {{entry_id}}"\n'
-             f"    module: labpipe.methods.{name}.analyze\n"
-             f"    config: config/{name}.yaml\n"
-             f"    outputs: [results.json, plot.png, plot.pdf, provenance.json, notes.md]\n")
-    registry = CODE_ROOT / "methods.yaml"
-    atomic_write_text(registry, registry.read_text(encoding="utf-8").rstrip() + "\n" + entry,
-                      pipeline=False)
-    return {"created": [p.relative_to(CODE_ROOT).as_posix() for p in targets] + ["methods.yaml (entry)"],
-            "next": [f"agree the design with the user in docs/methods/{name}.md first",
-                     f"implement reading and numerics in src/labpipe/methods/{name}/analyze.py",
-                     f"put every tunable number in config/{name}.yaml",
-                     f"write the synthetic test in tests/test_{name}.py",
-                     *([f"adapt agents/{agent}.md (what to look at, what the notes say)"]
+    registry = base / ("lab/methods.yaml" if lab else "methods.yaml")
+    entry = _entry(name, description, extension, agent, lab=lab)
+    if registry.exists():
+        text = registry.read_text(encoding="utf-8").rstrip() + "\n"
+        if lab and "methods:" not in text:
+            text += "\nmethods:\n"
+    else:
+        text = ("# The lab's own methods (docs/ADDING_A_METHOD.md). Same entries as labpipe's "
+                "methods.yaml;\n# modules are labpipe_lab.<name>, the package lab/methods/<name>/.\n"
+                "schema: labpipe.methods/1\n\nmethods:\n")
+    atomic_write_text(registry, text + entry, pipeline=False)
+    where = "lab/" if lab else ""
+    return {"created": [p.relative_to(base).as_posix() for p in targets]
+            + [f"{'lab/' if lab else ''}methods.yaml (entry)"],
+            "mode": "project (the lab's own method)" if lab else "dev (a method of labpipe)",
+            "next": [f"agree the design with the user in {page} first",
+                     f"implement reading and numerics in "
+                     f"{'lab/methods/' + name if lab else 'src/labpipe/methods/' + name}/analyze.py",
+                     f"put every tunable number in "
+                     f"{'lab/methods/' + name + '/config.yaml' if lab else 'config/' + name + '.yaml'}",
+                     *([] if lab else [f"write the synthetic test in tests/test_{name}.py"]),
+                     *([f"adapt {where}agents/{agent}.md (what to look at, what the notes say)"]
                        if agent else []),
                      f"labpipe methods check {name} --example <file>  (until it passes)",
-                     "labpipe agents sync; labpipe scan"]}
+                     "labpipe project sync; labpipe scan" if lab else "labpipe agents sync; labpipe scan"]}
 
 
 def _check(results: list, name: str, ok: bool, detail: str = "") -> bool:
@@ -129,12 +178,14 @@ def check(name: str, example: Path, config: dict | None = None,
         return {"method": name, "ok": False, "checks": results}
     for key in ("patterns", "module", "config"):
         _check(results, f"registry: {key}", spec.get(key), str(spec.get(key)))
-    _check(results, "settings file", (CODE_ROOT / str(spec.get("config"))).exists(),
-           str(spec.get("config")))
+    lab = bool(spec.get("lab"))
+    _check(results, "settings file", spec.get("config") and
+           labmethods.defaults_file(spec).exists(), str(spec.get("config")))
     if spec.get("subagent"):
-        role = CODE_ROOT / "agents" / f"{spec['subagent']}.md"
+        base = PROJECT_ROOT if lab else CODE_ROOT
+        role = base / ("lab/agents" if lab else "agents") / f"{spec['subagent']}.md"
         _check(results, "analyst role file", role.exists() and "labpipe notes verify" in
-               role.read_text(encoding="utf-8"), f"{role.relative_to(CODE_ROOT).as_posix()} "
+               role.read_text(encoding="utf-8"), f"{role.relative_to(base).as_posix()} "
                "must exist and keep the `labpipe notes verify` step")
     else:
         _check(results, "no analyst: notes switched off", spec.get("notes") is False,

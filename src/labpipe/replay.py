@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from labpipe import labmethods
 from labpipe.provenance import git_info, sha256_file, utc_now
 from labpipe.safety import CODE_ROOT, PROJECT_ROOT
 
@@ -76,6 +77,7 @@ def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[
 
     stamp = utc_now().replace(":", "").replace("-", "")
     work = PROJECT_ROOT / config["logs_dir"] / "replay" / stamp
+    labmethods.register()           # a lab method's code is labpipe_lab.<name>… in the project
     module = importlib.import_module(record["code"]["labpipe_entry"].rsplit(".", 1)[0])
     # The resolved settings are taken from provenance itself: the settings files
     # may have changed since, the record does not.

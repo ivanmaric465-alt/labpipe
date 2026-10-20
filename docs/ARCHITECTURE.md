@@ -63,7 +63,8 @@ project is one lab folder and is never written by an update.
   `*.example.yaml`; `methods.yaml`; `references/`; `agents/`; `templates/`; `docs/`; the sources
   of `AGENTS.md`, `CLAUDE.md`, `.claude/*.json`, `.codex/`, `.agents/`; `hooks/guard.py`; `container/`.
 - **Read from the project**: `labpipe.yaml`, `config/local.yaml`, `lab.yaml`, `samples.yaml`,
-  `sample_ids.yaml`, `ignore.yaml`, `config/measurements/`, `context/`, `lab/`; written: `analysis/`,
+  `sample_ids.yaml`, `ignore.yaml`, `config/measurements/`, `context/`, `lab/` (also the lab's own
+  methods, which are code: `lab/methods.yaml`, `lab/methods/<name>/`); written: `analysis/`,
   `logs/`, `manifest.json`.
 
 ## Install: the host and the container
@@ -123,6 +124,8 @@ config/                 local.yaml (this machine), lab.yaml, samples.yaml, sampl
 context/                the user's project context and documents
 lab/LAB.md              the lab's conventions for all agents
 lab/agents/<role>.md    appended to that role; <new>.md with frontmatter = an extra role
+lab/methods.yaml        the lab's own methods: same entries as `methods.yaml`
+lab/methods/<name>/     one lab method: analyze.py, summary.py, config.yaml (defaults), README.md (its page)
 lab/references/xrd/     the lab's own XRD reference phases (`labpipe xrd refs add`)
 analysis/  manifest.json  logs/       results and state
 AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's additions" (LAB.md)
@@ -151,7 +154,8 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | Entry | `cli.py` | argparse commands; forwards host commands into the container in container mode |
 | State | `manifest.py` | load, save and lock `manifest.json`; status changes |
 | | `scanner.py` | raw roots → manifest; settle time, hashes, duplicates, stale (analysis version or settings), plot out of date (plot version or settings), unrecognised files |
-| | `registry.py` | `methods.yaml`: patterns, `recognise:` hooks, ignore rules |
+| | `registry.py` | `methods.yaml` and the lab's `lab/methods.yaml` (shipped first): patterns, `recognise:` hooks, ignore rules |
+| | `labmethods.py` | the lab's own methods: reads and checks `lab/methods.yaml`, makes `labpipe_lab.<name>` importable |
 | | `naming.py` | sample ID and measurement ID from file names |
 | | `inventory.py` | what is recognised in the data folder (read-only) |
 | Analysis | `pipeline.py` | run a method on an entry; staging, `_superseded/`, `_failed/`; replot; review queue |
@@ -177,14 +181,34 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | | `wizard.py` | `labpipe setup` (asks in the terminal) |
 | | `installer.py` | `labpipe setup --first`: the installer's questions (tools present, agent tool, models, login, first project, start) |
 | | `roview.py` | commands for a read-only view (native mode) |
-| | `methods_kit.py` | `methods new | check`: scaffold and check a method |
+| | `methods_kit.py` | `methods new | check`: scaffold and check a method (in a project: into `lab/`) |
 | Support | `safety.py` | code and project roots, install and config folders, dev mode, write checks, atomic writes, container path mapping |
 | | `locking.py` | cross-platform file lock |
 
 ## The method contract
 
-A method is a package in `src/labpipe/methods/<m>/`, registered in `methods.yaml`.
-Details: `docs/ADDING_A_METHOD.md`, template: `methods/template/`.
+A method is a package, registered in a methods file. Two homes, one contract:
+
+| | Shipped (labpipe's own) | The lab's own |
+|---|---|---|
+| package | `src/labpipe/methods/<m>/` (import `labpipe.methods.<m>…`) | `lab/methods/<m>/` in the project (import `labpipe_lab.<m>…`) |
+| registry | `methods.yaml` | `lab/methods.yaml` |
+| defaults | `config/<m>.yaml` | `lab/methods/<m>/config.yaml` (`config:` in the entry) |
+| page | `docs/methods/<m>.md` | `lab/methods/<m>/README.md` |
+| analyst role | `agents/<m>-analyst.md` | `lab/agents/<m>-analyst.md` |
+
+- **Import prefix**: `labpipe_lab` is a package that exists only at run time (`labmethods.register()`):
+  its path is the project's `lab/methods/`. Nothing is installed or copied, and the prefix cannot
+  clash with the standard library or `labpipe`. In `lab/methods.yaml`, `module:` must be
+  `labpipe_lab.<name>…`; `summary:`, `gallery:`, `recognise:` may also name shipped modules.
+- **Registry**: `load_methods()` is the shipped methods, then the lab's. A lab method may not
+  reuse a shipped name or a command's name (an error names both files), and it never takes a
+  file from a shipped method: the first method whose pattern matches wins, shipped first. A broken
+  `lab/methods.yaml` is reported by `doctor`, `scan` and the other commands as an error naming the
+  file, not a traceback.
+- **Versions and replay**: the analysis version follows `labpipe.*` and `labpipe_lab.*` imports (the
+  lab's source is read from the project); `provenance.json` records `labpipe_lab.<m>.analyze.run`.
+- Details: `docs/ADDING_A_METHOD.md`, template: `methods/template/`.
 
 - **`analyze.run(input_path, out_dir, settings, context)`** writes:
   - `results.json`: schema, status, units, checks (`info` / `warning` / `review`);
@@ -204,6 +228,8 @@ Details: `docs/ADDING_A_METHOD.md`, template: `methods/template/`.
     out of date" instead of stale) and `analysis_data` (data files the numbers depend on).
 - **Docs**: `docs/methods/<m>.md` covers design, settings, interpretation, quantities and
   conventions. An agent role goes in `agents/<m>-analyst.md`, unless the method is code only.
+  (A lab method: its page and role are in the table above; `project sync` lists them in the
+  generated `AGENTS.md`, "This lab's own methods".)
 
 ## Versions: what marks an analysis out of date
 
@@ -257,6 +283,9 @@ One container per project.
     listed under "Read from the code", the default settings but never the lab's files, and the
     commit of the code as `.labpipe-code.json`, because the image has no `.git`);
   - the image tag is the hash of those files.
+  - the lab's own methods are not in the image: they are in the mounted project, and run with the
+    image's packages (`container/requirements.lock`: numpy, scipy, matplotlib, PyYAML, Pillow, …).
+    A lab method needing another package needs the lab's own image (not supported yet).
 - **Run**:
   - the project is mounted read-write at `/project` (the working folder, `LABPIPE_PROJECT`), the
     data folders read-only at `/data/<id>`;
@@ -268,7 +297,8 @@ One container per project.
   the listed hosts. The entrypoint drops privileges.
 - **Host side**: `labpipe` on the host, anywhere inside a project, forwards commands into that
   project's container (`exec`, the working folder mapped under `/project`). Local-only
-  commands: container, shell, setup, init, doctor, agents, project, guard, methods, readonly-view,
+  commands: container, shell, setup, init, doctor, agents, project, guard, methods (`new`,
+  `versions`; `methods check` runs an analysis, so it goes into the container), readonly-view,
   and method subcommands listed in `methods.yaml` → `run_on_host` (`xrd refs`: building
   references needs the optional pymatgen, which the image does not have).
 

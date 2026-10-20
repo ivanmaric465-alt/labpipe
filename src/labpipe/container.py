@@ -45,6 +45,9 @@ SAFE_ID = re.compile(r"[A-Za-z0-9_.-]+")
 # Commands that always run on the host (the guard must be fast; the rest are host tasks).
 LOCAL_COMMANDS = {"guard", "container", "shell", "setup", "init", "doctor", "agents",
                   "readonly-view", "methods", "project"}
+# Of `methods`, only `new` and `versions` stay on the host (they write or read files); `check`
+# runs an analysis (numpy, scipy, matplotlib are in the image only) and goes into the container.
+FORWARDED_SUBCOMMANDS = {"methods": {"check"}}
 # Only the entrypoint (root) uses them, to set up the firewall and proxy; it then drops
 # every one (SETPCAP lets it empty the bounding set) before running anything as the user.
 CAPABILITIES = ("NET_ADMIN", "SETUID", "SETGID", "CHOWN", "DAC_OVERRIDE", "FOWNER", "KILL",
@@ -385,7 +388,10 @@ def forward_argv(argv: list[str], cwd: Path | str, repo_root: Path | str, engine
     xrd refs, which needs the optional pymatgen the image does not have)."""
     words = [a for a in argv if not a.startswith("-")]
     command = words[0] if words else None
-    if command is None or command in LOCAL_COMMANDS or "--help" in argv or "-h" in argv:
+    if command is None or "--help" in argv or "-h" in argv:
+        return None
+    if command in LOCAL_COMMANDS and not (
+            words[1:2] and words[1] in FORWARDED_SUBCOMMANDS.get(command, ())):
         return None
     if words[1:2] and words[1] in (on_host or {}).get(command, []):
         return None
