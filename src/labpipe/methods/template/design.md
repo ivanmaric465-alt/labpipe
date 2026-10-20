@@ -33,6 +33,9 @@ Status: DRAFT, not yet agreed with the user. No code beyond the scaffold until i
 ## Quantities
 - Named numbers worth comparing across samples, for `labpipe dataset` (`quantities(results)` in the summary module; each with value, σ, unit, key path in `results.json`), or "none":
 
+## Report
+- Optional layout hooks in the summary module (`table`, `overview_tables`, `CAPTION`; `docs/ADDING_A_METHOD.md`), or "none" (the report shows the `summarize` lines):
+
 ## Interpretation
 - What may be named in notes, and how it is worded:
 

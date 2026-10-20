@@ -185,9 +185,9 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | | `versions.py` | analysis version and plot version per method (hash of the source), `labpipe methods versions` |
 | | `replay.py` | regenerate from `provenance.json` and compare hashes |
 | | `methods/<m>/analyze.py` | `run(...)`: the method contract (below) |
-| | `methods/<m>/summary.py` | `summarize(results)` for report and agents; `quantities(results)` for the dataset |
+| | `methods/<m>/summary.py` | `summarize(results)` for report and agents; `quantities(results)` for the dataset; optional, layout only: `table(results)` (card), `overview_tables(items)` (overview), `CAPTION` (figure caption); outside the analysis versions |
 | | `plotting/acs.py` | style from settings, figure saving, margins |
-| Results for people | `report.py` | HTML report: layouts, cards, galleries, the postdoc section, extra reports, the generated "How to read this report" box (`_how_to_read`, from the report settings; outside every analysis and plot version) |
+| Results for people | `report.py` | HTML report: layouts, cards, galleries, the postdoc section, extra reports, the generated "How to read this report" box (`_how_to_read`, from the report settings; outside every analysis and plot version), the sample order (`sample_sorter`, the `sample_order` setting, also used by `dataset.py`), table specs (`_spec_table`: the EDS and XRD overview tables and card tables, bars and n.d./grey/– states), the navigation bar, folding, captions and the print style |
 | | `dataset.py` | quantities of all samples; `compare` (differences, trends) |
 | | `notes.py` | `notes verify` (numbers vs results; `CHECKS_VERSION`, `notes_check` in the manifest), `todo`, `retire` |
 | | `postdoc.py` | postdoc runs: start, verify (`CHECKS_VERSION`), freshness, list, headless run |
@@ -474,6 +474,7 @@ One container per project.
   `labpipe update`, with the fake origin and the fake engine described under Updates.
 - `tests/test_checks_versions.py`: the rule fingerprints and the versions of the notes checks
   (the postdoc's and the report's side are in `tests/test_postdoc.py` and `tests/test_report.py`).
+- `tests/test_report.py`: layouts and settings, sample order, the EDS and XRD tables and the card tables (column order, n.d./grey/–, nominal row, fallbacks), navigation, folding, print style, captions, the "How to read" box.
 - `tests/test_encoding.py`: every text read and write names UTF-8 (Windows would otherwise use
   another code page).
 - `tests/test_docs.py` checks the docs against the code where it can be done mechanically:

@@ -60,6 +60,9 @@ labpipe xrd refs list | build
 - **Look again** also when the red fit leaves the data away from peaks (background too high or low: `background.anchor_ranges_deg`), or a clear peak has no red line or tick near it.
 - **Plot settings** (`plot:`, see `docs/settings/plots.md`; they redraw only): `y_scale: sqrt | log` makes small peaks visible (the axis label says so), `residual_panel: false` and `phase_ticks: false` remove those panels, `zoom_deg: [lo, hi]` adds `zoom.png` (same panels, cut to that window; the title says "zoom"), `width_in`, `height_in`.
 
+## Tables in the report
+- The overview has one row per measurement and fcc phase: lattice parameter a (Å) and its ± σ in separate cells so the numbers line up ("no σ" when the fit gave none), the closest reference and Δa (%), the Scherrer size of the first reflection ± σ (nm; a lower bound until an instrument calibration exists), the number of reflections (tent. = tentative) and Rwp (%). The card shows the same as quantity, value, ± σ. Layout only: `table` and `overview_tables` in `summary.py`.
+
 ## Conventions
 - **Units**: 2θ in degrees; d and lattice parameters in Å; intensity in counts (as recorded); peak areas in counts·degree; crystallite size in nm; strain dimensionless (also given in %).
 - **Plot**: full measured range; axis labels `2θ (°)` and `Intensity (counts)`, or `Intensity (10ⁿ counts)` when scaled; fit in red, background dashed grey, background + broad components dotted blue, one tick row per phase, residual panel.

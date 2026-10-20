@@ -12,6 +12,7 @@ What changed in each release, in four fixed parts. How it is kept: [docs/RELEASI
 
 ### New
 
+- The report reads down columns: the EDS overview has one row per measurement and one column per element (metals, then non-metals, by atomic number) in two tables (metals at%, all elements wt%) with faint bars, n.d./grey/– marks and a grey nominal row; the XRD overview has a ± σ in its own cell, the closest reference and Δa; the cards' key results are small tables. A slim sticky navigation bar, sticky table headers, folding samples (fold all), captions under every figure (also the alt text) and a print style (one card per page). New setting `report.sample_order: name | samples | property:<name>` orders the samples everywhere in the report and in `labpipe dataset`.
 - The analysts and the postdoc word their claims by `docs/WRITING.md` (adapted from K-Dense's scientific-writing skill): observation apart from interpretation, the verb matching the evidence, no cause from a trend, zero vs missing vs below detection, concrete limitations, the alternative named.
 
 ### Needs your action

@@ -1,6 +1,6 @@
 # Report
 
-`analysis/report.html` is the page people read: the postdoc's answer, overview tables per method, and one card per measurement (plot, key numbers, checks, notes). It is rebuilt after every pass and by `labpipe report`.
+`analysis/report.html` is the page people read: the postdoc's answer, overview tables per method, and one card per measurement (plot, key numbers, checks, notes). It is one self-contained HTML file, rebuilt after every pass and by `labpipe report`.
 
 ## How to read this report
 
@@ -13,6 +13,7 @@ Defaults in `config/report.yaml`; yours in `config/lab.yaml`:
 ```yaml
 report:
   group_by: sample             # sample | method | none
+  sample_order: name           # name | samples | property:<name>
   sections: [postdoc, overview, measurements]   # order; leave one out to hide it
   how_to_read: true            # the collapsed "How to read this report" box at the top
   cards: full                  # full | compact (first figure, key numbers, checks)
@@ -25,11 +26,36 @@ report:
 - `group_by: sample`: each sample with its measurements and image gallery (default).
 - `group_by: method`: one part per method, cards ordered by sample.
 - `group_by: none`: one list, ordered by sample, then method.
+- `sample_order`: the order of the samples in the cards, tables, galleries, navigation and in `labpipe dataset`.
+  - `name` (default): natural order by name, S-2 before S-10.
+  - `samples`: the order in `config/samples.yaml`; samples not listed there come after, by name.
+  - `property:<name>`: by the number `samples.<id>.properties.<name>` in `config/samples.yaml` (e.g. `property:loading_wt`, smallest first); samples without it come last, by name. Anything else is refused with a message.
+  An extra report can have its own `sample_order`.
 - Each extra report starts from your main report settings and changes only what it lists. The notifications page links all of them.
 
 ```bash
 labpipe report      # rebuild now; prints the reports written
 ```
+
+## The tables
+
+- **EDS overview** (two tables): one row per measurement, one column per element in a fixed order, so a column reads down: metals by atomic number, then non-metals by atomic number (an element not in the table of symbols goes last). The first table is the metals in at% (metal basis, sum 100), the second all elements in wt% as recorded. Units are in the header; numbers are right-aligned; a faint bar in each cell shows the size (at%: out of 100; wt%: relative to the largest of the column).
+  - **n.d.**: INCA reported a negative value; taken as 0 in the metal basis (a `review` check). Hover for the recorded value.
+  - **grey number**: near the detection limit (the `low_concentration` check lists it).
+  - **–**: the element is not in this measurement.
+  - **nominal** (grey, italic): a sample with a nominal composition gets this row right under each of its measurements in the metals table.
+- **XRD overview**: one row per measurement and fcc phase: lattice parameter a, ± σ in its own cell (so the numbers line up), the closest reference and Δa (a candidate, never an identification), Scherrer size ± σ (a lower bound until an instrument calibration exists), the number of reflections and Rwp. "no σ" says that the fit gave none.
+- **Cards**: the key results are a small table where the method offers one (EDS: per element, metal basis, as recorded, nominal and the difference; XRD: quantity, value, ± σ); other methods keep their lines.
+- Results from an older analysis that lack some details still render: EDS without `taken_as_zero` or nominal, or a result a table cannot take, goes into a plain table under the others.
+- Each table's notes under it explain what is in it. The box "How to read this report" lists the marks that are in this report.
+
+## The look
+
+- A slim bar stays at the top while you scroll: jump links to the postdoc, the overview (and each method's table) and each sample, only for the sections that are on. Table headers stay in view inside tall tables.
+- Each sample (or method, with `group_by: method`) folds; open by default. "Fold all" / "Unfold all" in the bar. A link to a card in a closed block opens it.
+- Every figure has a caption under it (what it shows; for EDS and XRD what the bars and ± are), and the same text is the image's alt text. A method's own wording is `CAPTION` in its summary module.
+- Printing (browser, "save as PDF"): no bar or fold buttons, one card per page, everything open.
+- Plain style: the same fonts and colours as before; the figure style is `config/plots.yaml`, unchanged. The page has a little plain JavaScript (figures one at a time, fold all, print) and no framework.
 
 ## You say → setting
 
@@ -37,6 +63,8 @@ labpipe report      # rebuild now; prints the reports written
 |---|---|
 | "I want to see all XRD together" | `group_by: method` |
 | "just one long list" | `group_by: none` |
+| "order the samples by loading" | `sample_order: property:loading_wt` (with `properties: {loading_wt: 20}` per sample in `config/samples.yaml`) |
+| "keep the samples in my own order" | `sample_order: samples` (the order in `config/samples.yaml`) |
 | "hide the how-to-read box" | `how_to_read: false` |
 | "hide the postdoc's part" | `sections: [overview, measurements]` |
 | "too long, only plots and numbers" | `cards: compact` |

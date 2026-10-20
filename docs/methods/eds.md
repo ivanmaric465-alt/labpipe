@@ -50,6 +50,9 @@ Status: APPROVED 2026-10-17 with changes (below). Implemented.
 - **Good vs look again**: bars close to nominal and no review checks. Look again when a metal is labelled `n.d.` (`negative_value`), when a bar is tiny (near the detection limit, `low_concentration`), when non-metals dominate the spectrum (`support_dominates`), or when the images belong to another report (`linked_images_other_name`). There are no error bars: the export has no uncertainties.
 - **Plot settings**: `plot.panels: [image, spectrum, composition]` chooses and orders the panels, `plot.width_in` (see `docs/settings/plots.md`).
 
+## Tables in the report
+- The overview has two tables, one row per measurement and one column per element (metals by atomic number, then non-metals): metals in at% (metal basis) and all elements in wt% as recorded, with a faint bar in each cell. **n.d.** = reported negative (taken as 0; hover for the recorded value), a **grey** number = near the detection limit, **–** = element not in that measurement, a grey **nominal** row under a measurement = the sample's nominal composition. The card shows the same per element, with measured − nominal. Layout only: `table` and `overview_tables` in `summary.py`; the numbers are `composition`, `metal_basis` and `nominal_comparison` in `results.json`.
+
 ## Settings (`config/eds.yaml`)
 
 | User says | Setting |
