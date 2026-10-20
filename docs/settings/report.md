@@ -2,6 +2,10 @@
 
 `analysis/report.html` is the page people read: the postdoc's answer, overview tables per method, and one card per measurement (plot, key numbers, checks, notes). It is rebuilt after every pass and by `labpipe report`.
 
+## How to read this report
+
+At the top is a collapsed box, "How to read this report", for people who only see the report: what the cards, the status flags (`ok`, `N to check`, `stale`), "Check before using", the notes and the postdoc's part mean, and that every number comes from `results.json` (with `provenance.json`, replayable). It is generated from these settings, so it describes only what this report shows (layout, sections, card size; stale analyses, galleries and the waiting line only when present). `how_to_read: false` removes it, in the main report or in one `extra` report.
+
 ## Settings
 
 Defaults in `config/report.yaml`; yours in `config/lab.yaml`:
@@ -10,6 +14,7 @@ Defaults in `config/report.yaml`; yours in `config/lab.yaml`:
 report:
   group_by: sample             # sample | method | none
   sections: [postdoc, overview, measurements]   # order; leave one out to hide it
+  how_to_read: true            # the collapsed "How to read this report" box at the top
   cards: full                  # full | compact (first figure, key numbers, checks)
   methods: all                 # or [xrd, eds]
   samples: all                 # or IDs / patterns, e.g. ["S-1*"]
@@ -32,6 +37,7 @@ labpipe report      # rebuild now; prints the reports written
 |---|---|
 | "I want to see all XRD together" | `group_by: method` |
 | "just one long list" | `group_by: none` |
+| "hide the how-to-read box" | `how_to_read: false` |
 | "hide the postdoc's part" | `sections: [overview, measurements]` |
 | "too long, only plots and numbers" | `cards: compact` |
 | "a separate page for the S-1x series" | `extra: {s1x: {samples: ["S-1*"]}}` |

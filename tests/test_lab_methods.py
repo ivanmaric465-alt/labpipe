@@ -64,7 +64,13 @@ def test_methods_new_in_a_project_writes_only_into_lab(tmp_path):
 
 def test_a_lab_method_scans_analyses_reports_versions_and_replays(tmp_path):
     project, raw, env, example, _ = _scaffold(tmp_path)
-    assert _labpipe(env, "methods", "check", "demo", "--example", str(example))["ok"]
+    checked = _labpipe(env, "methods", "check", "demo", "--example", str(example))
+    assert checked["ok"] and "Reading the plot" in checked["warnings"][0]   # warns, does not fail
+    page = project / "lab/methods/demo/README.md"
+    page.write_text(page.read_text(encoding="utf-8").replace(
+        "## Reading the plot\n", "## Reading the plot\n- x is time (s), y the signal (V).\n"),
+        encoding="utf-8")
+    assert "warnings" not in _labpipe(env, "methods", "check", "demo", "--example", str(example))
     assert (project / "logs" / "method-check").is_dir()
     assert _labpipe(env, "doctor")["checks"]            # reads fine with a lab method
     _labpipe(env, "scan")
@@ -232,3 +238,15 @@ def test_project_sync_tells_agents_where_the_lab_methods_are(tmp_path):
     assert (folder / ".claude" / "agents" / "demo-analyst.md").is_file()   # the analyst role
     supervisor = (folder / ".claude" / "agents" / "supervisor.md").read_text(encoding="utf-8")
     assert "demo-analyst" in supervisor
+
+
+def test_reading_the_plot_must_have_bullets(tmp_path):
+    from labpipe.methods_kit import reading_the_plot_missing
+    page = tmp_path / "m.md"
+    page.write_text("# m\n\n## Input\n- x\n", encoding="utf-8")
+    assert "no" in reading_the_plot_missing(page)
+    page.write_text("## Reading the plot\n<!-- fill in -->\n-\n\n## Settings\n- a\n", encoding="utf-8")
+    assert "no bullets" in reading_the_plot_missing(page)
+    page.write_text("## Reading the plot\n- x is 2θ\n\n## Settings\n", encoding="utf-8")
+    assert reading_the_plot_missing(page) is None
+    assert reading_the_plot_missing(tmp_path / "gone.md")

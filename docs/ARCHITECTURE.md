@@ -179,7 +179,7 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | | `methods/<m>/analyze.py` | `run(...)`: the method contract (below) |
 | | `methods/<m>/summary.py` | `summarize(results)` for report and agents; `quantities(results)` for the dataset |
 | | `plotting/acs.py` | style from settings, figure saving, margins |
-| Results for people | `report.py` | HTML report: layouts, cards, galleries, the postdoc section, extra reports |
+| Results for people | `report.py` | HTML report: layouts, cards, galleries, the postdoc section, extra reports, the generated "How to read this report" box (`_how_to_read`, from the report settings; outside every analysis and plot version) |
 | | `dataset.py` | quantities of all samples; `compare` (differences, trends) |
 | | `notes.py` | `notes verify` (numbers vs results; `CHECKS_VERSION`, `notes_check` in the manifest), `todo`, `retire` |
 | | `postdoc.py` | postdoc runs: start, verify (`CHECKS_VERSION`), freshness, list, headless run |
@@ -468,4 +468,5 @@ One container per project.
   another code page).
 - `tests/test_docs.py` checks the docs against the code where it can be done mechanically:
   every command documented, this module map complete, links resolve, settings keys and method
-  plot keys on their pages, every agent role in `AGENTS.md`.
+  plot keys on their pages, every agent role in `AGENTS.md`, a "Reading the plot" section
+  (3-5 bullets) on every shipped method page.

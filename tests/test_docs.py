@@ -111,3 +111,12 @@ def test_every_agent_role_is_in_agents_md():
         role = path.stem
         named = role in agents_md or (role.endswith("-analyst") and "<method>-analyst" in agents_md)
         assert named, f"AGENTS.md → Agents does not mention the role {role}"
+
+
+@pytest.mark.parametrize("method", sorted(m for m, s in load_methods().items() if not s.get("lab")))
+def test_every_shipped_method_page_has_reading_the_plot(method):
+    text = re.sub(r"<!--.*?-->", "", _text(f"docs/methods/{method}.md"), flags=re.S)
+    section = re.search(r"^## Reading the plot\s*\n(.*?)(?=^## |\Z)", text, re.M | re.S)
+    assert section, f"docs/methods/{method}.md has no 'Reading the plot' section"
+    bullets = re.findall(r"^- +\S", section.group(1), re.M)
+    assert 3 <= len(bullets) <= 5, f"'Reading the plot' of {method} has {len(bullets)} bullets (3-5)"

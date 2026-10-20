@@ -25,6 +25,7 @@ None.
 - First conversation: after setup the agent shows you around with your own data (`docs/ONBOARDING.md`: your files, each method's setup questions, a first result explained, a short tour; any step can be skipped, "tour" repeats it). `labpipe onboarding` keeps the record; `labpipe doctor` shows `onboarding` as a warning while steps remain.
 - `labpipe doctor` says when a project was set up with another release than the installed one (`project_release`).
 - `labpipe replay` needs the same analysis and plot version, not the same commit.
+- Every method page has a "Reading the plot" section (what each line, panel and colour is, good versus look again, which plot settings change it), and so does the template for your own methods (`labpipe methods check` warns while it is missing). The report starts with a collapsed "How to read this report" box, generated from the report settings (`how_to_read: false` hides it).
 - XRD quantities use a generic fcc name in every sample, with the closest reference as "possibly X"; no AI cost limit unless you set one.
 
 ### Needs your action

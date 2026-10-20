@@ -79,6 +79,9 @@ font-size:.85rem;color:var(--mut)}.nav button{width:2.2rem;height:2.2rem;border-
 border:1px solid var(--line);background:var(--card);color:var(--fg);font-size:1.1rem;cursor:pointer}
 .nav button:disabled{opacity:.3;cursor:default}
 @media print{.track{display:block;overflow:visible}.nav{display:none}}
+details.howto{background:var(--card);border:1px solid var(--line);border-radius:10px;
+padding:.55rem 1rem;margin:0 0 1rem;font-size:.9rem}details.howto summary{cursor:pointer;
+font-weight:600}details.howto ul{margin:.5rem 0 .2rem;padding-left:1.1rem}details.howto li{margin:.25rem 0}
 .postdoc{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-top:22px;
 padding:18px 20px}.postdoc h2{margin:0 0 .2rem;font-size:1.25rem}.postdoc .notes{font-size:.95rem}
 .plain{font-size:.97rem}details{margin-top:1rem}summary{cursor:pointer;color:var(--mut);font-size:.85rem}.notes{font-size:.88rem}.notes h4{margin:.8rem 0 .2rem}.warnbox{border-left:3px solid var(--warn);padding:.2rem .7rem;margin:.6rem 0}
@@ -414,6 +417,8 @@ def _check_values(settings: dict, where: str, known_methods: set[str]) -> None:
     def fail(message: str):
         raise settings_mod.SettingsError(f"{where}: {message}")
 
+    if not isinstance(settings["how_to_read"], bool):
+        fail(f"how_to_read must be true or false, not {settings['how_to_read']!r}")
     for key, allowed in (("group_by", GROUPS), ("cards", CARDS)):
         if settings[key] not in allowed:
             fail(f"{key} must be one of {', '.join(allowed)}, not {settings[key]!r}")
@@ -477,6 +482,66 @@ def report_settings(methods: dict | None = None) -> dict[str, dict]:
 def _wanted(sample: str, method: str, settings: dict) -> bool:
     return (settings["methods"] == "all" or method in settings["methods"]) and (
         settings["samples"] == "all" or any(fnmatchcase(sample, p) for p in settings["samples"]))
+
+
+def _how_to_read(settings: dict, records: list[dict], banner: str) -> str:
+    """The collapsed "How to read this report" box: only what this report shows, from its
+    settings (layout, sections, card size) and from what it holds (stale analyses, galleries,
+    several figures per card). `how_to_read: false` leaves it out."""
+    sections, compact = settings["sections"], settings["cards"] == "compact"
+    cards = "measurements" in sections
+    layout = {"sample": "grouped by sample, each sample with its measurements",
+              "method": "grouped by method, cards ordered by sample",
+              "none": "one list, ordered by sample, then method"}[settings["group_by"]]
+    bullets = []
+    if cards:
+        bullets.append(
+            f"<b>Cards</b>: one per measurement, {layout}" + (
+                "; a gallery of images per sample replaces the cards of imaging methods"
+                if any(r["gallery"] for r in records) else "") + ". "
+            + ("Compact cards show the figure, the key numbers and what to check; the notes "
+               "are left out." if compact else
+               "Each card has the figure, the key numbers, what to check, the notes and where "
+               "the files are."))
+    if "overview" in sections:
+        stale = any(r["stale"] for r in records)
+        bullets.append(
+            "<b>Overview tables</b>: one row per measurement. The last column says "
+            "<span class=\"flag o\">ok</span> (nothing to check) or "
+            "<span class=\"flag r\">N to check</span> (N points under "
+            "&ldquo;Check before using&rdquo;)"
+            + (", and <span class=flag>stale</span> when the calculation or settings changed "
+               "since the analysis, so the numbers are from an older version until it is redone"
+               if stale else "") + ".")
+    if cards:
+        bullets.append("<b>Check before using</b>: points the analysis itself flagged for a "
+                       "human to look at; read them before using a number."
+                       + ("" if compact else " <b>Worth knowing</b> lists lesser remarks."))
+    if cards and not compact:
+        bullets.append(
+            "<b>In plain words</b>: the notes of an AI analyst. They are checked by code "
+            "(<code>labpipe notes verify</code>): numbers must match the results. A warning box "
+            "means they failed that check; &ldquo;checked with the rules of labpipe X&rdquo; means "
+            "they passed the checks of that older release.")
+    if cards and (any(r["gallery"] or r["figures"] for r in records)):
+        bullets.append("<b>Figures</b>: where a card has several, they are shown one at a time "
+                       "(arrows, keys or side scrolling).")
+    if "postdoc" in sections:
+        bullets.append("<b>The postdoc's analysis</b> (top): the latest answer that passed its "
+                       "checks, across measurements. It says when it is out of date.")
+    if banner:
+        bullets.append("<b>Line under the title</b>: also counts what is not in the report yet "
+                       "(waiting, failed, needing a decision, not recognised); the list is in "
+                       "<code>logs/review_queue.md</code>.")
+    bullets.append("<b>Where numbers come from</b>: only from each measurement's "
+                   "<code>results.json</code> (next to its plot, with <code>provenance.json</code>, "
+                   "which records the raw file, settings and code); "
+                   "<code>labpipe replay</code> regenerates them from that record. Nothing here is "
+                   "calculated by AI.")
+    return ("<details class=howto><summary>How to read this report</summary><ul>"
+            + "".join(f"<li>{b}</li>" for b in bullets)
+            + "</ul><p class=know>Hide this box: <code>how_to_read: false</code> under "
+              "<code>report</code> in <code>config/lab.yaml</code>.</p></details>")
 
 
 def _filter_note(settings: dict) -> str:
@@ -554,6 +619,7 @@ def _render(config: dict, settings: dict, name: str | None, entries: list[dict],
             f"<h1>{title}</h1><p class=sub>{count} analysed measurement(s)"
             + (f" · {html.escape(note)}" if note else "")
             + f" · generated {utc_now()} · code {html.escape(code_version())}{banner}</p>"
+            + (_how_to_read(settings, shown, banner) if settings["how_to_read"] else "")
             + "".join(parts[s]() for s in settings["sections"])
             + f"</main><script>{SCRIPT}</script>")
 
@@ -588,6 +654,7 @@ def build(config: dict) -> dict[str, Any]:
         checked = verify_entry(config, entry["entry_id"]) if notes_text is not None else {}
         card, compact = _card(entry, results, summary, notes_text,
                               checked["ok"] if checked else None, checked.get("checked_with"))
+        figures = len(results.get("figures") or [])
         n_checks = len(summary.get("check_before_using") or [])
         flag = (f'<span class="flag r">{n_checks} to check</span>' if n_checks
                 else '<span class="flag o">ok</span>')
@@ -597,12 +664,14 @@ def build(config: dict) -> dict[str, Any]:
         row["Review"] = flag + stale
         records.append({"sample": entry.get("sample_id") or "?", "method": entry["method"],
                         "mid": entry["measurement_id"], "card": card, "compact": compact,
-                        "row": row})
+                        "row": row, "gallery": False, "figures": figures > 1,
+                        "stale": entry["status"] == "stale"})
     for (sample, method), items in sorted(gallery_items.items(),
                                           key=lambda kv: (_sample_order(kv[0][0]), kv[0][1])):
         card, compact, row = _gallery(method, methods[method], sample, items)
         records.append({"sample": sample, "method": method, "mid": "", "card": card,
-                        "compact": compact, "row": row})
+                        "compact": compact, "row": row, "gallery": True, "figures": False,
+                        "stale": False})
     pending = statuses.get("pending", 0) + statuses.get("needs_review", 0) + statuses.get("failed", 0)
     unrecognised = len(data.get("unrecognised", {}))
     banner = ((f" · {pending} waiting, failed or needing a decision (logs/review_queue.md)"
