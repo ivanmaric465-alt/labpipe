@@ -52,13 +52,24 @@ from pathlib import Path
 
 from labpipe import manifest as mf
 from labpipe import container, pipeline, scanner
-from labpipe.registry import load_methods
+from labpipe.labmethods import MethodsError
+from labpipe.registry import load_methods, shipped_methods
 from labpipe import safety
 from labpipe.safety import CODE_ROOT, PROJECT_ROOT, SetupError, load_pipeline_config
 
 
 # Commands that work outside a project (the others explain how to create one).
 NO_PROJECT_COMMANDS = {"doctor", "guard", "readonly-view", "methods"}
+
+
+def _registered_methods() -> dict:
+    """The methods to give commands to. A broken lab/methods.yaml must not stop the parser (so
+    `doctor` can say what is wrong): the shipped methods only, and the commands that need the
+    registry report the error (`main`)."""
+    try:
+        return load_methods()
+    except MethodsError:
+        return shipped_methods()
 
 
 def _refresh_report(config) -> str | None:
@@ -588,7 +599,7 @@ def build_parser() -> argparse.ArgumentParser:
     replay.add_argument("--force", action="store_true",
                         help="replay even if the current code commit differs")
     replay.set_defaults(func=cmd_replay)
-    for method, spec in load_methods().items():
+    for method, spec in _registered_methods().items():
         method_parser = sub.add_parser(method)
         method_sub = method_parser.add_subparsers(dest="action", required=True)
         run = method_sub.add_parser("analyze")
@@ -645,7 +656,12 @@ def main(argv: list[str] | None = None) -> int:
     except SetupError as exc:
         _print({"error": str(exc)})
         return 2
-    result = args.func(args, config)
+    try:
+        result = args.func(args, config)
+    except MethodsError as exc:
+        _print({"error": str(exc), "next": "fix lab/methods.yaml (docs/ADDING_A_METHOD.md); "
+                "`labpipe doctor` shows it too"})
+        return 2
     if isinstance(result, int):
         return result
     _print(result)

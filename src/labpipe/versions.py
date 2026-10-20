@@ -20,7 +20,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
-from labpipe import safety
+from labpipe import labmethods, safety
 from labpipe.registry import load_methods
 
 # Source root of the labpipe package (the directory holding `labpipe/`). Tests point it at a copy.
@@ -34,7 +34,7 @@ INFRASTRUCTURE = frozenset({
     "labpipe.locking", "labpipe.registry", "labpipe.versions",
 })
 # Packages that only group modules: never part of a version themselves.
-PACKAGES_SKIPPED = frozenset({"labpipe", "labpipe.methods"})
+PACKAGES_SKIPPED = frozenset({"labpipe", "labpipe.methods", labmethods.PREFIX})
 PLOTTING = "labpipe.plotting"
 
 
@@ -42,7 +42,14 @@ def _is_plotting(name: str) -> bool:
     return name == PLOTTING or name.startswith(PLOTTING + ".")
 
 
+def _own(name: str) -> bool:
+    """A module of labpipe or of the lab's own methods (labpipe_lab.…, in the project)."""
+    return name.split(".")[0] in ("labpipe", labmethods.PREFIX)
+
+
 def _module_file(name: str) -> Path | None:
+    if labmethods.is_lab_module(name):
+        return labmethods.module_file(name)
     base = SOURCE_ROOT.joinpath(*name.split("."))
     for candidate in (base.with_suffix(".py"), base / "__init__.py"):
         if candidate.is_file():
@@ -54,7 +61,8 @@ def read_source(name: str) -> bytes:
     """The source of a module, line endings as \\n. (Tests patch SOURCE_ROOT, not this.)"""
     path = _module_file(name)
     if path is None:
-        raise FileNotFoundError(f"module {name} not found under {SOURCE_ROOT}")
+        raise FileNotFoundError(f"module {name} not found under "
+                                f"{labmethods.methods_dir() if labmethods.is_lab_module(name) else SOURCE_ROOT}")
     return path.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
 
 
@@ -65,7 +73,7 @@ def _imports(name: str, source: bytes) -> set[str]:
     found: set[str] = set()
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Import):
-            found.update(a.name for a in node.names if a.name.split(".")[0] == "labpipe")
+            found.update(a.name for a in node.names if _own(a.name))
         elif isinstance(node, ast.ImportFrom):
             if node.level:
                 parts = package.split(".")
@@ -73,7 +81,7 @@ def _imports(name: str, source: bytes) -> set[str]:
                 module = f"{base}.{node.module}" if node.module else base
             else:
                 module = node.module or ""
-            if module.split(".")[0] != "labpipe":
+            if not _own(module):
                 continue
             found.add(module)
             for alias in node.names:       # `from labpipe.methods.xrd import fitting`

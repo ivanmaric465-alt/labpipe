@@ -19,6 +19,7 @@ from typing import Any
 import yaml
 
 from labpipe import manifest as mf
+from labpipe.labmethods import MethodsError
 from labpipe.registry import load_methods
 from labpipe.container import container_mode
 from labpipe import safety
@@ -249,10 +250,14 @@ def _automation(config: dict) -> list[dict[str, Any]]:
 def _method_setup() -> list[dict[str, Any]]:
     items = []
     roles = {p.stem for p in (CODE_ROOT / "agents").glob("*.md")}
-    for name in [spec.get("subagent") for spec in load_methods().values()]:
-        if name and name not in roles:
-            items.append(_item(f"agent:{name}", "todo", f"methods.yaml names agent {name}, but "
-                               f"agents/{name}.md does not exist", "see docs/ADDING_A_METHOD.md"))
+    roles |= {p.stem for p in (PROJECT_ROOT / "lab" / "agents").glob("*.md")}   # the lab's roles
+    for name, spec in load_methods().items():
+        agent = spec.get("subagent")
+        if agent and agent not in roles:
+            where = f"lab/agents/{agent}.md" if spec.get("lab") else f"agents/{agent}.md"
+            items.append(_item(f"agent:{agent}", "todo", f"{'lab/methods.yaml' if spec.get('lab') else 'methods.yaml'}"
+                               f" names agent {agent}, but {where} does not exist",
+                               "see docs/ADDING_A_METHOD.md"))
     catalogue = CODE_ROOT / "references" / "xrd" / "phases.yaml"
     if catalogue.exists():
         phases = (yaml.safe_load(catalogue.read_text(encoding="utf-8")) or {}).get("phases") or []
@@ -283,6 +288,14 @@ def run() -> dict[str, Any]:
                 "checks": [*_environment(), _item("project", "todo", message,
                                                   "labpipe project new <folder>")]}
     items = _environment()
+    try:
+        load_methods()
+    except MethodsError as exc:      # one clear item instead of a traceback in every command
+        items.append(_item("lab_methods", "todo", str(exc), "fix lab/methods.yaml (see "
+                           "docs/ADDING_A_METHOD.md); nothing else can run until then"))
+        return {"project_root": str(PROJECT_ROOT), "platform": platform.platform(),
+                "ready": False, "next": {"check": "lab_methods", "do": items[-1]["next"]},
+                "checks": items}
     items += _project()
     local = PROJECT_ROOT / "config" / "local.yaml"
     try:

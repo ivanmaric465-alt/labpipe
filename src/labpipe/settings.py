@@ -33,6 +33,8 @@ from typing import Any
 
 import yaml
 
+from labpipe import labmethods
+from labpipe.registry import shipped_methods
 from labpipe.safety import CODE_ROOT, PROJECT_ROOT
 
 CONFIG = PROJECT_ROOT / "config"      # the project's files: lab.yaml, samples.yaml, measurements/
@@ -41,6 +43,15 @@ DEFAULTS = CODE_ROOT / "config"       # labpipe's defaults: <method>.yaml, plots
 
 class SettingsError(ValueError):
     pass
+
+
+def defaults_file(method: str) -> tuple[Path, str]:
+    """A method's default settings and the root they are in: config/<method>.yaml of the code,
+    or (a lab method, lab/methods.yaml) the file its `config:` names in the project."""
+    spec = None if method in shipped_methods() else labmethods.lab_spec(method)
+    if spec is not None:
+        return labmethods.defaults_file(spec), "project"
+    return DEFAULTS / f"{method}.yaml", "code"
 
 
 def _source(path: Path, digest: str | None, layer: str, root: str = "project") -> dict[str, Any]:
@@ -112,9 +123,10 @@ def _plot_style(lab: dict[str, Any]) -> tuple[dict[str, Any], list]:
 def resolve(method: str, sample_id: str | None,
             measurement_id: str | None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Return (resolved settings, list of sources used)."""
-    base_path = DEFAULTS / f"{method}.yaml"
+    base_path, base_root = defaults_file(method)
     config, digest = _load(base_path)
-    sources = [_source(base_path, digest, "global defaults", "code")]
+    sources = [_source(base_path, digest, "global defaults" if base_root == "code"
+                       else "the lab method's defaults", base_root)]
 
     lab, lab_digest = load_lab()
     style, style_sources = _plot_style(lab)
@@ -227,7 +239,7 @@ def compare_entry(entry: dict[str, Any], config: dict[str, Any]) -> dict[str, An
         old["plot"] = _legacy_plot(method, plot)
     if entry.get("settings_sha256") != fingerprint(old):
         return {"analysis_current": False, "plot_current": False, "adopt": {}}
-    base, _ = _load(DEFAULTS / f"{method}.yaml")
+    base, _ = _load(defaults_file(method)[0])
     drawn_plot = {k: (v if k in _legacy_plot(method, plot) else (base.get("plot") or {}).get(k))
                   for k, v in plot.items()}
     defaults, _ = _load(DEFAULTS / "plots.yaml")

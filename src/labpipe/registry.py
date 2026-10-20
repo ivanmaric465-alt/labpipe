@@ -5,7 +5,9 @@ path relative to the raw root. If the file type is shared with other methods
 (e.g. `.txt`), the method can also name a content check,
 `recognise: package.module:function`, called as function(path) -> bool with the
 file's full path (it must only read). When it returns False, the next method
-is tried. Without a root (e.g. the watcher's cheap snapshot) only globs count.
+is tried. Methods are tried in the order of `load_methods()`: the shipped ones first, then the
+lab's own (lab/methods.yaml), so a lab method never takes a file from a shipped one. Without a
+root (e.g. the watcher's cheap snapshot) only globs count.
 
 Before any method is asked, `skip_reason` leaves out system files
 (config/pipeline.yaml → `system_files`, names such as Thumbs.db or `~$x.docx`)
@@ -23,12 +25,20 @@ from typing import Any, Callable
 
 import yaml
 
+from labpipe import labmethods
 from labpipe.safety import CODE_ROOT, PROJECT_ROOT
 
 
-def load_methods() -> dict[str, dict[str, Any]]:
+def shipped_methods() -> dict[str, dict[str, Any]]:
     with open(CODE_ROOT / "methods.yaml", encoding="utf-8") as stream:
         return yaml.safe_load(stream)["methods"]
+
+
+def load_methods() -> dict[str, dict[str, Any]]:
+    """The shipped methods, then the project's own (lab/methods.yaml; `"lab": True`). Raises
+    labmethods.MethodsError (a SetupError) for a broken or clashing lab/methods.yaml."""
+    shipped = shipped_methods()
+    return {**shipped, **labmethods.load(shipped)}
 
 
 USER_IGNORE_FILE = "config/ignore.yaml"

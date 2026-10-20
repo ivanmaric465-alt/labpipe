@@ -12,7 +12,7 @@ Reproducible analysis of lab data, driven by AI agents.
 | `sem` | JEOL `.tif` + `.txt` | metadata, pixel size, field of view; per-sample gallery (code only, no AI) |
 | `eds` | Oxford INCA `.htm` + linked images | composition as recorded, metal-only composition, vs. nominal |
 
-These methods are one lab's formulation, for its instruments: use them as they are, steer them with settings, or treat them as worked examples for methods of your own ([docs/ADDING_A_METHOD.md](docs/ADDING_A_METHOD.md)).
+These methods are one lab's formulation, for its instruments: use them as they are, steer them with settings, or treat them as worked examples for methods of your own: `labpipe methods new` scaffolds one into your project's `lab/methods/`, where updates never touch it ([docs/ADDING_A_METHOD.md](docs/ADDING_A_METHOD.md)).
 
 Details: [docs/SAFETY.md](docs/SAFETY.md) (safety), [docs/ADDING_A_METHOD.md](docs/ADDING_A_METHOD.md) (new methods), [docs/methods/](docs/methods/) (method designs).
 

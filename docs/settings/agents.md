@@ -40,7 +40,7 @@ labpipe agents sync           # after editing by hand
 
 ## Instructions of your own
 
-Roles come with labpipe. To add to one role or to add a role of your own, put a file in `lab/agents/` (the project page: [project.md](project.md)); `labpipe agents sync` appends it to the role.
+Roles come with labpipe. To add to one role or to add a role of your own, put a file in `lab/agents/` (the project page: [project.md](project.md)); `labpipe agents sync` appends it to the role. The analyst of a method of your own is such a role: `labpipe methods new` writes `lab/agents/<name>-analyst.md`.
 
 ## After a change
 
