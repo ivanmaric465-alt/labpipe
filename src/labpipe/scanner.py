@@ -38,6 +38,7 @@ from typing import Any
 import yaml
 
 from labpipe import manifest as mf
+from labpipe import migrations
 from labpipe import settings as settings_mod
 from labpipe import versions as versions_mod
 from labpipe.naming import DEFAULT_SEPARATORS, derive_sample_id, entry_id, measurement_id
@@ -50,7 +51,8 @@ def _overrides(config: dict) -> dict[str, str]:
     path = PROJECT_ROOT / config["sample_id"]["overrides_file"]
     if not path.exists():
         return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    data = migrations.upgraded(path, yaml.safe_load(path.read_text(encoding="utf-8")) or {},
+                               PROJECT_ROOT)
     return dict(data.get("overrides") or {})
 
 

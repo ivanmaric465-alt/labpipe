@@ -15,6 +15,7 @@ Everything specific to one method (its settings, how to word its results, its co
 Run `labpipe doctor` first (it only reads). If `ready` is true, go to what the user asks. Otherwise lead the user through setup, one item at a time, as described in `docs/SETUP.md`.
 
 - If `labpipe` itself is not found, the user has not installed it yet: show them the one-line install (README → Install); they run it. It asks its questions itself and creates the first project.
+- **`settings_migrations`** (a warning): an update renamed or moved settings, and a file of the user still has the old names (they keep working for one release, with a warning). Show the user `labpipe migrate` (it changes nothing: files, the migrations, the diff, whether comments in the file are kept). **Apply it (`labpipe migrate --apply`, which makes a backup in `backups/migrate-<time>/`) only with the user's OK**, then tell them where the backup is. `docs/settings/migrations.md`.
 - **Optional dependencies** (e.g. pymatgen for `labpipe xrd refs build`) are never installed by you. When a command reports one missing, show the user the exact command it prints (it names this installation's own Python and the pinned version), say what the package is for, and let them run it.
 - **The user runs anything that needs admin rights or asks questions in a terminal** (`labpipe setup`, `labpipe automation setup`, mounts, shares, `sudo`). Show the exact commands and explain them; never run them yourself.
 
@@ -48,11 +49,12 @@ All commands print JSON.
 | `labpipe review` | Write `logs/review_queue.md` (not recognised, needs a decision, failed, flagged, stale) |
 | `labpipe report` | Write `analysis/report.html` (and the extra reports in `lab.yaml` → `report.extra`), the overview pages for people |
 | `labpipe replot [--entry ID \| --method M \| --all]` | Redraw plots after a plot-settings change (no re-analysis, no AI) |
-| `labpipe notes todo` / `verify --entry ID` / `retire --entry ID` | Notes missing or outdated / check a `notes.md` / move it aside to be rewritten (only when the user asks) |
+| `labpipe notes todo` / `verify --entry ID` / `retire --entry ID` | Notes missing or outdated / check a `notes.md` (a pass is recorded with the rules' version) / move it aside to be rewritten (only when the user asks) |
 | `labpipe inventory` | What labpipe recognises in the data folder(s) |
 | `labpipe dataset` / `dataset compare --quantity Q (--reference S \| --against P) [--run RUN]` | All samples with the named quantities of their measurements / differences and trends across samples, done by code |
 | `labpipe context init \| index` | Create `context/` from the templates / extract the text of `context/documents/` |
 | `labpipe postdoc start "Q" \| verify RUN \| list \| run "Q"` | A run for the postdoc / check its `analysis.md` / past runs / the whole thing without a conversation |
+| `labpipe migrate` / `migrate --apply [--yes]` | Settings files that use names an update changed: show the change (read-only) / make it, with a backup (only with the user's OK, after showing the diff) |
 | `labpipe replay PROVENANCE.json` | Regenerate outputs and compare hashes (needs the same analysis version as the record) |
 | `labpipe project new FOLDER [--data PATH]... [--name NAME]` / `project sync` | Create a project folder (the user runs it) / regenerate its generated files (`AGENTS.md`, `CLAUDE.md`, `.labpipe/`, harness files) after `lab/LAB.md`, `lab/agents/` or a labpipe update changed |
 | `labpipe agents sync` | Generate the harness's agent files from `agents/` and `lab/agents/` (in a project: the whole `project sync`) |
@@ -103,6 +105,7 @@ The postdoc answers the user's questions about the whole project, with its conte
   4. Give the user the summary and say where the analysis is.
 
   It costs more than notes: say so if the user asks for several at once. Without a conversation, the user runs `labpipe postdoc run "<question>"`.
+- A postdoc analysis, like a note, that the report marks "checked with the rules of labpipe X" passed the checks of an older release and is valid: never rewrite it for that reason.
 - Never edit `analysis.md` of a run yourself. To change an answer, the user asks again: a new run.
 
 ## Layout
@@ -173,6 +176,8 @@ A separate task with the user, never during analysis work, never unattended.
   - update `docs/ARCHITECTURE.md` when a module, command, file or flow is added, removed or moved.
 - Check before committing:
   - `python scripts/check_docs.py` must pass (CI runs it too). If an area's docs truly need no change, add the commit message line `Docs-checked: <area>`.
+  - A renamed, moved or removed settings key needs a `Migration` in `migrations.MIGRATIONS` (`src/labpipe/migrations.py`) with a test, and a line under "Settings migrated" in `CHANGELOG.md`; CI refuses the change without it (`scripts/check_settings_migrations.py`).
+  - Stricter rules in `notes.py` or `postdoc.py` need a `CHECKS_VERSION` bump in that module; `tests/test_checks_versions.py` fails when the rule code changed (then update its fingerprint).
   - `tests/test_docs.py` checks what can be checked mechanically: commands, the module map, links, settings keys, method pages.
 
 ## Adding a new analysis method
@@ -187,4 +192,5 @@ A code change: a separate task with the user, never during analysis work, never 
 - **Units**: `results.json` → `units` is authoritative; never convert by hand.
 - **Plots**: ACS journal style, 3.25 in single column (7 in double), 300 dpi, Arial or a metric-compatible fallback; the full measured range. Method specifics: its doc.
 - **Checks**: `review` = a human must look before the result is used; `warning` = mention it in the notes; `info` = context.
+- **Notes and the checks' versions**: `labpipe notes verify` records the version of the rules a note passed. A note the report marks "checked with the rules of labpipe X" (or whose verify says `checked_with`) passed the rules of an older release and is valid: do not rewrite or retire it for that reason, and `labpipe notes todo` does not list it. Only text you write now must pass the current rules.
 - **Platforms**: Linux is the reference; Windows runs natively (CI). Forward slashes in YAML paths. Never put the venv, `analysis/` or `manifest.json` in a synced folder. The installation: `~/.local/share/labpipe/` (`app/` the code, `venv/`; Windows `%LOCALAPPDATA%\labpipe\`), your defaults for new projects `~/.config/labpipe/defaults.yaml`. The host needs only Python 3.10+ and PyYAML; the analysis runs in the container (native analysis: `install.sh --full`, Python 3.14).

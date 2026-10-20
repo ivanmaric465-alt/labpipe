@@ -16,6 +16,7 @@ from typing import Any
 import yaml
 
 from labpipe import manifest as mf
+from labpipe import migrations
 from labpipe.naming import DEFAULT_SEPARATORS, derive_sample_id
 from labpipe.registry import classify, load_methods, skip_reason, user_ignore
 from labpipe.safety import PROJECT_ROOT
@@ -25,7 +26,9 @@ def _overrides(config: dict) -> dict[str, str]:
     path = PROJECT_ROOT / config["sample_id"]["overrides_file"]
     if not path.exists():
         return {}
-    return (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("overrides") or {}
+    data = migrations.upgraded(path, yaml.safe_load(path.read_text(encoding="utf-8")) or {},
+                               PROJECT_ROOT)
+    return data.get("overrides") or {}
 
 
 def data_folder(config: dict, root: dict) -> str | None:

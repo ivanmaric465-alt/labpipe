@@ -25,7 +25,7 @@ from typing import Any, Callable
 
 import yaml
 
-from labpipe import labmethods
+from labpipe import labmethods, migrations
 from labpipe.safety import CODE_ROOT, PROJECT_ROOT
 
 
@@ -49,7 +49,8 @@ def user_ignore() -> list[str]:
     path = PROJECT_ROOT / USER_IGNORE_FILE
     if not path.exists():
         return []
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    data = migrations.upgraded(path, yaml.safe_load(path.read_text(encoding="utf-8")) or {},
+                               PROJECT_ROOT)
     return [str(pattern) for pattern in data.get("ignore") or []]
 
 

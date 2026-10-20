@@ -45,6 +45,13 @@ jobs:
           base=origin/main
           if [ "$GITHUB_REF" = "refs/heads/main" ]; then base="${{ github.event.before }}"; fi
           "$LABPIPE_VENV/bin/python" scripts/check_docs.py "$base"
+      # A settings key removed or renamed without a migration (labpipe/migrations.py)?
+      - name: Settings changes come with a migration
+        if: runner.os != 'Windows'
+        run: |
+          base=origin/main
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then base="${{ github.event.before }}"; fi
+          "$LABPIPE_VENV/bin/python" scripts/check_settings_migrations.py "$base"
       - name: Test
         if: runner.os == 'Windows'
         shell: pwsh
@@ -78,4 +85,5 @@ jobs:
           "$py" -m pip install --quiet pytest
           "$py" -m pytest -q tests/test_install.py tests/test_container.py tests/test_project.py \
             tests/test_agent_support.py tests/test_dataset.py tests/test_encoding.py \
-            tests/test_inbox.py tests/test_in_container.py tests/test_postdoc.py tests/test_report.py
+            tests/test_inbox.py tests/test_in_container.py tests/test_postdoc.py tests/test_report.py \
+            tests/test_migrations.py

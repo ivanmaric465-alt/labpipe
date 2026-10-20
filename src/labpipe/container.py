@@ -30,7 +30,7 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
-from labpipe import safety
+from labpipe import migrations, safety
 from labpipe.safety import SetupError, load_pipeline_config
 
 PROJECT_MOUNT = "/project"       # the project folder, read-write; the working folder
@@ -44,7 +44,7 @@ SECRET_NAME = "labpipe-claude-token"
 SAFE_ID = re.compile(r"[A-Za-z0-9_.-]+")
 # Commands that always run on the host (the guard must be fast; the rest are host tasks).
 LOCAL_COMMANDS = {"guard", "container", "shell", "setup", "init", "doctor", "agents",
-                  "readonly-view", "methods", "project"}
+                  "readonly-view", "methods", "project", "migrate"}
 # Of `methods`, only `new` and `versions` stay on the host (they write or read files); `check`
 # runs an analysis (numpy, scipy, matplotlib are in the image only) and goes into the container.
 FORWARDED_SUBCOMMANDS = {"methods": {"check"}}
@@ -89,6 +89,7 @@ def local_container_block() -> dict | None:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except (OSError, yaml.YAMLError):
         return None
+    data = migrations.upgraded(path, data, _root())     # old key names are understood
     block = data.get("container") if isinstance(data, dict) else None
     return block if isinstance(block, dict) else None
 
