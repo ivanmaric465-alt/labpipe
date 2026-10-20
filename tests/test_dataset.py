@@ -153,6 +153,13 @@ def test_build_shape_order_and_gaps(project):
     assert [m["status"] for m in data["samples"]["?"]["measurements"]] == ["needs_review"]
 
 
+def test_samples_follow_the_reports_sample_order_setting(project, monkeypatch):
+    monkeypatch.setattr(settings_mod, "CONFIG", project / "config")
+    (project / "config" / "lab.yaml").write_text(
+        "report: {sample_order: samples}\n", encoding="utf-8")        # samples.yaml: S-1, S-3
+    assert list(dataset.build(CONFIG)["samples"]) == ["S-1", "S-3", "?", "S-2", "S-10"]
+
+
 def test_compare_on_a_built_project(project):
     out = dataset.compare(CONFIG, "xrd.a.fcc", reference="S-1")
     assert [p["sample"] for p in out["points"]] == ["S-2"]

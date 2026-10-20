@@ -15,6 +15,13 @@ that it is out of date or that the newest one failed its checks.
 Layout and content come from config/report.yaml (the defaults) and config/lab.yaml →
 `report` (the lab's own): grouping, sections, card size, method and sample filters, and
 `extra` reports written beside the main one as analysis/report-<name>.html.
+
+Tables: a summary module may also provide `table(results)` (the card's key results) and
+`overview_tables(items)` (the overview: one row per measurement); both return table specs
+({"columns", "rows", "notes"}, see `_spec_table`) and only lay numbers out. Without them the
+card shows the `overview` lines and the overview table one column per line. `CAPTION` in the
+summary module is what a method's plot shows (caption and alt text of its figure). Samples
+are ordered by the `sample_order` setting (`sample_sorter`), everywhere in the report.
 """
 
 from __future__ import annotations
@@ -41,13 +48,13 @@ from labpipe.safety import PROJECT_ROOT, atomic_write_text
 
 CSS = """
 :root{--bg:#fbfbf8;--fg:#1c1c1a;--mut:#66665f;--line:#deded6;--card:#ffffff;--warn:#9a5b00;
---bad:#a3262a;--ok:#2f6b3a;--chip:#f1f0ea;color-scheme:light}
+--bad:#a3262a;--ok:#2f6b3a;--chip:#f1f0ea;--bar:#e4e9ee;color-scheme:light}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161614;--fg:#ebebe6;
 --mut:#a3a39b;--line:#383833;--card:#1f1f1c;--warn:#e0a54a;--bad:#ef8a8c;--ok:#8fcf99;
---chip:#2a2a26;color-scheme:dark}}
+--chip:#2a2a26;--bar:#2c3540;color-scheme:dark}}
 :root[data-theme="dark"]{--bg:#161614;--fg:#ebebe6;--mut:#a3a39b;--line:#383833;--card:#1f1f1c;
---warn:#e0a54a;--bad:#ef8a8c;--ok:#8fcf99;--chip:#2a2a26;color-scheme:dark}
-body{background:var(--bg);color:var(--fg);margin:0;padding-inline:16px;
+--warn:#e0a54a;--bad:#ef8a8c;--ok:#8fcf99;--chip:#2a2a26;--bar:#2c3540;color-scheme:dark}
+html{scroll-padding-top:3rem}body{background:var(--bg);color:var(--fg);margin:0;padding-inline:16px;
 font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
 main{max-width:1100px;margin:0 auto;padding-block:28px 60px}
 h1{font-size:1.6rem;margin:0}.sub{color:var(--mut);margin:.2rem 0 1.4rem}
@@ -85,6 +92,30 @@ font-weight:600}details.howto ul{margin:.5rem 0 .2rem;padding-left:1.1rem}detail
 .postdoc{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-top:22px;
 padding:18px 20px}.postdoc h2{margin:0 0 .2rem;font-size:1.25rem}.postdoc .notes{font-size:.95rem}
 .plain{font-size:.97rem}details{margin-top:1rem}summary{cursor:pointer;color:var(--mut);font-size:.85rem}.notes{font-size:.88rem}.notes h4{margin:.8rem 0 .2rem}.warnbox{border-left:3px solid var(--warn);padding:.2rem .7rem;margin:.6rem 0}
+nav.top{position:sticky;top:0;z-index:5;display:flex;gap:.9rem;align-items:center;overflow-x:auto;
+white-space:nowrap;margin:0 -16px;padding:.4rem 16px;background:var(--bg);border-bottom:1px solid var(--line);
+font-size:.85rem}nav.top a{text-decoration:none;color:var(--mut)}nav.top a:hover{color:var(--fg)}
+nav.top .grp{color:var(--mut);opacity:.6}nav.top .fold{margin-left:auto;display:flex;gap:.4rem}
+nav.top button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);
+border-radius:6px;padding:.1rem .55rem;cursor:pointer}
+details.blk{margin-top:0}details.blk>summary{list-style:none;color:var(--fg);font-size:inherit}
+details.blk>summary::-webkit-details-marker{display:none}
+details.blk>summary h2.sample{display:block;margin-top:2.4rem}
+details.blk>summary h2.sample::before{content:"▾ ";color:var(--mut)}
+details.blk:not([open])>summary h2.sample::before{content:"▸ "}
+section.mt h3{margin:1.4rem 0 .4rem}section.mt h4{margin:1rem 0 .3rem;font-size:.9rem;color:var(--mut)}
+.tw.st{max-height:80vh;overflow:auto}.tw.st th{position:sticky;top:0;background:var(--card);z-index:1;
+box-shadow:0 1px 0 var(--line)}
+th .u{display:block;font-weight:400;text-transform:none;letter-spacing:0}th.r,td.r{text-align:right}
+td.num{font-variant-numeric:tabular-nums}td.bar{background-repeat:no-repeat}
+td.nd{color:var(--warn);font-style:italic}td.low{color:var(--mut)}td.missing{color:var(--mut);opacity:.7}
+tr.nominal td{color:var(--mut);font-style:italic;background-color:rgba(128,128,128,.07)}
+tr.sub td:first-child{padding-left:1.4rem}p.tnote{color:var(--mut);font-size:.8rem;margin:.3rem 0 0}
+.card table{font-size:.85rem}.card .tw{margin-top:.2rem}
+@media print{nav.top{display:none}body{background:#fff;color:#000;padding-inline:0}
+.card,.postdoc{break-inside:avoid;break-after:page;border-color:#bbb}
+.tw.st{max-height:none;overflow:visible}.tw.st th{position:static;box-shadow:none}
+details.blk>summary h2.sample::before{content:""}}
 """
 
 
@@ -182,6 +213,13 @@ const go=d=>{t.scrollTo({left:(at()+d)*t.clientWidth});show()};
 p.onclick=()=>go(-1);x.onclick=()=>go(1);t.addEventListener('scroll',show,{passive:true});
 c.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){e.preventDefault();go(-1)}
 else if(e.key==='ArrowRight'){e.preventDefault();go(1)}});show()});
+document.querySelectorAll('[data-fold]').forEach(b=>b.onclick=()=>
+document.querySelectorAll('details.blk').forEach(d=>d.open=b.dataset.fold==='open'));
+const reveal=()=>{let e=document.getElementById(decodeURIComponent(location.hash.slice(1)));
+for(;e;e=e.parentElement)if(e.tagName==='DETAILS')e.open=true};
+addEventListener('hashchange',reveal);reveal();
+addEventListener('beforeprint',()=>document.querySelectorAll('details').forEach(d=>{d.dataset.was=d.open?1:'';d.open=true}));
+addEventListener('afterprint',()=>document.querySelectorAll('details').forEach(d=>{d.open=!!d.dataset.was}));
 """
 
 
@@ -196,9 +234,10 @@ def _carousel(figures: list[str]) -> str:
             f'<button type=button data-next aria-label="next figure">&rarr;</button></div></div>')
 
 
-def _figure(path: Path, caption: str | None = None) -> str:
-    text = f"<figcaption>{html.escape(caption)}</figcaption>" if caption else ""
-    return f"<figure>{_embedded(path, caption or 'plot')}{text}</figure>"
+def _figure(path: Path, caption: str) -> str:
+    """A figure with its caption under it; the caption is also the image's alt text."""
+    return (f"<figure>{_embedded(path, caption)}"
+            f"<figcaption>{html.escape(caption)}</figcaption></figure>")
 
 
 def _embedded(png: Path, alt: str = "plot") -> str:
@@ -220,6 +259,66 @@ def _embedded(png: Path, alt: str = "plot") -> str:
             f'src="data:image/{kind};base64,{base64.b64encode(data).decode()}">')
 
 
+def _spec_rows(spec: dict) -> list[dict]:
+    return [row if isinstance(row, dict) else {"cells": row} for row in spec["rows"]]
+
+
+def _spec_states(spec: dict) -> set[str]:
+    """The cell states used in a table spec (nd, low, missing, nominal) and its row classes."""
+    states = {c.get("state") for row in _spec_rows(spec) for c in row["cells"]
+              if isinstance(c, dict)}
+    states |= {row.get("class") for row in _spec_rows(spec)}
+    if any(isinstance(c, dict) and c.get("bar") is not None
+           for row in _spec_rows(spec) for c in row["cells"]):
+        states.add("bar")
+    return {x for x in states if x}
+
+
+def _spec_cell(cell: Any, column: dict) -> str:
+    c = cell if isinstance(cell, dict) else {"text": cell}
+    classes = ["num"] + (["r"] if column.get("align") == "r" else [])
+    if c.get("state"):
+        classes.append(c["state"])
+    attributes = ""
+    if c.get("title"):
+        attributes += f' title="{html.escape(c["title"])}"'
+    if c.get("bar") is not None:
+        width = round(100 * min(max(c["bar"], 0.0), 1.0), 1)
+        classes.append("bar")
+        attributes += (f' style="background-image:linear-gradient(90deg,var(--bar) {width}%,'
+                       f'transparent {width}%)"')
+    return f'<td class="{" ".join(classes)}"{attributes}>{html.escape(str(c.get("text", "")))}</td>'
+
+
+def _spec_table(spec: dict, lead: tuple[str, Any] | None = None,
+                trail: tuple[str, Any] | None = None, sticky: bool = False) -> str:
+    """A table spec as HTML. spec = {"columns": [{"label", "unit"?, "align": "l"|"r"}],
+    "rows": [cells | {"cells", "item"?, "label"?, "class"?}], "notes": [text]}; a cell is a
+    text or {"text", "bar": 0..1 (a faint bar behind the number), "state": nd | low | missing
+    | nominal, "title"}. `lead` and `trail` = (header, fn(item) -> HTML) add a first and a
+    last column for the rows with an `item` (rows without one show their `label`)."""
+    columns = spec["columns"]
+    head = "".join(f'<th class="{"r" if c.get("align") == "r" else ""}">{html.escape(c["label"])}'
+                   + (f'<span class=u>{html.escape(c["unit"])}</span>' if c.get("unit") else "")
+                   + "</th>" for c in columns)
+    body = ""
+    for row in _spec_rows(spec):
+        item, cells = row.get("item"), "".join(_spec_cell(c, col)
+                                               for c, col in zip(row["cells"], columns))
+        first = last = ""
+        if lead:
+            first = f"<td>{lead[1](item)}</td>" if item is not None else (
+                f'<td>{html.escape(row.get("label") or "")}</td>')
+        if trail:
+            last = f"<td>{trail[1](item)}</td>" if item is not None else "<td></td>"
+        body += f'<tr class="{html.escape(row.get("class") or "")}">{first}{cells}{last}</tr>'
+    head = (f"<th>{html.escape(lead[0])}</th>" if lead else "") + head \
+        + (f"<th>{html.escape(trail[0])}</th>" if trail else "")
+    notes = "".join(f"<p class=tnote>{html.escape(n)}</p>" for n in spec.get("notes") or [])
+    return (f'<div class="tw{" st" if sticky else ""}"><table><thead><tr>{head}</tr></thead>'
+            f"<tbody>{body}</tbody></table></div>{notes}")
+
+
 def _rules_line(labpipe_version: str | None) -> str:
     """The small line under notes or an analysis that passed the checks of an older release."""
     which = f"labpipe {html.escape(labpipe_version)}" if labpipe_version else "an older labpipe"
@@ -227,20 +326,26 @@ def _rules_line(labpipe_version: str | None) -> str:
 
 
 def _card(entry: dict, results: dict, summary: dict, notes_text: str | None,
-          notes_ok: bool | None, checked_with: dict | None = None) -> tuple[str, str]:
-    """(full card, compact card: plot, key numbers and checks only)"""
+          notes_ok: bool | None, checked_with: dict | None = None,
+          caption: str = "plot") -> tuple[str, str]:
+    """(full card, compact card: plot, key numbers and checks only). `summary["table"]`, when
+    the method has one, replaces the key-result lines; `caption` is for the plot (figures
+    listed in results.json bring their own)."""
     out = PROJECT_ROOT / entry["output_dir"]
-    figures = [_figure(out / f["file"], f.get("caption")) for f in results.get("figures") or []
-               if (out / f["file"]).exists()]
+    figures = [_figure(out / f["file"], f.get("caption") or caption)
+               for f in results.get("figures") or [] if (out / f["file"]).exists()]
     if not figures and (out / "plot.png").exists():
-        figures = [_figure(out / "plot.png")]
+        figures = [_figure(out / "plot.png", caption)]
     image = _carousel(figures) if figures else ""
-    rows = "".join(f"<dt>{html.escape(k)}</dt><dd>{html.escape(str(v))}</dd>"
-                   for k, v in summary.get("overview", {}).items())
+    lines = "".join(f"<dt>{html.escape(k)}</dt><dd>{html.escape(str(v))}</dd>"
+                    for k, v in summary.get("overview", {}).items()
+                    if not summary.get("table"))
     for extra in ("internal_standard", "broad_bands"):
         if summary.get(extra):
             label = extra.replace("_", " ").capitalize()
-            rows += f"<dt>{label}</dt><dd>{html.escape(summary[extra])}</dd>"
+            lines += f"<dt>{label}</dt><dd>{html.escape(summary[extra])}</dd>"
+    rows = (_spec_table(summary["table"]) if summary.get("table") else "") \
+        + (f"<dl>{lines}</dl>" if lines else "")
     checks = summary.get("check_before_using") or []
     check_html = ("<h3>Check before using</h3><ul class=check>" + "".join(
         f"<li>{html.escape(c['text'])}</li>" for c in checks) + "</ul>") if checks else ""
@@ -265,20 +370,53 @@ def _card(entry: dict, results: dict, summary: dict, notes_text: str | None,
                   f'{_markdown(notes_path.read_text(encoding="utf-8"))}</div></details>'
                   if notes_path.exists() else "")
     compact = (f'<section class=card id="{anchor}"><div>{_carousel(figures[:1]) if figures else ""}'
-               f'</div><div><h2>{html.escape(_title(entry))}</h2><dl>{rows}</dl>{check_html}'
+               f'</div><div><h2>{html.escape(_title(entry))}</h2>{rows}{check_html}'
                f'</div></section>')
     return (f'<section class=card id="{anchor}"><div>{image}</div><div>'
             f'<h2>{html.escape(_title(entry))}</h2>'
             f'<div class=meta>Raw file: {html.escape(entry["relative_path"])}<br>'
             f'Outputs (results.json, plot.pdf, provenance.json): '
             f'<code>{html.escape(entry["output_dir"])}/</code></div>'
-            f'<h3>In plain words</h3>{plain}<h3>Key results</h3><dl>{rows}</dl>'
+            f'<h3>In plain words</h3>{plain}<h3>Key results</h3>{rows}'
             f'{check_html}{know_html}{steer_html}{full_notes}</div></section>', compact)
 
 
 def _sample_order(sample: str) -> tuple:
+    """Natural order by name: S-2 before S-10."""
     number = re.search(r"(\d+)", sample)
     return (re.sub(r"\d+.*", "", sample), int(number.group(1)) if number else 0, sample)
+
+
+def _samples_config() -> dict:
+    """config/samples.yaml as the dataset reads it ({} without the file)."""
+    from labpipe import migrations
+    path = PROJECT_ROOT / "config" / "samples.yaml"
+    if not path.exists():
+        return {}
+    return migrations.upgraded(path, yaml.safe_load(path.read_text(encoding="utf-8")) or {},
+                               PROJECT_ROOT)
+
+
+def sample_sorter(order: str, samples: dict | None = None):
+    """The one place that decides the order of samples: a key function for sample IDs.
+
+    `order` is the `sample_order` setting: `name` (natural: S-2 before S-10), `samples` (the
+    order in config/samples.yaml, unlisted samples after, by name) or `property:<name>` (by
+    the number `samples.<id>.properties.<name>`, samples without it last, by name).
+    `samples`: the parsed samples.yaml (read from the project when None and needed)."""
+    if order == "name":
+        return _sample_order
+    samples = (_samples_config() if samples is None else samples).get("samples") or {}
+    if order == "samples":
+        place = {name: i for i, name in enumerate(samples)}
+        return lambda sample: (place.get(sample, len(place)), *_sample_order(sample))
+    name = order.split(":", 1)[1]
+
+    def key(sample: str) -> tuple:
+        value = ((samples.get(sample) or {}).get("properties") or {}).get(name)
+        known = isinstance(value, (int, float)) and not isinstance(value, bool)
+        return (0, value, *_sample_order(sample)) if known else (1, 0, *_sample_order(sample))
+    return key
 
 
 def _sample_key(entry: dict) -> tuple:
@@ -411,6 +549,7 @@ def _postdoc_section(config: dict, anchors: dict[str, str]) -> str:
 REPORT_DEFAULTS = "report.yaml"
 GROUPS, SECTIONS, CARDS = ("sample", "method", "none"), ("postdoc", "overview", "measurements"), (
     "full", "compact")
+ORDER_WORDS = "name, samples or property:<name>"
 
 
 def _check_values(settings: dict, where: str, known_methods: set[str]) -> None:
@@ -422,6 +561,11 @@ def _check_values(settings: dict, where: str, known_methods: set[str]) -> None:
     for key, allowed in (("group_by", GROUPS), ("cards", CARDS)):
         if settings[key] not in allowed:
             fail(f"{key} must be one of {', '.join(allowed)}, not {settings[key]!r}")
+    order = settings["sample_order"]
+    if not (order in ("name", "samples") or (isinstance(order, str) and re.fullmatch(
+            r"property:\S+", order))):
+        fail(f"sample_order must be {ORDER_WORDS} (the name of a number under "
+             f"samples.<id>.properties in config/samples.yaml), not {order!r}")
     sections = settings["sections"]
     if not isinstance(sections, list) or any(x not in SECTIONS for x in sections) \
             or len(set(sections)) != len(sections):
@@ -484,10 +628,22 @@ def _wanted(sample: str, method: str, settings: dict) -> bool:
         settings["samples"] == "all" or any(fnmatchcase(sample, p) for p in settings["samples"]))
 
 
-def _how_to_read(settings: dict, records: list[dict], banner: str) -> str:
+MARKS = {
+    "bar": "a faint bar behind a number shows its size (at%: out of 100; wt%: relative to the "
+           "largest of its column)",
+    "nd": "<i>n.d.</i> (not detected): INCA reported a negative value, taken as 0 (hover for the "
+          "recorded value)",
+    "low": "grey numbers are near the detection limit",
+    "missing": "<b>&ndash;</b> or <i>no σ</i>: not in this measurement, or no uncertainty available",
+    "nominal": "a grey italic row <i>nominal</i> is the sample's nominal composition"}
+
+
+def _how_to_read(settings: dict, records: list[dict], banner: str,
+                 states: set[str] = frozenset(), nav: bool = False, folds: bool = False) -> str:
     """The collapsed "How to read this report" box: only what this report shows, from its
     settings (layout, sections, card size) and from what it holds (stale analyses, galleries,
-    several figures per card). `how_to_read: false` leaves it out."""
+    several figures per card, table marks in `states`, the navigation bar `nav`, folding
+    `folds`). `how_to_read: false` leaves it out."""
     sections, compact = settings["sections"], settings["cards"] == "compact"
     cards = "measurements" in sections
     layout = {"sample": "grouped by sample, each sample with its measurements",
@@ -523,6 +679,15 @@ def _how_to_read(settings: dict, records: list[dict], banner: str) -> str:
             "(<code>labpipe notes verify</code>): numbers must match the results. A warning box "
             "means they failed that check; &ldquo;checked with the rules of labpipe X&rdquo; means "
             "they passed the checks of that older release.")
+    if states & set(MARKS):
+        bullets.append("<b>Marks in the tables</b>: " + "; ".join(
+            MARKS[k] for k in MARKS if k in states) + ".")
+    if nav:
+        bullets.append("<b>Navigation</b>: the bar at the top jumps to the parts, tables and "
+                       "samples and stays in view"
+                       + ("; each sample folds (<i>Fold all</i> / <i>Unfold all</i>)"
+                          if folds else "")
+                       + ". Printing the page gives one card per page, everything open.")
     if cards and (any(r["gallery"] or r["figures"] for r in records)):
         bullets.append("<b>Figures</b>: where a card has several, they are shown one at a time "
                        "(arrows, keys or side scrolling).")
@@ -553,7 +718,8 @@ def _filter_note(settings: dict) -> str:
     return "; ".join(parts)
 
 
-def _table(method: str, rows: list[dict], linked: bool) -> str:
+def _plain_table(rows: list[dict], linked: bool) -> str:
+    """One row per measurement; the columns are the method's `overview` lines."""
     headers = list(rows[0])
 
     def cell(h, r):
@@ -562,64 +728,136 @@ def _table(method: str, rows: list[dict], linked: bool) -> str:
             value = f'<a href="#{value[0]}">{value[1]}</a>' if linked else value[1]
         return f'<td class={"num" if h not in ("Measurement", "Sample") else ""}>{value}</td>'
 
-    return (f"<h3>{html.escape(method.upper())}</h3><div class=tw><table><thead><tr>"
+    return ("<div class=tw><table><thead><tr>"
             + "".join(f"<th>{h}</th>" for h in headers) + "</tr></thead><tbody>"
             + "".join("<tr>" + "".join(cell(h, r) for h in headers) + "</tr>" for r in rows)
             + "</tbody></table></div>")
 
 
+def _table(method: str, rows: list[dict], linked: bool) -> str:
+    return (f"<section id=table-{html.escape(method)} class=mt><h3>{html.escape(method.upper())}"
+            f"</h3>{_plain_table(rows, linked)}</section>")
+
+
+def _method_tables(method: str, recs: list[dict], linked: bool) -> tuple[str, set[str]]:
+    """The overview of one method: the method's own tables when its summary module has
+    `overview_tables`, else one row per measurement with the `overview` lines as columns.
+    A measurement whose results do not fit the method's tables (an older results.json) goes
+    into that plain table instead, under the others. Also the table marks used."""
+    hook = recs[0]["overview_tables"]
+    fits, rest = [], []
+    for rec in recs:
+        try:
+            if hook and not rec["gallery"]:
+                hook([{"results": rec["results"]}])
+                fits.append(rec)
+                continue
+        except (KeyError, TypeError, ValueError, IndexError):
+            pass
+        rest.append(rec)
+    body, used = "", set()
+    if fits:
+        def link(i: int) -> str:
+            anchor, text = fits[i]["row"]["Measurement"]
+            return f'<a href="#{anchor}">{text}</a>' if linked else text
+        for spec in hook([{"results": r["results"]} for r in fits]):
+            body += (f'<h4>{html.escape(spec["title"])}</h4>' if spec.get("title") else "") \
+                + _spec_table(spec, lead=("Measurement", link),
+                              trail=("Review", lambda i: fits[i]["row"]["Review"]), sticky=True)
+            used |= _spec_states(spec)
+    if rest:
+        body += ("<h4>Other measurements (results without the details the tables above need)</h4>"
+                 if fits else "") + _plain_table([r["row"] for r in rest], linked)
+    return (f"<section id=table-{html.escape(method)} class=mt><h3>{html.escape(method.upper())}"
+            f"</h3>{body}</section>"), used
+
+
+def _fold(summary: str, cards: str) -> str:
+    """A block (sample or method) that folds; open by default."""
+    return f"<details class=blk open><summary>{summary}</summary>{cards}</details>"
+
+
 def _render(config: dict, settings: dict, name: str | None, entries: list[dict],
-            records: list[dict], banner: str) -> str:
+            records: list[dict], banner: str, samples: dict | None = None) -> str:
     """One report page from the collected records (cards and rows are already built)."""
-    shown = [r for r in records if _wanted(r["sample"], r["method"], settings)]
+    key = sample_sorter(settings["sample_order"], samples)
+    shown = sorted((r for r in records if _wanted(r["sample"], r["method"], settings)),
+                   key=lambda r: key(r["sample"]))        # stable: a sample's own order stays
     count = sum(1 for e in entries if _wanted(e.get("sample_id") or "?", e["method"], settings))
     note = _filter_note(settings)
     with_cards = "measurements" in settings["sections"]
     compact = settings["cards"] == "compact"
-    key = "compact" if compact else "card"
+    card = "compact" if compact else "card"
     tables: dict[str, list[dict]] = {}
     for rec in shown:
-        tables.setdefault(rec["method"], []).append(rec["row"])
+        tables.setdefault(rec["method"], []).append(rec)
     by_sample: dict[str, list[dict]] = {}
     for rec in shown:
         by_sample.setdefault(rec["sample"], []).append(rec)
     group = settings["group_by"]
     body = ""
     if group == "sample":
-        for sample in sorted(by_sample, key=_sample_order):
-            body += (f'<h2 class=sample id="sample-{html.escape(sample)}">{html.escape(sample)}</h2>'
-                     + "".join(r[key] for r in by_sample[sample]))
+        for sample in by_sample:             # already in sample order
+            body += _fold(f'<h2 class=sample id="sample-{html.escape(sample)}">'
+                          f'{html.escape(sample)}</h2>',
+                          "".join(r[card] for r in by_sample[sample]))
     else:
-        order = (lambda r: (_sample_order(r["sample"]), r["method"], r["mid"])) if group == "none" \
-            else (lambda r: (_sample_order(r["sample"]), r["mid"]))
+        order = (lambda r: (key(r["sample"]), r["method"], r["mid"])) if group == "none" \
+            else (lambda r: (key(r["sample"]), r["mid"]))
         done: set[str] = set()
 
         def put(rec: dict) -> str:   # a sample anchor at the sample's first card
             anchor = "" if rec["sample"] in done else f'<a id="sample-{html.escape(rec["sample"])}"></a>'
             done.add(rec["sample"])
-            return anchor + rec[key]
+            return anchor + rec[card]
         if group == "none":
             body = "".join(put(r) for r in sorted(shown, key=order))
         else:
             for method in tables:
-                body += (f'<h2 class=sample id="method-{html.escape(method)}">'
-                         f"{html.escape(method.upper())}</h2>"
-                         + "".join(put(r) for r in sorted((x for x in shown if x["method"] == method),
-                                                          key=order)))
+                body += _fold(f'<h2 class=sample id="method-{html.escape(method)}">'
+                              f"{html.escape(method.upper())}</h2>",
+                              "".join(put(r) for r in sorted(tables[method], key=order)))
     anchors = {}
     if with_cards:
         anchors = {**{r["mid"]: r["mid"] for r in shown if r["mid"]},
                    **{sample: f"sample-{sample}" for sample in by_sample}}
+    overview, states = "", set()
+    if "overview" in settings["sections"]:
+        for method, recs in tables.items():
+            text, used = _method_tables(method, recs, with_cards)
+            overview += text
+            states |= used
+        overview = f"<section id=overview>{overview}</section>"
+    if with_cards:
+        for rec in shown:
+            states |= rec["states"]
     parts = {"postdoc": lambda: _postdoc_section(config, anchors),
-             "overview": lambda: "".join(_table(m, rows, with_cards) for m, rows in tables.items()),
+             "overview": lambda: overview,
              "measurements": lambda: body}
+    folds = with_cards and group != "none"
+    links = []
+    if "postdoc" in settings["sections"]:
+        links.append('<a href="#postdoc">Postdoc</a>')
+    if "overview" in settings["sections"] and tables:
+        links.append('<span class=grp>&middot;</span><a href="#overview">Overview</a>' + "".join(
+            f'<a href="#table-{html.escape(m)}">{html.escape(m.upper())}</a>' for m in tables))
+    if with_cards and by_sample:
+        links.append('<span class=grp>&middot;</span>' + "".join(
+            f'<a href="#sample-{html.escape(s)}">{html.escape(s)}</a>' for s in by_sample))
+    nav = ""
+    if links:
+        nav = ('<nav class=top aria-label="jump to">' + "".join(links)
+               + ('<span class=fold><button type=button data-fold=close>Fold all</button>'
+                  '<button type=button data-fold=open>Unfold all</button></span>' if folds else "")
+               + "</nav>")
     title = "Analysis report" + (f" · {html.escape(name)}" if name else "")
     return (f'<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             f"<title>labpipe {html.escape(name or 'report')}</title><style>{CSS}</style><main>"
             f"<h1>{title}</h1><p class=sub>{count} analysed measurement(s)"
             + (f" · {html.escape(note)}" if note else "")
-            + f" · generated {utc_now()} · code {html.escape(code_version())}{banner}</p>"
-            + (_how_to_read(settings, shown, banner) if settings["how_to_read"] else "")
+            + f" · generated {utc_now()} · code {html.escape(code_version())}{banner}</p>{nav}"
+            + (_how_to_read(settings, shown, banner, states, bool(nav), folds)
+               if settings["how_to_read"] else "")
             + "".join(parts[s]() for s in settings["sections"])
             + f"</main><script>{SCRIPT}</script>")
 
@@ -646,32 +884,45 @@ def build(config: dict) -> dict[str, Any]:
                 {"entry": entry, "results": results})
             continue
         module = _summary_module(methods.get(entry["method"], {}))
+        title = _title(entry)
+        caption = (f"{title}: {module.CAPTION}" if hasattr(module, "CAPTION")
+                   else f"{entry['method'].upper()} plot of {title}")
         summary = module.summarize(results) if module else {
             "overview": {"Status": results.get("status")},
             "check_before_using": [{"code": c["code"], "text": c["message"]}
                                    for c in results.get("checks", []) if c["severity"] == "review"]}
         notes_text = _notes_summary(out / "notes.md")
         checked = verify_entry(config, entry["entry_id"]) if notes_text is not None else {}
-        card, compact = _card(entry, results, summary, notes_text,
-                              checked["ok"] if checked else None, checked.get("checked_with"))
+        spec = None
+        if hasattr(module, "table"):
+            try:
+                spec = module.table(results)
+            except (KeyError, TypeError, ValueError, IndexError):
+                spec = None          # an older results.json: the lines of `overview` instead
+        card, compact = _card(entry, results, {**summary, "table": spec}, notes_text,
+                              checked["ok"] if checked else None, checked.get("checked_with"),
+                              caption)
         figures = len(results.get("figures") or [])
         n_checks = len(summary.get("check_before_using") or [])
         flag = (f'<span class="flag r">{n_checks} to check</span>' if n_checks
                 else '<span class="flag o">ok</span>')
         stale = ' <span class="flag">stale</span>' if entry["status"] == "stale" else ""
-        row = {"Measurement": (html.escape(entry["measurement_id"]), html.escape(_title(entry)))}
+        row = {"Measurement": (html.escape(entry["measurement_id"]), html.escape(title))}
         row |= {k: html.escape(str(v)) for k, v in summary.get("overview", {}).items()}
         row["Review"] = flag + stale
         records.append({"sample": entry.get("sample_id") or "?", "method": entry["method"],
                         "mid": entry["measurement_id"], "card": card, "compact": compact,
                         "row": row, "gallery": False, "figures": figures > 1,
-                        "stale": entry["status"] == "stale"})
+                        "stale": entry["status"] == "stale", "results": results,
+                        "states": _spec_states(spec) if spec else set(),
+                        "overview_tables": getattr(module, "overview_tables", None)})
     for (sample, method), items in sorted(gallery_items.items(),
                                           key=lambda kv: (_sample_order(kv[0][0]), kv[0][1])):
         card, compact, row = _gallery(method, methods[method], sample, items)
         records.append({"sample": sample, "method": method, "mid": "", "card": card,
                         "compact": compact, "row": row, "gallery": True, "figures": False,
-                        "stale": False})
+                        "stale": False, "results": None, "states": set(),
+                        "overview_tables": None})
     pending = statuses.get("pending", 0) + statuses.get("needs_review", 0) + statuses.get("failed", 0)
     unrecognised = len(data.get("unrecognised", {}))
     banner = ((f" · {pending} waiting, failed or needing a decision (logs/review_queue.md)"
@@ -679,9 +930,11 @@ def build(config: dict) -> dict[str, Any]:
               + (f" · {unrecognised} file(s) not recognised (logs/review_queue.md)"
                  if unrecognised else ""))
     written = []
+    samples = _samples_config() if any(s["sample_order"] != "name"
+                                       for s in configured.values()) else None
     for stem, settings in configured.items():
         page = _render(config, settings, stem[len("report-"):] if stem != "report" else None,
-                       entries, records, banner)
+                       entries, records, banner, samples)
         target = PROJECT_ROOT / config["analysis_dir"] / f"{stem}.html"
         atomic_write_text(target, page, config)
         written.append(target.relative_to(PROJECT_ROOT).as_posix())

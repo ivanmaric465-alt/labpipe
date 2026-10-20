@@ -5,6 +5,9 @@ module (methods.yaml → `summary`); a method without one has no quantities. Val
 from results.json (and config/samples.yaml for sample properties), never computed here. Image
 methods (`report: gallery`, e.g. SEM) are summed up per sample under `galleries`.
 
+Samples come in the order of the report's `sample_order` setting (config/report.yaml; natural
+order by name by default).
+
 `compare` does the arithmetic across samples, and nothing else: the difference from a
 reference sample, or an unweighted straight-line fit against another quantity. It never picks
 among several measurements silently, and it lists what it left out and why.
@@ -24,7 +27,7 @@ from labpipe import manifest as mf
 from labpipe import migrations
 from labpipe.provenance import utc_now
 from labpipe.registry import load_methods
-from labpipe.report import _sample_order
+from labpipe.report import report_settings, sample_sorter
 from labpipe.safety import PROJECT_ROOT, atomic_write_text
 
 SCHEMA = "labpipe.dataset/1"
@@ -123,7 +126,8 @@ def build(config: dict) -> dict[str, Any]:
             continue
         rows[sample].append(_measurement(entry, methods[entry["method"]]))
     out = {}
-    for sample in sorted(rows, key=_sample_order):
+    order = sample_sorter(report_settings(methods)["report"]["sample_order"], samples_cfg)
+    for sample in sorted(rows, key=order):   # the report's `sample_order` setting
         out[sample] = {
             "properties": sample_properties(sample, samples_cfg),
             "measurements": sorted(rows[sample], key=lambda m: (m["method"], m["measurement_id"],
