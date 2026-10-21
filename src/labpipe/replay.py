@@ -4,7 +4,8 @@ Uses: the input path + sha256, the resolved settings (stored in full), the code 
 and the reference files (checked by sha256). The code must match: the method's analysis and
 plot version (records made since per-method versions), else the recorded commit, clean
 (older records). A different commit with equal versions is only noted. --force compares
-anyway. Output goes to logs/replay/<stamp>/.
+anyway. Output goes to logs/replay/<stamp>/. A comparison figure (analysis/_compare/) is
+redrawn from the data recorded in its provenance (`labpipe.compare.replay`).
 """
 
 from __future__ import annotations
@@ -39,6 +40,9 @@ def _input_path(recorded: dict, config: dict) -> Path:
 
 def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[str, Any]:
     record = json.loads(provenance_path.read_text(encoding="utf-8"))
+    if record.get("schema") == "labpipe.compare-figure/1":      # a comparison figure of samples
+        from labpipe import compare
+        return compare.replay(provenance_path, config, force=force)
     problems, notes = [], []
     code = git_info()
     recorded = record["code"]

@@ -17,7 +17,8 @@ settings, so a steered result is reproducible without the files.
 
 The look of all plots (font, sizes, palette, formats) is resolved separately,
 config/plots.yaml ← config/lab.yaml plots:, and added to the resolved settings
-under the key `plots`. Plot settings (`plots` and the method's `plot:` block)
+under the key `plots` (without its `compare:` block, the look of the comparison figures,
+which no method's settings depend on). Plot settings (`plots` and the method's `plot:` block)
 are left out of the analysis fingerprint; they have their own (`plot_sha256`),
 so a plot change redraws figures (`labpipe replot`) and never makes an
 analysis stale.
@@ -119,7 +120,38 @@ def _plot_style(lab: dict[str, Any]) -> tuple[dict[str, Any], list]:
     formats = style["formats"]
     if not isinstance(formats, list) or not set(formats) <= set(PLOT_FORMATS):
         raise SettingsError(f"plots.formats: a list of {', '.join(PLOT_FORMATS)}")
+    if not isinstance(style["compare"], dict):
+        raise SettingsError("plots.compare: must be a section of settings")
+    _check_compare_style(style["compare"])
     return style, sources
+
+
+def _check_compare_style(block: dict[str, Any]) -> None:
+    """plots.compare: the look of the comparison figures (`labpipe compare`)."""
+    def positive(key: str) -> None:
+        value = block[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+            raise SettingsError(f"plots.compare.{key}: a number above 0, not {value!r}")
+    if block["width_in"] not in ("single", "double"):
+        positive("width_in")
+    for key in ("height_per_sample_in", "min_height_in", "marker_size"):
+        positive(key)
+    offset = block["point_offset"]
+    if isinstance(offset, bool) or not isinstance(offset, (int, float)) or not 0 <= offset <= 1:
+        raise SettingsError(f"plots.compare.point_offset: a number from 0 to 1, not {offset!r}")
+    colours = block["palette"]
+    if not (colours == "okabe-ito" or (isinstance(colours, list) and colours
+                                       and all(isinstance(c, str) for c in colours))):
+        raise SettingsError("plots.compare.palette: 'okabe-ito' or a list of colours")
+    markers = block["marker_cycle"]
+    if not (isinstance(markers, list) and markers and all(isinstance(m, str) and m for m in markers)):
+        raise SettingsError("plots.compare.marker_cycle: a list of marker names, e.g. [o, s, ^]")
+
+
+def plot_style() -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """The resolved plot style including `compare:` (the comparison figures use it) and the
+    files it came from. Method settings carry the style without it (see `resolve`)."""
+    return _plot_style(load_lab()[0])
 
 
 def resolve(method: str, sample_id: str | None,
@@ -173,7 +205,9 @@ def resolve(method: str, sample_id: str | None,
             _check_keys(layer, config, str(path.relative_to(CONFIG.parent)))
             config = _merge(config, layer)
             sources.append(_source(path, digest, f"measurement {measurement_id}"))
-    config["plots"] = style
+    # `plots.compare` is the look of the comparison figures: it is not part of a method's
+    # settings, so it never changes a method's plot fingerprint or records.
+    config["plots"] = _without(style, "compare")
     sources.extend(style_sources)
     return config, sources
 
@@ -245,6 +279,7 @@ def compare_entry(entry: dict[str, Any], config: dict[str, Any]) -> dict[str, An
     drawn_plot = {k: (v if k in _legacy_plot(method, plot) else (base.get("plot") or {}).get(k))
                   for k, v in plot.items()}
     defaults, _ = _load(DEFAULTS / "plots.yaml")
+    defaults = _without(defaults, "compare")
     drawn = {"plot": drawn_plot if plot else config.get("plot"), "plots": defaults}
     return {"analysis_current": True,
             "plot_current": fingerprint(drawn) == plot_fingerprint(config),

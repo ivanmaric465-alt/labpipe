@@ -544,8 +544,8 @@ def test_card_hook_failures_fall_back_to_the_lines(project, config, monkeypatch)
 def test_nav_bar_links_only_sections_that_are_on(rich, config):
     _, page = build(rich, config)
     nav = re.search(r"<nav class=top.*?</nav>", page, re.S).group(0)
-    assert nav.count("<a ") == 1 + 1 + 3 + 3          # postdoc, overview, 3 method tables, 3 samples
-    for target in ("#postdoc", "#overview", "#table-xrd", "#table-eds", "#table-sem",
+    assert nav.count("<a ") == 1 + 1 + 1 + 3 + 3      # postdoc, compare, overview, 3 methods, 3 samples
+    for target in ("#postdoc", "#compare", "#overview", "#table-xrd", "#table-eds", "#table-sem",
                    "#sample-S-1", "#sample-S-2", "#sample-S-10"):
         assert f'href="{target}"' in nav and f'id="{target[1:]}"' in page.replace("id=" + target[1:], f'id="{target[1:]}"')
     assert "Fold all" in nav and "Unfold all" in nav

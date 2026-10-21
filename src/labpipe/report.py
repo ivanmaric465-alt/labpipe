@@ -22,6 +22,10 @@ Tables: a summary module may also provide `table(results)` (the card's key resul
 card shows the `overview` lines and the overview table one column per line. `CAPTION` in the
 summary module is what a method's plot shows (caption and alt text of its figure). Samples
 are ordered by the `sample_order` setting (`sample_sorter`), everywhere in the report.
+
+The section "Compare samples" (`sections: compare`, `compare:` chooses the quantities) shows the
+figures of `labpipe.compare` (analysis/_compare/), drawn when the report is built; matplotlib is
+imported only then, and a failure to draw is said in the section, not raised.
 """
 
 from __future__ import annotations
@@ -92,18 +96,33 @@ font-weight:600}details.howto ul{margin:.5rem 0 .2rem;padding-left:1.1rem}detail
 .postdoc{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-top:22px;
 padding:18px 20px}.postdoc h2{margin:0 0 .2rem;font-size:1.25rem}.postdoc .notes{font-size:.95rem}
 .plain{font-size:.97rem}details{margin-top:1rem}summary{cursor:pointer;color:var(--mut);font-size:.85rem}.notes{font-size:.88rem}.notes h4{margin:.8rem 0 .2rem}.warnbox{border-left:3px solid var(--warn);padding:.2rem .7rem;margin:.6rem 0}
-nav.top{position:sticky;top:0;z-index:5;display:flex;gap:.9rem;align-items:center;overflow-x:auto;
-white-space:nowrap;margin:0 -16px;padding:.4rem 16px;background:var(--bg);border-bottom:1px solid var(--line);
-font-size:.85rem}nav.top a{text-decoration:none;color:var(--mut)}nav.top a:hover{color:var(--fg)}
-nav.top .grp{color:var(--mut);opacity:.6}nav.top .fold{margin-left:auto;display:flex;gap:.4rem}
-nav.top button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);
-border-radius:6px;padding:.1rem .55rem;cursor:pointer}
+nav.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;overflow-x:auto;
+white-space:nowrap;margin:0 -16px;padding:0 16px;min-height:2.9rem;background:var(--bg);
+background:color-mix(in srgb,var(--bg) 90%,var(--card));border-bottom:1px solid var(--line);
+box-shadow:0 3px 10px -6px rgba(0,0,0,.28);font-size:.95rem;scrollbar-width:thin}
+nav.top .g{display:flex;align-items:center;gap:.1rem}nav.top .sep{flex:none;width:1px;height:1.3rem;
+background:var(--line);margin:0 .8rem}nav.top .gl{color:var(--mut);font-size:.72rem;
+text-transform:uppercase;letter-spacing:.05em;margin-right:.35rem}
+nav.top a{padding:.3rem .65rem;border-radius:6px;text-decoration:none;color:var(--mut);
+transition:background .15s,color .15s}nav.top a:hover{color:var(--fg);background:var(--chip)}
+nav.top a.on{color:var(--fg);background:var(--chip);box-shadow:inset 0 -2px 0 var(--fg)}
+nav.top .fold{margin-left:auto;padding-left:.8rem;display:flex;gap:.4rem}
+nav.top button{font:inherit;font-size:.85rem;border:1px solid var(--line);background:var(--card);
+color:var(--fg);border-radius:6px;padding:.15rem .6rem;cursor:pointer}
+nav.top button:hover{background:var(--chip)}
 details.blk{margin-top:0}details.blk>summary{list-style:none;color:var(--fg);font-size:inherit}
 details.blk>summary::-webkit-details-marker{display:none}
 details.blk>summary h2.sample{display:block;margin-top:2.4rem}
 details.blk>summary h2.sample::before{content:"▾ ";color:var(--mut)}
 details.blk:not([open])>summary h2.sample::before{content:"▸ "}
-section.mt h3{margin:1.4rem 0 .4rem}section.mt h4{margin:1rem 0 .3rem;font-size:.9rem;color:var(--mut)}
+section.mt h3{margin:1.4rem 0 .4rem}
+h2.sec{margin:2.4rem 0 .3rem;font-size:1.3rem;padding-bottom:.3rem;border-bottom:1px solid var(--line)}
+details.cmp>summary h3{display:block;margin:1.2rem 0 .5rem;font-size:1.05rem}
+details.cmp>summary h3::before{content:"▾ ";color:var(--mut)}
+details.cmp:not([open])>summary h3::before{content:"▸ "}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.cgrid figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:8px;
+padding:10px 12px}.cgrid img{width:100%;background:#fff;border-radius:4px}section.mt h4{margin:1rem 0 .3rem;font-size:.9rem;color:var(--mut)}
 .tw.st{max-height:80vh;overflow:auto}.tw.st th{position:sticky;top:0;background:var(--card);z-index:1;
 box-shadow:0 1px 0 var(--line)}
 th .u{display:block;font-weight:400;text-transform:none;letter-spacing:0}th.r,td.r{text-align:right}
@@ -115,7 +134,8 @@ tr.sub td:first-child{padding-left:1.4rem}p.tnote{color:var(--mut);font-size:.8r
 @media print{nav.top{display:none}body{background:#fff;color:#000;padding-inline:0}
 .card,.postdoc{break-inside:avoid;break-after:page;border-color:#bbb}
 .tw.st{max-height:none;overflow:visible}.tw.st th{position:static;box-shadow:none}
-details.blk>summary h2.sample::before{content:""}}
+details.blk>summary h2.sample::before,details.cmp>summary h3::before{content:""}
+.cgrid figure{break-inside:avoid}}
 """
 
 
@@ -218,6 +238,16 @@ document.querySelectorAll('details.blk').forEach(d=>d.open=b.dataset.fold==='ope
 const reveal=()=>{let e=document.getElementById(decodeURIComponent(location.hash.slice(1)));
 for(;e;e=e.parentElement)if(e.tagName==='DETAILS')e.open=true};
 addEventListener('hashchange',reveal);reveal();
+(()=>{const nav=document.querySelector('nav.top');if(!nav||!window.IntersectionObserver)return;
+const target=a=>{const e=document.getElementById(decodeURIComponent(a.hash.slice(1)));
+return e&&(e.tagName==='A'?e.nextElementSibling:e.closest('details.blk')||e)};
+const links=[...nav.querySelectorAll('a[href^="#"]')],of=new Map(links.map(a=>[a,target(a)])),live=new Set();
+const mark=()=>{links.forEach(a=>a.classList.toggle('on',live.has(of.get(a))));
+const a=nav.querySelector('a.on');if(a&&nav.scrollWidth>nav.clientWidth)
+nav.scrollTo({left:a.offsetLeft-nav.clientWidth/2,behavior:'smooth'})};
+const io=new IntersectionObserver(es=>{es.forEach(e=>e.isIntersecting?live.add(e.target):live.delete(e.target));mark()},
+{rootMargin:'-56px 0px -62% 0px'});
+new Set(of.values()).forEach(t=>t&&io.observe(t))})();
 addEventListener('beforeprint',()=>document.querySelectorAll('details').forEach(d=>{d.dataset.was=d.open?1:'';d.open=true}));
 addEventListener('afterprint',()=>document.querySelectorAll('details').forEach(d=>{d.open=!!d.dataset.was}));
 """
@@ -547,12 +577,57 @@ def _postdoc_section(config: dict, anchors: dict[str, str]) -> str:
 
 
 REPORT_DEFAULTS = "report.yaml"
-GROUPS, SECTIONS, CARDS = ("sample", "method", "none"), ("postdoc", "overview", "measurements"), (
-    "full", "compact")
+GROUPS, CARDS = ("sample", "method", "none"), ("full", "compact")
+SECTIONS = ("postdoc", "compare", "overview", "measurements")
 ORDER_WORDS = "name, samples or property:<name>"
 
 
-def _check_values(settings: dict, where: str, known_methods: set[str]) -> None:
+def _offers_quantities(spec: dict) -> bool:
+    """Does the method name quantities to compare (`quantities` in its summary module)?"""
+    try:
+        return hasattr(_summary_module(spec), "quantities")
+    except ImportError:
+        return False
+
+
+def _check_compare(value: Any, fail, methods: dict) -> None:
+    """`compare`: all, or {method: [quantity names or globs] | true | false}."""
+    if value == "all":
+        return
+    offering = sorted(m for m, spec in methods.items() if _offers_quantities(spec))
+    if not isinstance(value, dict):
+        fail(f"compare must be 'all' or a mapping such as {{xrd: [xrd.a.fcc], eds: false}}, "
+             f"not {value!r}")
+    for method, wanted in value.items():
+        if method not in methods:
+            fail(f"compare: unknown method {method!r}; known: {', '.join(sorted(methods))}")
+        if method not in offering:
+            fail(f"compare: method {method!r} names no quantities to compare; "
+                 f"methods that do: {', '.join(offering) or 'none'}")
+        if isinstance(wanted, bool) or wanted == "all":
+            continue
+        if not (isinstance(wanted, list) and all(isinstance(x, str) for x in wanted)):
+            fail(f"compare.{method} must be a list of quantity names (or globs such as "
+                 f"{method}.*), true or false, not {wanted!r}")
+        for name in wanted:
+            if not name.startswith(method + "."):
+                fail(f"compare.{method}: {name!r} is not a {method} quantity; its names start "
+                     f"with '{method}.' (list them with `labpipe dataset`)")
+
+
+def compare_wanted(setting: Any, method: str, quantity: str) -> bool:
+    """Does the report's `compare` setting ask for this quantity? A method not named in a
+    mapping keeps all its quantities."""
+    if setting == "all":
+        return True
+    wanted = setting.get(method, True)
+    if isinstance(wanted, bool):
+        return wanted
+    return wanted == "all" or any(fnmatchcase(quantity, pattern) for pattern in wanted)
+
+
+def _check_values(settings: dict, where: str, methods: dict) -> None:
+    known_methods = set(methods)
     def fail(message: str):
         raise settings_mod.SettingsError(f"{where}: {message}")
 
@@ -566,6 +641,7 @@ def _check_values(settings: dict, where: str, known_methods: set[str]) -> None:
             r"property:\S+", order))):
         fail(f"sample_order must be {ORDER_WORDS} (the name of a number under "
              f"samples.<id>.properties in config/samples.yaml), not {order!r}")
+    _check_compare(settings["compare"], fail, methods)
     sections = settings["sections"]
     if not isinstance(sections, list) or any(x not in SECTIONS for x in sections) \
             or len(set(sections)) != len(sections):
@@ -601,7 +677,7 @@ def report_settings(methods: dict | None = None) -> dict[str, dict]:
     settings_mod._check_keys({k: v for k, v in lab.items() if k != "extra"}, base, where)
     if not isinstance(lab.get("extra") or {}, dict):
         raise settings_mod.SettingsError(f"{where}: extra: must be a mapping of report name to settings")
-    known = set(methods if methods is not None else load_methods())
+    known = methods if methods is not None else load_methods()
     main = settings_mod._merge(base, {k: v for k, v in lab.items() if k != "extra"})
     _check_values(main, where, known)
     result = {"report": main}
@@ -639,7 +715,8 @@ MARKS = {
 
 
 def _how_to_read(settings: dict, records: list[dict], banner: str,
-                 states: set[str] = frozenset(), nav: bool = False, folds: bool = False) -> str:
+                 states: set[str] = frozenset(), nav: bool = False, folds: bool = False,
+                 compare: bool = False) -> str:
     """The collapsed "How to read this report" box: only what this report shows, from its
     settings (layout, sections, card size) and from what it holds (stale analyses, galleries,
     several figures per card, table marks in `states`, the navigation bar `nav`, folding
@@ -659,6 +736,13 @@ def _how_to_read(settings: dict, records: list[dict], banner: str,
                "are left out." if compact else
                "Each card has the figure, the key numbers, what to check, the notes and where "
                "the files are."))
+    if compare:
+        bullets.append(
+            "<b>Compare samples</b>: one figure per quantity, the samples in one column in the "
+            "order of the report, the value along the axis, one point per measurement (several "
+            "measurements of a sample sit side by side; nothing is averaged). Bars are the "
+            "&sigma; the analysis gives; a hollow marker has none. A sample keeps its colour and "
+            "marker in every figure. Not drawn: a quantity that only one sample has.")
     if "overview" in sections:
         stale = any(r["stale"] for r in records)
         bullets.append(
@@ -772,13 +856,52 @@ def _method_tables(method: str, recs: list[dict], linked: bool) -> tuple[str, se
             f"</h3>{body}</section>"), used
 
 
+def _compare_section(settings: dict, built: dict | None) -> tuple[str, set[str]]:
+    """"Compare samples": the comparison figures (`labpipe.compare`) of the methods this report
+    shows, one block per method that folds, the figures in a grid; then what was not drawn and
+    why. `built` is what `compare.build` returned (an `error` when it could not draw)."""
+    built = built or {}
+
+    def mine(item: dict) -> bool:
+        return (compare_wanted(settings["compare"], item["method"], item["quantity"])
+                and (settings["methods"] == "all" or item["method"] in settings["methods"]))
+
+    figures = [f for f in built.get("figures", []) if mine(f)]
+    body = ("<p class=tnote>One figure per quantity: the samples in the order above, one point "
+            "per measurement (nothing averaged), the bars are the &sigma; the analysis gives. "
+            "Drawn by code from <code>results.json</code>, kept in "
+            "<code>analysis/_compare/</code> with their provenance.</p>")
+    if built.get("error"):
+        body += (f'<p class=warnbox>The comparison figures could not be drawn: '
+                 f'{html.escape(built["error"])}</p>')
+    methods: dict[str, list[dict]] = {}
+    for figure in figures:
+        methods.setdefault(figure["method"], []).append(figure)
+    for method, items in methods.items():
+        cells = "".join(_figure(PROJECT_ROOT / f["png"], f["caption"]) for f in items)
+        body += (f'<details class="blk cmp" open id="compare-{html.escape(method)}"><summary>'
+                 f'<h3>{html.escape(method.upper())} <span class=know>({len(items)} '
+                 f'figure{"s" if len(items) != 1 else ""})</span></h3></summary>'
+                 f'<div class=cgrid>{cells}</div></details>')
+    if not figures and not built.get("error"):
+        body += ("<p class=know>Nothing to compare yet: a quantity needs measurements of at "
+                 "least 2 samples.</p>")
+    left = [f'{html.escape(i["quantity"])} ({html.escape(i["reason"])})'
+            for i in built.get("skipped", []) + built.get("unmatched", []) if mine(i)]
+    if left:
+        body += f"<p class=tnote>Not drawn: {'; '.join(left)}.</p>"
+    return (f'<section id=compare class=mt><h2 class=sec>Compare samples</h2>{body}</section>',
+            set(methods))
+
+
 def _fold(summary: str, cards: str) -> str:
     """A block (sample or method) that folds; open by default."""
     return f"<details class=blk open><summary>{summary}</summary>{cards}</details>"
 
 
 def _render(config: dict, settings: dict, name: str | None, entries: list[dict],
-            records: list[dict], banner: str, samples: dict | None = None) -> str:
+            records: list[dict], banner: str, samples: dict | None = None,
+            compared: dict | None = None) -> str:
     """One report page from the collected records (cards and rows are already built)."""
     key = sample_sorter(settings["sample_order"], samples)
     shown = sorted((r for r in records if _wanted(r["sample"], r["method"], settings)),
@@ -831,22 +954,33 @@ def _render(config: dict, settings: dict, name: str | None, entries: list[dict],
     if with_cards:
         for rec in shown:
             states |= rec["states"]
+    compare_html, compared_methods = (_compare_section(settings, compared)
+                                      if "compare" in settings["sections"] else ("", set()))
     parts = {"postdoc": lambda: _postdoc_section(config, anchors),
+             "compare": lambda: compare_html,
              "overview": lambda: overview,
              "measurements": lambda: body}
     folds = with_cards and group != "none"
-    links = []
-    if "postdoc" in settings["sections"]:
-        links.append('<a href="#postdoc">Postdoc</a>')
-    if "overview" in settings["sections"] and tables:
-        links.append('<span class=grp>&middot;</span><a href="#overview">Overview</a>' + "".join(
-            f'<a href="#table-{html.escape(m)}">{html.escape(m.upper())}</a>' for m in tables))
+    groups = []        # the bar: sections | methods | samples
+    jump = [(name, label) for name, label in (("postdoc", "Postdoc"), ("compare", "Compare"),
+                                              ("overview", "Overview"))
+            if name in settings["sections"] and (name != "overview" or tables)]
+    if jump:
+        groups.append("".join(f'<a href="#{n}">{label}</a>' for n, label in jump))
+    shown_methods = ([m for m in tables] if "overview" in settings["sections"] else
+                     [m for m in tables if m in compared_methods])
+    if shown_methods:
+        prefix = "table" if "overview" in settings["sections"] else "compare"
+        groups.append('<span class=gl>Methods</span>' + "".join(
+            f'<a href="#{prefix}-{html.escape(m)}">{html.escape(m.upper())}</a>'
+            for m in shown_methods))
     if with_cards and by_sample:
-        links.append('<span class=grp>&middot;</span>' + "".join(
+        groups.append('<span class=gl>Samples</span>' + "".join(
             f'<a href="#sample-{html.escape(s)}">{html.escape(s)}</a>' for s in by_sample))
     nav = ""
-    if links:
-        nav = ('<nav class=top aria-label="jump to">' + "".join(links)
+    if groups:
+        nav = ('<nav class=top aria-label="jump to">'
+               + "<span class=sep></span>".join(f"<span class=g>{g}</span>" for g in groups)
                + ('<span class=fold><button type=button data-fold=close>Fold all</button>'
                   '<button type=button data-fold=open>Unfold all</button></span>' if folds else "")
                + "</nav>")
@@ -856,7 +990,7 @@ def _render(config: dict, settings: dict, name: str | None, entries: list[dict],
             f"<h1>{title}</h1><p class=sub>{count} analysed measurement(s)"
             + (f" · {html.escape(note)}" if note else "")
             + f" · generated {utc_now()} · code {html.escape(code_version())}{banner}</p>{nav}"
-            + (_how_to_read(settings, shown, banner, states, bool(nav), folds)
+            + (_how_to_read(settings, shown, banner, states, bool(nav), folds, bool(compare_html))
                if settings["how_to_read"] else "")
             + "".join(parts[s]() for s in settings["sections"])
             + f"</main><script>{SCRIPT}</script>")
@@ -929,12 +1063,19 @@ def build(config: dict) -> dict[str, Any]:
                if pending else "")
               + (f" · {unrecognised} file(s) not recognised (logs/review_queue.md)"
                  if unrecognised else ""))
+    compared = None
+    if any("compare" in s["sections"] for s in configured.values()):
+        from labpipe import compare       # draws figures: needs matplotlib (the container)
+        try:
+            compared = compare.build(config)
+        except Exception as exc:      # the report must still come out
+            compared = {"error": f"{type(exc).__name__}: {exc}"}
     written = []
     samples = _samples_config() if any(s["sample_order"] != "name"
                                        for s in configured.values()) else None
     for stem, settings in configured.items():
         page = _render(config, settings, stem[len("report-"):] if stem != "report" else None,
-                       entries, records, banner, samples)
+                       entries, records, banner, samples, compared)
         target = PROJECT_ROOT / config["analysis_dir"] / f"{stem}.html"
         atomic_write_text(target, page, config)
         written.append(target.relative_to(PROJECT_ROOT).as_posix())

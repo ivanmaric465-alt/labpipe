@@ -159,6 +159,15 @@ def describe(method: str, methods: dict[str, dict[str, Any]] | None = None) -> d
     }
 
 
+def compare_version() -> dict[str, Any]:
+    """The version of the comparison figures (`labpipe compare`): a hash of labpipe.compare and
+    the plotting modules. It belongs to no method: a change here redraws comparison figures
+    and changes no analysis or plot version."""
+    modules = sorted({"labpipe.compare", *plotting_modules()})
+    return {"compare_version": _digest([(n, read_source(n)) for n in modules]),
+            "compare_modules": modules}
+
+
 def all_versions(methods: dict[str, dict[str, Any]] | None = None) -> dict[str, dict[str, Any]]:
     methods = methods or load_methods()
     return {name: describe(name, methods) for name in methods}

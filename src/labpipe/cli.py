@@ -30,6 +30,7 @@
   labpipe review                            write logs/review_queue.md
   labpipe replot [--entry ID | --method M | --all | --outdated]   redraw figures (results are checked, not changed)
   labpipe replay PROVENANCE.json            regenerate outputs from provenance and compare hashes
+  labpipe compare [--method M]              (re)draw the comparison figures of samples (analysis/_compare/)
   labpipe xrd refs list|add|build           manage XRD reference phases (CIFs)
   labpipe notes todo                        analysed entries whose notes.md is missing or outdated
   labpipe notes verify --entry ID           check notes.md against results.json (numbers, review codes)
@@ -460,6 +461,16 @@ def cmd_replot(args, config) -> int:
     return 1 if result.get("error") or result.get("failed") else 0
 
 
+def cmd_compare(args, config) -> int:
+    from labpipe import compare
+    try:
+        _print(compare.build(config, method=args.method))
+    except ValueError as exc:
+        _print({"error": str(exc)})
+        return 1
+    return 0
+
+
 def cmd_replay(args, config) -> int:
     from labpipe.replay import replay
     result = replay(Path(args.provenance), config, force=args.force)
@@ -680,6 +691,10 @@ def build_parser() -> argparse.ArgumentParser:
                        help="entries whose plot is out of date (the default)")
     replot.set_defaults(func=cmd_replot)
     sub.add_parser("report").set_defaults(func=cmd_report)
+    compare = sub.add_parser("compare", help="(re)draw the comparison figures of the samples "
+                             "(analysis/_compare/), kept when nothing they depend on changed")
+    compare.add_argument("--method", help="only this method's figures")
+    compare.set_defaults(func=cmd_compare)
     auto = sub.add_parser("automation").add_subparsers(dest="action", required=True)
     auto_run = auto.add_parser("run", help="one pass: scan; start the AI only if there is work")
     auto_run.add_argument("--reason", default="manual")

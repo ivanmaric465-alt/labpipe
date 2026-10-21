@@ -78,7 +78,10 @@ def test_lab_layer_refuses_unknown_keys_and_bad_values(tmp_path, monkeypatch, la
 
 def test_plot_style_defaults_are_the_old_acs_constants(monkeypatch):
     style = yaml.safe_load((REPO / "config" / "plots.yaml").read_text(encoding="utf-8"))
+    compare_style = style.pop("compare")      # the comparison figures' look: compare.DEFAULT_STYLE
     assert style == acs.DEFAULT_STYLE
+    from labpipe import compare
+    assert compare_style == compare.DEFAULT_STYLE
     assert (style["font"], style["font_size"], style["label_size"], style["line_width"],
             style["dpi"], style["single_column_in"], style["double_column_in"]) == (
         acs.ACS["font_family"], acs.ACS["font_size"], acs.ACS["axes_labelsize"],

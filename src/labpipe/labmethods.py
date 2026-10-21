@@ -33,7 +33,7 @@ METHODS_DIR = "lab/methods"
 # Not usable as a method name: the names of labpipe's own commands (a test keeps this list
 # equal to the commands of the CLI) and the template.
 RESERVED = frozenset({
-    "agents", "analyze", "automation", "container", "context", "dataset", "doctor", "guard",
+    "agents", "analyze", "automation", "compare", "container", "context", "dataset", "doctor", "guard",
     "init", "inventory", "methods", "migrate", "notes", "onboarding", "pending", "postdoc", "project", "readonly-view",
     "replay", "replot", "report", "requeue", "review", "roots", "scan", "setup", "shell",
     "status", "template", "update", "lab",
