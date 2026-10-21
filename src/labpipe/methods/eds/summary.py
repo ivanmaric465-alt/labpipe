@@ -76,13 +76,15 @@ def quantities(results: dict[str, Any]) -> dict[str, dict[str, Any]]:
         out[f"eds.at.{element}"] = {
             "value": value, "sigma": None,
             "unit": units.get("metal_basis.at_percent", "at%"),
-            "key": f"metal_basis.at_percent.{element}"}
+            "key": f"metal_basis.at_percent.{element}",
+            "label": f"{element} (at%, metal basis)"}
     for i, row in enumerate((results.get("nominal_comparison") or {}).get("rows") or []):
         if row.get("difference_at_percent") is not None:
             out[f"eds.at_minus_nominal.{row['element']}"] = {
                 "value": row["difference_at_percent"], "sigma": None,
                 "unit": units.get("difference_at_percent", "at% points"),
-                "key": f"nominal_comparison.rows[{i}].difference_at_percent"}
+                "key": f"nominal_comparison.rows[{i}].difference_at_percent",
+                "label": f"{row['element']}, measured − nominal (at% points)"}
     return out
 
 

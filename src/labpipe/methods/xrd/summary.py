@@ -239,7 +239,8 @@ def quantities(results: dict[str, Any]) -> dict[str, dict[str, Any]]:
             notes.append(f"possibly {nearest['phase']} (closest reference"
                          + (f", Δa {delta:+.2f} %" if delta is not None else "") + ")")
         entry = {"value": phase["a_angstrom"], "sigma": phase.get("a_sigma_angstrom"),
-                 "unit": "Å", "key": f"phases.fcc_indexed[{i}].a_angstrom"}
+                 "unit": "Å", "key": f"phases.fcc_indexed[{i}].a_angstrom",
+                 "label": f"Lattice parameter a, {name} (Å)"}
         if notes:
             entry["note"] = "; ".join(notes)
         out[f"xrd.a.{name}"] = entry
@@ -254,7 +255,8 @@ def quantities(results: dict[str, Any]) -> dict[str, dict[str, Any]]:
                 out[f"xrd.size.{name}"] = {
                     "value": scherrer["size_nm"], "sigma": scherrer.get("size_sigma_nm_from_fwhm"),
                     "unit": units.get("size", "nm"),
-                    "key": f"size_strain[{j}].scherrer[{k}].size_nm", "note": note}
+                    "key": f"size_strain[{j}].scherrer[{k}].size_nm", "note": note,
+                    "label": f"Crystallite size, {name} ({units.get('size', 'nm')})"}
                 break
     return out
 

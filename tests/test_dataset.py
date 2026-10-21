@@ -54,7 +54,8 @@ def test_xrd_quantities_generic_fcc_name():
     assert q["xrd.a.fcc"] == {"value": 3.8870, "sigma": 0.0035, "unit": "Å",
                               "key": "phases.fcc_indexed[0].a_angstrom",
                               "note": "main of 2 fcc phases (phase fcc-1 in results.json); "
-                                      "possibly Pd (closest reference, Δa -0.07 %)"}
+                                      "possibly Pd (closest reference, Δa -0.07 %)",
+                              "label": "Lattice parameter a, fcc (Å)"}
     assert q["xrd.a.fcc-2"]["sigma"] is None and "tentative (2 reflections)" in q["xrd.a.fcc-2"]["note"]
     size = q["xrd.size.fcc"]
     assert (size["value"], size["sigma"], size["unit"]) == (5.55, 0.034, "nm")
@@ -81,7 +82,8 @@ def test_eds_quantities():
     q = eds_summary.quantities(eds_results())
     assert q["eds.at.Pt"] == {"value": 23.66, "sigma": None,
                               "unit": "at% of the metals (sum 100)",
-                              "key": "metal_basis.at_percent.Pt"}
+                              "key": "metal_basis.at_percent.Pt",
+                              "label": "Pt (at%, metal basis)"}
     assert q["eds.at_minus_nominal.Pt"]["value"] == 3.66
     assert q["eds.at_minus_nominal.Pt"]["key"] == "nominal_comparison.rows[1].difference_at_percent"
     assert "eds.at_minus_nominal.Ru" not in q                      # no value, no quantity

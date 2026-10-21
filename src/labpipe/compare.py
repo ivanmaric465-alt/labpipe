@@ -128,7 +128,8 @@ def offered(ds: dict[str, Any]) -> dict[tuple[str, str], list[dict[str, Any]]]:
                     "measurement_id": item["measurement_id"], "value": value["value"],
                     "sigma": sigma if _number(sigma) else None, "unit": value.get("unit") or "",
                     "status": item["status"], "results_path": path,
-                    "results_sha256": hashes[path], "key": value.get("key")})
+                    "results_sha256": hashes[path], "key": value.get("key"),
+                    "label": value.get("label")})
     return found
 
 
@@ -137,6 +138,8 @@ def _sample_styles(ds: dict[str, Any], style: dict[str, Any]) -> dict[str, dict[
     sample looks the same in every figure."""
     from labpipe.plotting.acs import palette
     colours = palette({"palette": style["palette"]})
+    if style["palette"] == "okabe-ito":         # its yellow vanishes as a hollow marker on white
+        colours = [c for c in colours if c.upper() != "#F0E442"]
     markers = style["marker_cycle"]
     return {sample: {"color": colours[i % len(colours)], "marker": markers[i % len(markers)]}
             for i, sample in enumerate(ds["samples"])}
@@ -146,7 +149,9 @@ def figure_spec(method: str, quantity: str, points: list[dict[str, Any]],
                 styles: dict[str, dict[str, str]], plot: dict[str, Any]) -> dict[str, Any]:
     """Everything the figure is drawn from (what provenance.json records): no other input."""
     samples = list(dict.fromkeys(p["sample"] for p in points))
-    return {"method": method, "quantity": quantity, "unit": points[0]["unit"], "points": points,
+    label = next((p["label"] for p in points if p.get("label")), None)
+    return {"method": method, "quantity": quantity, "unit": points[0]["unit"], "label": label,
+            "points": points,
             "samples": [{"sample": s, **styles[s]} for s in samples], "plot": plot}
 
 
@@ -154,7 +159,7 @@ def inputs_sha256(spec: dict[str, Any], compare_version: str) -> str:
     """What decides whether a figure is current: data, order, styles, plot style, code version."""
     return sha256_bytes(canonical_json({
         "method": spec["method"], "quantity": spec["quantity"], "unit": spec["unit"],
-        "points": spec["points"], "samples": spec["samples"], "plot": spec["plot"],
+        "label": spec.get("label"), "points": spec["points"], "samples": spec["samples"], "plot": spec["plot"],
         "compare_version": compare_version}))
 
 
@@ -162,9 +167,10 @@ def caption(spec: dict[str, Any]) -> str:
     """What the figure shows and what its bars are; the report's caption and alt text."""
     points, samples = spec["points"], spec["samples"]
     unit = f" ({spec['unit']})" if spec["unit"] else ""
+    name = spec.get("label") or f"{spec['quantity']}{unit}"
     counts = {s["sample"]: sum(1 for p in points if p["sample"] == s["sample"]) for s in samples}
     several = [f"{name} ×{n}" for name, n in counts.items() if n > 1]
-    text = (f"{spec['quantity']}{unit}: {len(points)} measurement{'s' if len(points) != 1 else ''}"
+    text = (f"{name}: {len(points)} measurement{'s' if len(points) != 1 else ''}"
             f" of {len(samples)} samples, one point each, nothing averaged"
             + (f" ({', '.join(several)})" if several else "") + ". ")
     bare = [p["measurement_id"] for p in points if p["sigma"] is None]
@@ -183,7 +189,11 @@ def caption(spec: dict[str, Any]) -> str:
 
 # --- drawing -----------------------------------------------------------------------------------
 
-def _axis_label(quantity: str, unit: str) -> str:
+def _axis_label(quantity: str, unit: str, label: str | None = None) -> str:
+    """The method's label for the quantity (its unit included), else the name and the unit."""
+    if label:
+        label = label.replace("$", r"\$")
+        return label if len(label) <= 34 or " (" not in label else label.replace(" (", "\n(", 1)
     name, unit = quantity.replace("$", r"\$"), unit.replace("$", r"\$")
     if not unit:
         return name
@@ -201,7 +211,7 @@ def render(spec: dict[str, Any], stem: Path) -> dict[str, Any]:
     style = DEFAULT_STYLE | dict(spec["plot"].get("compare") or {})
     font = apply_acs(plot)
     rows = spec["samples"]
-    label = _axis_label(spec["quantity"], spec["unit"])
+    label = _axis_label(spec["quantity"], spec["unit"], spec.get("label"))
     height = max(style["min_height_in"], len(rows) * style["height_per_sample_in"]
                  + MARGIN_IN["top"] + (MARGIN_IN["bottom_two_lines"] if "\n" in label
                                        else MARGIN_IN["bottom"]))
@@ -243,7 +253,8 @@ def _record(spec: dict[str, Any], folder: Path, files: list[str], font: dict[str
     outputs = {name: sha256_file(folder / name) for name in sorted(files)}
     return {
         "schema": SCHEMA, "created_utc": utc_now(), "method": spec["method"],
-        "quantity": spec["quantity"], "unit": spec["unit"], "caption": caption(spec),
+        "quantity": spec["quantity"], "unit": spec["unit"], "label": spec.get("label"),
+        "caption": caption(spec),
         "inputs_sha256": digest, "points": spec["points"], "samples": spec["samples"],
         "plot": spec["plot"], "plot_sources": sources,
         "code": git_info() | version | {"labpipe_entry": ENTRY_POINT},
