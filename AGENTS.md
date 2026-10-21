@@ -61,7 +61,8 @@ All commands print JSON.
 | `labpipe postdoc start "Q" \| verify RUN \| list \| run "Q"` | A run for the postdoc / check its `analysis.md` / past runs / the whole thing without a conversation |
 | `labpipe update [--check\|--preview\|--to vX.Y.Z]` | New release, preview or rollback: `--check` says what is available and what the changelog says (read-only); `--check --preview` also analyses copies of the measurements with the new code and says what would change in the numbers (changes nothing); `labpipe update` itself backs up, switches the code, migrates settings, regenerates, restarts and lists what is out of date: **the user runs it**, never you |
 | `labpipe migrate` / `migrate --apply [--yes]` | Settings files that use names an update changed: show the change (read-only) / make it, with a backup (only with the user's OK, after showing the diff) |
-| `labpipe replay PROVENANCE.json` | Regenerate outputs and compare hashes (needs the same analysis version as the record) |
+| `labpipe replay PROVENANCE.json` | Regenerate outputs and compare hashes (needs the same analysis version as the record; a comparison figure needs the same compare version) |
+| `labpipe compare [--method M]` | (Re)draw the comparison figures of the samples, `analysis/_compare/<method>/<quantity>/plot.png` (code only; also done by `labpipe report`). You may look at and cite them by path; never compute from them: numbers come from `labpipe dataset compare` |
 | `labpipe project new FOLDER [--data PATH]... [--name NAME]` / `project sync` | Create a project folder (the user runs it) / regenerate its generated files (`AGENTS.md`, `CLAUDE.md`, `.labpipe/`, harness files) after `lab/LAB.md`, `lab/agents/` or a labpipe update changed |
 | `labpipe agents sync` | Generate the harness's agent files from `agents/` and `lab/agents/` (in a project: the whole `project sync`) |
 | `labpipe automation run \| status` | One automatic pass (by hand; in container mode the container's watcher does this) / settings and last events. `automation setup` (timings, container at login, removes old native units) is run by the user; `automation watch` is the container's own entry point |
@@ -130,6 +131,7 @@ A project is a folder with `labpipe.yaml`; labpipe finds it from the folder you 
 ```
 analysis/<sample_id>/<method>/<measurement_id>/   results.json, plot.png, plot.pdf, provenance.json, notes.md
 analysis/<sample_id>/<method>/_superseded|_failed/ older or failed outputs (never deleted)
+analysis/_compare/<method>/<quantity>/              comparison figure of the samples: plot.png, plot.pdf, provenance.json (the plotted data)
 analysis/_postdoc/<run>/                           the postdoc's runs: request.md, inputs.json, dataset.json, compare-N.json, analysis.md, verify.json
 context/                                           the user's project context and documents (git-ignored)
 lab/                                               the lab's own additions: LAB.md (all agents), agents/<role>.md, methods.yaml + methods/<name>/ (its own methods)

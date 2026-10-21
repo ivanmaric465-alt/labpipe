@@ -29,7 +29,10 @@ You never start other agents, and never change `context/`, settings, results or 
 3. Read the data: `labpipe dataset` (the current table), `labpipe <method> summary --entry ID`,
    the measurements' `notes.md` and `plot.png` as they matter to the question. Image methods
    (SEM) are under `galleries` in the dataset: look at the images if they matter, but make no
-   quantitative claims from them.
+   quantitative claims from them. The comparison figures across samples are in
+   `analysis/_compare/<method>/<quantity>/plot.png` (the report's "Compare samples"): you may
+   look at them and cite one by its path as a plot (mark it "(plot)"); the numbers still come from
+   the dataset or `compare`, never read off a figure.
 4. Arithmetic comes from code: differences between samples and trends are
    `labpipe dataset compare ... --run <run>` (see `labpipe dataset compare --help`). Each call
    is saved in the run as `compare-N.json`. Quote its numbers as printed. If the number you

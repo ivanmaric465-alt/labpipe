@@ -1,10 +1,10 @@
 # Report
 
-`analysis/report.html` is the page people read: the postdoc's answer, overview tables per method, and one card per measurement (plot, key numbers, checks, notes). It is one self-contained HTML file, rebuilt after every pass and by `labpipe report`.
+`analysis/report.html` is the page people read: the postdoc's answer, a comparison of the samples, overview tables per method, and one card per measurement (plot, key numbers, checks, notes). It is one self-contained HTML file, rebuilt after every pass and by `labpipe report`.
 
 ## How to read this report
 
-At the top is a collapsed box, "How to read this report", for people who only see the report: what the cards, the status flags (`ok`, `N to check`, `stale`), "Check before using", the notes and the postdoc's part mean, and that every number comes from `results.json` (with `provenance.json`, replayable). It is generated from these settings, so it describes only what this report shows (layout, sections, card size; stale analyses, galleries and the waiting line only when present). `how_to_read: false` removes it, in the main report or in one `extra` report.
+At the top is a collapsed box, "How to read this report", for people who only see the report: what the comparison figures, the cards, the status flags (`ok`, `N to check`, `stale`), "Check before using", the notes and the postdoc's part mean, and that every number comes from `results.json` (with `provenance.json`, replayable). It is generated from these settings, so it describes only what this report shows (layout, sections, card size; stale analyses, galleries and the waiting line only when present). `how_to_read: false` removes it, in the main report or in one `extra` report.
 
 ## Settings
 
@@ -14,8 +14,9 @@ Defaults in `config/report.yaml`; yours in `config/lab.yaml`:
 report:
   group_by: sample             # sample | method | none
   sample_order: name           # name | samples | property:<name>
-  sections: [postdoc, overview, measurements]   # order; leave one out to hide it
+  sections: [postdoc, compare, overview, measurements]   # order; leave one out to hide it
   how_to_read: true            # the collapsed "How to read this report" box at the top
+  compare: all                 # the comparison figures: all, or {xrd: [xrd.a.fcc, xrd.size.fcc], eds: false}
   cards: full                  # full | compact (first figure, key numbers, checks)
   methods: all                 # or [xrd, eds]
   samples: all                 # or IDs / patterns, e.g. ["S-1*"]
@@ -31,11 +32,26 @@ report:
   - `samples`: the order in `config/samples.yaml`; samples not listed there come after, by name.
   - `property:<name>`: by the number `samples.<id>.properties.<name>` in `config/samples.yaml` (e.g. `property:loading_wt`, smallest first); samples without it come last, by name. Anything else is refused with a message.
   An extra report can have its own `sample_order`.
+- `compare`: which quantities the section "Compare samples" draws (below). `all` (default) is every quantity each method offers; a mapping names methods: a list of quantity names or globs (`eds.at.*`), `true` (all of that method) or `false` (hide that method). A method you do not name keeps all its quantities. Quantity names are those of `labpipe dataset` (`xrd.a.fcc`, `eds.at.Pt`). An unknown method, a name that is not that method's (`eds.at.Pt` under `xrd`) or a method without quantities is refused with a message; a name no measurement has is listed under the figures as "not drawn". An extra report can have its own `compare`; its figures are drawn once and shared.
 - Each extra report starts from your main report settings and changes only what it lists. The notifications page links all of them.
 
 ```bash
 labpipe report      # rebuild now; prints the reports written
 ```
+
+## Compare samples
+
+One figure per quantity (`labpipe dataset` names them: the lattice parameter `xrd.a.fcc`, the Scherrer size `xrd.size.fcc`, one `eds.at.<element>` per element, any quantity a lab method names), all samples on one axis, so values can be compared by eye. A quantity needs measurements of at least two samples; otherwise the line under the figures says "not drawn: xrd.size.fcc (only 1 sample)". The figures are drawn by code from `results.json` (nothing is computed), kept in `analysis/_compare/<method>/<quantity>/` (`plot.png`, `plot.pdf`, `provenance.json`) and redrawn only when a value, the sample order, the plot style or the drawing code changed; the old figure goes to `analysis/_compare/_superseded/`. `labpipe report` does it as part of the report; `labpipe compare [--method M]` does only that and prints what was drawn, kept or skipped, with reasons. `labpipe replay analysis/_compare/<method>/<quantity>/provenance.json` redraws a figure from the data recorded in its provenance and compares the hashes. Each method has a heading that folds; many figures (EDS has one per element) sit in a grid. The figures always cover all samples, also in an extra report that lists only some.
+
+Reading the plot (the dot plot of one quantity):
+
+- Samples are the rows, in the order of `sample_order`; the value is along the horizontal axis (it may start away from zero: these are points, not bars; read the axis).
+- Every measurement is its own point; several measurements of a sample sit side by side in its row. Nothing is averaged.
+- The bar is the σ the analysis gives (from the fit). A hollow marker has no σ (EDS has none): differences there cannot be judged against an uncertainty.
+- A sample has the same colour and marker in every figure; the colour is never the only cue, the row is labelled.
+- Look again when a sample's points are far apart (two measurements disagree), or when a bar is much larger than the others (a poor fit; see the cards).
+
+Style (size, palette, markers): `plots.compare` in [plots.md](plots.md). No AI is involved; the postdoc may cite a figure by its path, never compute from it.
 
 ## The tables
 
@@ -51,7 +67,7 @@ labpipe report      # rebuild now; prints the reports written
 
 ## The look
 
-- A slim bar stays at the top while you scroll: jump links to the postdoc, the overview (and each method's table) and each sample, only for the sections that are on. Table headers stay in view inside tall tables.
+- A slim bar stays at the top while you scroll, in three groups: the sections (postdoc, compare, overview), the methods and the samples, only for the sections that are on. The part you are reading is highlighted. On a narrow screen the bar scrolls sideways. Table headers stay in view inside tall tables.
 - Each sample (or method, with `group_by: method`) folds; open by default. "Fold all" / "Unfold all" in the bar. A link to a card in a closed block opens it.
 - Every figure has a caption under it (what it shows; for EDS and XRD what the bars and ± are), and the same text is the image's alt text. A method's own wording is `CAPTION` in its summary module.
 - Printing (browser, "save as PDF"): no bar or fold buttons, one card per page, everything open.
@@ -65,6 +81,10 @@ labpipe report      # rebuild now; prints the reports written
 | "just one long list" | `group_by: none` |
 | "order the samples by loading" | `sample_order: property:loading_wt` (with `properties: {loading_wt: 20}` per sample in `config/samples.yaml`) |
 | "keep the samples in my own order" | `sample_order: samples` (the order in `config/samples.yaml`) |
+| "compare the lattice parameters across samples" | the section is on by default: figure `xrd.a.fcc`. Only these: `compare: {xrd: [xrd.a.fcc], eds: false}` |
+| "hide the EDS comparison" | `compare: {eds: false}` |
+| "only the Pt and Pd comparison for EDS" | `compare: {eds: ['eds.at.Pt', 'eds.at.Pd']}` (or `'eds.at.*'`) |
+| "no comparison section" | `sections: [postdoc, overview, measurements]` |
 | "hide the how-to-read box" | `how_to_read: false` |
 | "hide the postdoc's part" | `sections: [overview, measurements]` |
 | "too long, only plots and numbers" | `cards: compact` |
@@ -76,4 +96,4 @@ The checks on notes and on the postdoc's analyses get stricter with some release
 
 ## After a change
 
-Only the report is rebuilt: no re-analysis, no AI. An extra you remove from the settings keeps its old file (nothing is deleted); delete it yourself if you like.
+Only the report is rebuilt (and the comparison figures that a change touches): no re-analysis, no AI. An extra you remove from the settings keeps its old file (nothing is deleted); delete it yourself if you like.

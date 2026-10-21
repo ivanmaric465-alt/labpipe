@@ -18,7 +18,24 @@ plots:
   double_column_in: 7.0
   dpi: 300
   formats: [png, pdf]          # png is always written (the report uses it); svg possible
+  compare:                     # the comparison figures of the samples, see below
+    marker_size: 4.5
 ```
+
+**Comparison figures** (`analysis/_compare/`, the report's "Compare samples"): the `compare:` block of the plot style, in `config/plots.yaml`, yours in `config/lab.yaml` → `plots: {compare: …}`:
+
+```yaml
+compare:
+  width_in: single             # inches, or single | double
+  height_per_sample_in: 0.3    # one row per sample: the figure grows with the number of samples
+  min_height_in: 1.6
+  palette: okabe-ito           # one colour per sample, in the report's sample order; or a list of colours
+  marker_cycle: [o, s, ^, D, v, P]   # one marker per sample, used with the palette
+  marker_size: 4.5             # pt
+  point_offset: 0.2            # vertical spacing of one sample's measurements (1 = one row)
+```
+
+A sample gets its colour and marker by its place in the sample order, the same in every comparison figure. These keys belong to no method: changing them redraws only the comparison figures (`labpipe compare`, or the next report) and never marks a plot out of date. The font and the other keys above apply to them too.
 
 **Per method**: the `plot:` block of the method, in `config/lab.yaml` → `<method>: {plot: …}` (all samples), `config/samples.yaml` (one sample) or `config/measurements/<method>/<id>.yaml` (one measurement):
 
@@ -52,3 +69,5 @@ What each figure shows, how to tell a good one from one to look at again, and wh
 ## After a change
 
 Plots become "plot out of date" (not re-analysed). The same happens when an update changes the method's drawing code (its plot version). The next automatic pass, or `labpipe replot`, redraws them: the analysis code runs again, `results.json` must come out the same (otherwise nothing is replaced and the review queue says so), old figures go to `_superseded/`. No AI: the notes stay valid. Provenance records the plot settings, so `labpipe replay` redraws the same figure.
+
+The comparison figures follow their own rule: `labpipe compare` (also run by `labpipe report`) redraws a figure when its data, the sample order, `plots` or the drawing code changed, and keeps it otherwise.
