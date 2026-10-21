@@ -184,6 +184,7 @@ From the command line:
 labpipe scan                     # find new or changed raw files
 labpipe analyze --pending        # analyse them
 labpipe report                   # write analysis/report.html
+labpipe compare                  # redraw the comparison figures of the samples (analysis/_compare/)
 labpipe review                   # write logs/review_queue.md
 labpipe status                   # overview of all files
 ```
