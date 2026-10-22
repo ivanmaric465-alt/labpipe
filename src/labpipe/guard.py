@@ -21,8 +21,8 @@ settings say:
 In unattended mode (LABPIPE_AGENT_MODE=unattended, set by the scheduled-run
 wrapper) it additionally allows only notes.md and logs/ writes, and only plain
 `labpipe ...` commands without shell operators, plus read-only file viewing
-(cat, head, tail, sed -n, ls, wc, grep, rg, nl) of paths inside the project:
-Codex has no separate read tool and reads files through the shell.
+(cat, head, tail, sed -n, ls, wc, grep, rg, nl; only the forms in READ_FORMS, no `$`) of
+paths inside the project: Codex has no separate read tool and reads files through the shell.
 Mode "postdoc" (`labpipe postdoc run`) is the same, but writes only the run's analysis.md and
 runs only read-only labpipe commands plus `labpipe postdoc verify|list`.
 """
@@ -155,23 +155,125 @@ def _unwrap_shell(command: str) -> str:
     return match.group(2).strip() if match else command
 
 
+# Read-only viewing (unattended and postdoc runs): one strict form per command. Each entry:
+# short flags without an argument, short options taking a number, bare -N (head/tail),
+# short options taking a word, long flags, long options (--name=VALUE), what it may omit.
+READ_FORMS = {
+    "cat": ("", "", False, "", (), (), "cat FILE..."),
+    "nl": ("", "", False, "", (), (), "nl FILE..."),
+    "wc": ("lwc", "", False, "", (), (), "wc [-l -w -c] FILE..."),
+    "head": ("", "n", True, "", (), (), "head [-n N | -N] FILE..."),
+    "tail": ("", "n", True, "", (), (), "tail [-n N | -N] FILE..."),
+    "ls": ("lah1Rtr", "", False, "", (), (), "ls [-l -a -h -1 -R -t -r] [PATH...]"),
+    "grep": ("nilcFwvr", "ABC", False, "e", ("--no-heading",), ("--include",),
+             "grep [-n -i -l -c -F -w -v -r -A/-B/-C N --include=GLOB] PATTERN|-e PATTERN [PATH...]"),
+    "rg": ("nilcFwv", "ABC", False, "ge", ("--no-heading",), (),
+           "rg [-n -i -l -c -F -w -v -A/-B/-C N --no-heading -g GLOB] PATTERN|-e PATTERN [PATH...]"),
+}
+SED_FORM = "sed -n 'Np' | 'N,Mp' | 'N,$p' FILE..."
+SED_PROGRAM = re.compile(r"\d+(,(\d+|\$))?p")
+DIGITS = re.compile(r"\d+")
+SEARCHES = {"grep", "rg"}
+
+
+def _unquoted_brace(command: str) -> bool:
+    """A `{` outside quotes (the shell would expand `a{,/etc/x}`)."""
+    quote, skip = "", False
+    for char in command:
+        if skip:
+            skip = False
+        elif quote:
+            quote = "" if char == quote else quote
+        elif char in "'\"":
+            quote = char
+        elif char == "\\":
+            skip = True
+        elif char == "{":
+            return True
+    return False
+
+
+def _parse_options(command: str, words: list[str]) -> tuple[list[str], list[str], str | None]:
+    """(operands, -e patterns, problem) of a command's words by its READ_FORMS entry."""
+    flags, numeric, bare, valued, longs, long_values, _ = READ_FORMS[command]
+    operands, patterns, index = [], [], 0
+    while index < len(words):
+        word = words[index]
+        index += 1
+        if word == "-" or not word.startswith("-"):
+            operands.append(word)
+        elif word.startswith("--"):
+            if not (word in longs or ("=" in word and word.split("=")[0] in long_values)):
+                return operands, patterns, f"option {word} is not allowed"
+        elif bare and DIGITS.fullmatch(word[1:]):
+            continue
+        else:
+            for position, char in enumerate(word[1:], 1):
+                if char in flags:
+                    continue
+                if char not in numeric + valued:
+                    return operands, patterns, f"option -{char} is not allowed"
+                value = word[position + 1:]
+                if not value and index < len(words):
+                    value, index = words[index], index + 1
+                if char in numeric and not DIGITS.fullmatch(value):
+                    return operands, patterns, f"-{char} needs a number"
+                if char == "e":
+                    patterns.append(value)
+                break
+    return operands, patterns, None
+
+
+def _path_problem(operands: list[str], cwd: str | None, project: Path) -> str | None:
+    for word in operands:
+        if word.startswith("~") and not word.startswith("~/") and word != "~":
+            return f"{word}: only ~ and ~/... are understood"
+        if "{" in word or (".." in Path(word).parts and re.search(r"[*?\[]", word)):
+            return f"{word}: no braces, and no wildcards combined with .."
+        if not _inside(_real(word, cwd), project):
+            return f"{word} is outside the project"
+    return None
+
+
 def _read_only_decision(command: str, cwd: str | None) -> str | None:
-    """cat/head/sed -n/rg … of paths inside the project only; never sed -i or find -exec."""
+    """cat/head/sed -n/rg … in the strict READ_FORMS, of paths inside the project only."""
     try:
         words = shlex.split(command)
     except ValueError:
         return "unreadable command (quoting); blocking to be safe"
-    if words[0] == "sed" and not ("-n" in words and not any(w.startswith("-i") or w == "--in-place"
-                                                            for w in words)):
-        return "unattended runs may use sed only as `sed -n` (read-only)"
+    name, words = words[0], words[1:]
+    form = SED_FORM if name == "sed" else READ_FORMS[name][-1]
+
+    def refuse(why: str) -> str:
+        return (f"unattended runs may read files only as `{form}` with paths inside the project "
+                f"(no $ except in a quoted 'N,$p', no ~user, braces or other options): {why}")
+
+    program = words[1] if name == "sed" and len(words) > 1 else ""
+    dollars = command.count("$") - (program.count("$") if f"'{program}'" in command else 0)
+    if dollars or "\n" in command or _unquoted_brace(command):
+        return refuse("shell expansion ($, braces, newlines) is not allowed")
     project = _real(PROJECT_ROOT)
-    for word in words[1:]:
-        if word.startswith("-"):
-            continue
-        if word.startswith(("/", "~")) or ".." in Path(word).parts:
-            if not _inside(_real(word, cwd), project):
-                return f"unattended runs may read files inside the project only, not {word}"
-    return None
+    if name == "sed":
+        if len(words) < 3 or words[0] != "-n" or not SED_PROGRAM.fullmatch(words[1]):
+            return refuse("sed takes exactly -n, one print program and files")
+        operands, patterns, problem = words[2:], [], None
+    else:
+        operands, patterns, problem = _parse_options(name, words)
+    if problem:
+        return refuse(problem)
+    if name in SEARCHES:
+        if len(patterns) > 1 or (not patterns and not operands):
+            return refuse("exactly one pattern is needed")
+        if not patterns:
+            operands = operands[1:]
+    recursive = name in ("ls", "rg") or (name == "grep" and any(
+        w.startswith("-") and not w.startswith("--") and "r" in w for w in words))
+    if not operands:
+        if not recursive:
+            return refuse("a file is needed")
+        operands = ["."]
+    problem = _path_problem(operands, cwd, project)
+    return refuse(problem) if problem else None
 
 
 def _shell_decision(command: Any, config: dict | None, mode: str,

@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +30,7 @@ import yaml
 from labpipe import __version__, agents, labmethods, migrations
 from labpipe.registry import shipped_methods
 from labpipe.provenance import utc_now
-from labpipe.safety import (CODE_ROOT, FIXED_GENERATED, GENERATED_DIR, GENERATED_RECORD, PROJECT_FILE, PROJECT_ROOT, atomic_write_bytes,
+from labpipe.safety import (CODE_ROOT, FIXED_GENERATED, GENERATED_DIR, GENERATED_RECORD, PROJECT_FILE, PROJECT_ROOT, atomic_write_bytes, in_container,
                             atomic_write_text, config_home, default_config_files, find_project, is_dev,
                             load_pipeline_config, synced_marker)
 
@@ -178,6 +179,9 @@ def desired_files(project: Path) -> dict[str, bytes]:
         files[f"{GENERATED_DIR}/config/{path.name}"] = path.read_bytes()
     files[f"{GENERATED_DIR}/methods.yaml"] = (CODE_ROOT / "methods.yaml").read_bytes()
     files[f"{GENERATED_DIR}/hooks/guard.py"] = (CODE_ROOT / "hooks" / "guard.py").read_bytes()
+    python = project / GENERATED_DIR / "python"       # the hook launcher's Python (the host's:
+    files[f"{GENERATED_DIR}/python"] = (python.read_bytes() if in_container() and python.is_file()
+                                        else f"{sys.executable}\n".encode())   # not the container's)
     for name in ("settings.json", "unattended.json", "unattended-container.json"):
         if (CODE_ROOT / ".claude" / name).exists():
             files[f".claude/{name}"] = _claude_settings(name)
