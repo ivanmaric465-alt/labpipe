@@ -11,7 +11,7 @@ areas:
   structure:        # a module or file added, removed or moved
     on: added or removed
     code: ["src/labpipe/*.py", "src/labpipe/plotting/*.py", "methods.yaml", "container/*", "install.sh",
-           "install.ps1", "scripts/*"]
+           "install.ps1", "uninstall.sh", "scripts/*"]
     docs: [docs/ARCHITECTURE.md]
   cli:
     code: [src/labpipe/cli.py]
@@ -75,8 +75,8 @@ areas:
     docs: [docs/settings/container.md, docs/ARCHITECTURE.md, README.md]
   setup:
     code: [src/labpipe/doctor.py, src/labpipe/wizard.py, src/labpipe/installer.py, install.sh,
-           install.ps1, pyproject.toml]
-    docs: [docs/SETUP.md, README.md, AGENTS.md]
+           install.ps1, uninstall.sh, pyproject.toml]
+    docs: [docs/SETUP.md, README.md, AGENTS.md, docs/NATIVE.md]
   onboarding:       # the first conversation: its steps, the record, the doctor item
     code: [src/labpipe/onboarding.py]
     docs: [docs/ONBOARDING.md, AGENTS.md, README.md, docs/ARCHITECTURE.md]

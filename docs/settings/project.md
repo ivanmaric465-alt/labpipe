@@ -28,3 +28,28 @@ Text inside `<!-- … -->` in these files is left out (the templates keep their 
 ## After a change
 
 `labpipe project sync`. Nothing is re-analysed. The agent tool picks up the new text in its next session.
+
+## The project folder
+
+```
+~/labpipe-projects/pd-films/
+  labpipe.yaml            marks the folder as a project: its name, the labpipe release, the updates
+  backups/                what `labpipe update` and `labpipe migrate` saved before they changed something
+  config/                 your settings: data folders (local.yaml), plots and report (lab.yaml), samples
+  context/                what the study is about, for the postdoc: context.md, documents/
+  lab/                    your additions: conventions (LAB.md), agent roles, methods, XRD references
+  analysis/               results: report.html, one folder per measurement, comparison figures, postdoc runs
+  manifest.json           every file found and its state
+  logs/                   runs, notifications, replays
+  AGENTS.md  CLAUDE.md    generated for the agents: do not edit
+  .labpipe/  .claude/ …   generated: do not edit
+```
+
+- **In the container** the three folders (README → Three folders) are `/opt/labpipe` (the code,
+  built into the image), `/data/<id>` (each data folder, read-only) and `/project` (this folder).
+- **Updates** replace the code and the files marked "generated" here. They never touch your data,
+  `context/`, `lab/` or results; a file in `config/` changes only when a release renamed something
+  in it and you agree after seeing the diff (a backup is kept in `backups/`).
+- **More projects**: `labpipe project new ~/labpipe-projects/<name> --data <its data folder>`.
+- **Dev mode**: the labpipe repository is its own project; there the code and the project folder
+  are the same folder.

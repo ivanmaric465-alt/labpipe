@@ -105,6 +105,13 @@ $LABPIPE_HOME/              default ~/.local/share/labpipe (Windows %LOCALAPPDAT
   from `requirements.lock` (the same packages as the image; optional extras such as `refbuild`
   are never in it): analysis without a container. CI runs the main tests that way, plus the
   `refbuild` extra on Linux so `xrd refs build` stays tested.
+- **`uninstall.sh`** (Linux, macOS; plain bash, no labpipe import, so it works with a broken
+  environment): finds labpipe's containers by image (`localhost/labpipe…`), their `<name>-home`
+  volumes, the images, the podman secret, the `labpipe-*` user units, `$LABPIPE_HOME`, the link
+  (only if it points into it) and `~/.config/labpipe`; lists them, asks once, removes. It never
+  touches projects, data, `podman-restart.service` (shared) or a read-only view (both only named).
+  Its body runs from one function, read in full first, because it deletes the folder it is in.
+  CI's host job installs and uninstalls with it.
 - **`labpipe setup --first`** (`installer.py`) is what `install.sh` / `install.ps1` call after the
   environment exists: checks Podman/Docker and the agent tool (shows install commands, never runs
   them), asks the agent tool, models per role and pop-ups, writes `defaults.yaml`, stores the

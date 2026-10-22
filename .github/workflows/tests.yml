@@ -94,3 +94,15 @@ jobs:
             tests/test_agent_support.py tests/test_dataset.py tests/test_encoding.py \
             tests/test_inbox.py tests/test_in_container.py tests/test_postdoc.py tests/test_report.py \
             tests/test_migrations.py tests/test_update.py tests/test_onboarding.py
+      - name: Uninstall (uninstall.sh)
+        env:
+          LABPIPE_HOME: ${{ runner.temp }}/labpipe-host
+          LABPIPE_BIN: ${{ runner.temp }}/labpipe-bin
+          XDG_CONFIG_HOME: ${{ runner.temp }}/labpipe-config
+        run: |
+          mkdir -p "$XDG_CONFIG_HOME/labpipe" && touch "$XDG_CONFIG_HOME/labpipe/defaults.yaml"
+          ./uninstall.sh --dry-run
+          test -e "$LABPIPE_HOME" && test -L "$LABPIPE_BIN/labpipe"    # a dry run removes nothing
+          ./uninstall.sh --yes
+          test ! -e "$LABPIPE_HOME" && test ! -e "$LABPIPE_BIN/labpipe" && test ! -e "$XDG_CONFIG_HOME/labpipe"
+          test -f README.md                                              # the checkout is untouched
