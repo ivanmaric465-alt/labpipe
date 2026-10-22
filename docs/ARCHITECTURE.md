@@ -16,9 +16,9 @@ docs belong to which code: `docs/docmap.yaml` (`scripts/check_docs.py` checks it
 3. **Every output can be regenerated from its `provenance.json`**: input hash, resolved
    settings, the settings files used and their hashes (each with its root, `code` or
    `project`), git commit, the method's analysis and plot version, environment, output hashes
-   (`replay`). The comparison figures of samples (`analysis/_compare/`) record the plotted
-   values, the `results.json` they came from with their hashes, the settings and their own
-   `compare_version`, and replay the same way.
+   (`replay`). The comparison figures of samples (`analysis/_compare/`) record the figure's
+   spec (the plotted values, the `results.json` or raw file they came from with their hashes),
+   the settings and their own `compare_version`, and replay the same way.
 4. **Only a changed calculation marks an analysis out of date.** Each method has an
    *analysis version* and a *plot version* (`versions.py`): hashes of the source that computes
    the results, and of the drawing code. A new git commit, a doc, the report, an agent, another
@@ -36,7 +36,8 @@ data folder (read-only)
                        notes.md                                         (analyst agent, verified)
             └─ review ─► logs/review_queue.md
             └─ report ─► analysis/report.html (+ extra reports)
-  dataset ─► named quantities ─► compare ─► analysis/_compare/<method>/<quantity>/ (plot, provenance)
+  dataset ─► named quantities ─► compare ─► analysis/_compare/<method>/<name>/ (plot, figure.html, provenance)
+  method `compare:` hook ─► figure specs ─► compare (kinds: dots, lines, bars, images)
   dataset ─► quantities across samples ─► postdoc run ─► analysis/_postdoc/<run>/analysis.md
 ```
 
@@ -192,7 +193,8 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | | `plotting/acs.py` | style from settings, figure saving, margins |
 | Results for people | `report.py` | HTML report: layouts, cards, galleries, the postdoc section, extra reports, the generated "How to read this report" box (`_how_to_read`, from the report settings; outside every analysis and plot version), the sample order (`sample_sorter`, the `sample_order` setting, also used by `dataset.py`), table specs (`_spec_table`: the EDS and XRD overview tables and card tables, bars and n.d./grey/– states), the navigation bar, folding, captions and the print style |
 | | `dataset.py` | quantities of all samples; `compare` (differences, trends) |
-| | `compare.py` | comparison figures across samples: one dot plot per quantity of `dataset.py` (value ± σ, one point per measurement, samples in the report's order) in `analysis/_compare/<method>/<quantity>/`; its `provenance.json` holds the plotted data, so `labpipe replay` redraws it; rebuilt only when data, order, plot style or `compare_version` (`versions.compare_version`: this module and `plotting/`, outside every method's analysis and plot version) changed, the old one moved to `_compare/_superseded/`; `labpipe report` and `labpipe compare` run it (needs matplotlib: the container); which quantities: the report's `compare` setting (`report.compare_wanted`) |
+| | `compare.py` | comparison figures across samples in `analysis/_compare/<method>/<name>/` (`plot.png`, `plot.pdf`, `figure.html`, `provenance.json`): a `dots` figure per quantity of `dataset.py`, plus the figures of a method's optional `compare: <module>` hook (`figures(measurements, context)` returns specs; `COVERS` = quantity globs they replace). A *spec* is a JSON-able dict holding everything drawn; its `provenance.json` records it with the source hashes, so `labpipe replay` redraws all outputs; rebuilt only when spec, plot style or `compare_version` (`versions.compare_version`: this module, `plotting/`, `comparekinds/` and each hook module; outside every method's analysis and plot version) changed, the old one moved to `_compare/_superseded/`; a failing hook or figure is recorded as skipped with its reason; `labpipe report` and `labpipe compare` run it (needs matplotlib: the container); which figures: the report's `compare` setting (`report.compare_wanted`) |
+| `comparekinds/` | the figure kinds `dots`, `lines`, `bars`, `images`, one module each: `render(spec, stem)` (matplotlib, ACS, deterministic), `html(spec, fig_id)` (inline SVG with checkboxes; marks carry `data-m`/`data-s`, no script of its own: the report's script switches them), `check`, `caption`, `inventory`; spec schemas in their docstrings |
 | | `notes.py` | `notes verify` (numbers vs results; `CHECKS_VERSION`, `notes_check` in the manifest), `todo`, `retire` |
 | | `postdoc.py` | postdoc runs: start, verify (`CHECKS_VERSION`), freshness, list, headless run |
 | | `context.py` | `context/` init and text index of documents |
@@ -253,6 +255,7 @@ A method is a package, registered in a methods file. Two homes, one contract:
   - `summary.summarize` / `quantities`;
   - a `recognise:` content check;
   - a `cli_extension`;
+  - a `compare:` module (`figures(measurements, context)`, optional `COVERS`: the method's own comparison figures, docs/ADDING_A_METHOD.md);
   - `report: gallery` (+ `gallery.select`);
   - `figures` in results;
   - `plot_modules` (drawing code in its own modules, not in the analyze module: a change marks "plot
@@ -453,7 +456,7 @@ One container per project.
 | `analysis/<sample>/<method>/<m>/` | pipeline (code); `notes.md` by the analyst agent |
 | `analysis/_postdoc/<run>/` | postdoc (code), `analysis.md` by the postdoc agent |
 | `analysis/report*.html` | report |
-| `analysis/_compare/<method>/<quantity>/` | `compare` (code), through `labpipe report` or `labpipe compare` |
+| `analysis/_compare/<method>/<name>/` | `compare` (code), through `labpipe report` or `labpipe compare` |
 | `logs/` | automation, review, supervisor run summaries, notifications |
 | `config/` lab files | the user, or an agent with the user's OK |
 | `context/` | the user; `context.md` / `instructions.md` by an agent with the user's OK; `.text/` by `context index` |
@@ -480,7 +483,8 @@ One container per project.
 - `tests/test_checks_versions.py`: the rule fingerprints and the versions of the notes checks
   (the postdoc's and the report's side are in `tests/test_postdoc.py` and `tests/test_report.py`).
 - `tests/test_report.py`: layouts and settings, sample order, the EDS and XRD tables and the card tables (column order, n.d./grey/–, nominal row, fallbacks), navigation, folding, print style, captions, the "How to read" box.
-- `tests/test_compare.py` (needs matplotlib): the figures and what is skipped, sample order, several measurements per sample, no-σ points, the provenance (data and hashes), identical bytes, kept or redrawn (old moved aside), replay (identical, a changed source noted, another compare version refused), the `compare` and `plots.compare` settings, the report section, navigation and how-to-read bullet, the command.
+- `tests/test_compare.py` (needs matplotlib): the figures and what is skipped, sample order, several measurements per sample, no-σ points, the provenance (spec and hashes), identical bytes, kept or redrawn (old moved aside), replay (identical, a changed source noted, another compare version refused), method hooks (a fake module: outputs, `COVERS`, failing hook, bad specs, figure names in settings), the `compare` and `plots.compare` settings, the report section (inlined figure, sample chips), navigation and how-to-read bullet, the command.
+- `tests/test_comparekinds.py` (needs matplotlib): each kind renders the same bytes twice (PNG, PDF, HTML), marks carry `data-m`/`data-s`, controls exist, the kind-specific looks, images that changed or are missing.
 - `tests/test_encoding.py`: every text read and write names UTF-8 (Windows would otherwise use
   another code page).
 - `tests/test_docs.py` checks the docs against the code where it can be done mechanically:

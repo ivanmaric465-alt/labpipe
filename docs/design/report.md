@@ -1,6 +1,6 @@
 # Report: readable tables and sample comparison (design, draft)
 
-Status: approved 2026-10-20; built step by step (Order of work); steps 1 (tables, sample order, the look) and 2 (the comparison framework, dot plots, the section, settings) are built; step 3 revised 2026-10-22 (below: "Step 3, revised"). Built alongside it: the agents'
+Status: approved 2026-10-20; built step by step (Order of work); steps 1 (tables, sample order, the look) and 2 (the comparison framework, dot plots, the section, settings) are built; step 3 revised 2026-10-22 (below: "Step 3, revised"); its framework (figure kinds, method hooks, interactive section, thicker scroll bar) is built, the method hooks (EDS, XRD, SEM) follow. Built alongside it: the agents'
 writing rules (`docs/WRITING.md`) and the EDS change for negative values.
 
 ## What is wrong today (a report of 13 samples: EDS, XRD, SEM)

@@ -27,15 +27,14 @@ plots:
 ```yaml
 compare:
   width_in: single             # inches, or single | double
-  height_per_sample_in: 0.3    # one row per sample: the figure grows with the number of samples
+  height_per_sample_in: 0.3    # dot plots and bars: one row per sample, the figure grows with the number of samples
   min_height_in: 1.6
-  palette: okabe-ito           # one colour per sample, in the report's sample order; or a list of colours
-  marker_cycle: [o, s, ^, D, v, P]   # one marker per sample, used with the palette
+  palette: okabe-ito           # colours that tell traces apart (XRD patterns); or a list of colours
   marker_size: 4.5             # pt
   point_offset: 0.2            # vertical spacing of one sample's measurements (1 = one row)
 ```
 
-A sample gets its colour and marker by its place in the sample order, the same in every comparison figure. These keys belong to no method: changing them redraws only the comparison figures (`labpipe compare`, or the next report) and never marks a plot out of date. The font and the other keys above apply to them too.
+Dot plots are one dark colour with filled markers (no colour or marker per sample); colour is kept for traces that must be told apart (the palette, Okabe-Ito without yellow, one colour per trace, always labelled). `width_in` is the width of dot plots; patterns, bars and image grids use the double-column width. These keys belong to no method: changing them redraws only the comparison figures (`labpipe compare`, or the next report) and never marks a plot out of date. The font and the other keys above apply to them too.
 
 **Per method**: the `plot:` block of the method, in `config/lab.yaml` → `<method>: {plot: …}` (all samples), `config/samples.yaml` (one sample) or `config/measurements/<method>/<id>.yaml` (one measurement):
 

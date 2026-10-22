@@ -34,8 +34,8 @@ areas:
     code: [src/labpipe/report.py, config/report.yaml]
     docs: [docs/settings/report.md, README.md]
   compare:          # comparison figures across samples: analysis/_compare/, their provenance and replay
-    code: [src/labpipe/compare.py]
-    docs: [docs/settings/report.md, docs/settings/plots.md, docs/ARCHITECTURE.md]
+    code: [src/labpipe/compare.py, "src/labpipe/comparekinds/*.py"]
+    docs: [docs/settings/report.md, docs/settings/plots.md, docs/ARCHITECTURE.md, docs/ADDING_A_METHOD.md]
   provenance:       # what is recorded, replay, the rules in Invariants
     code: [src/labpipe/provenance.py, src/labpipe/versions.py, src/labpipe/replay.py, src/labpipe/safety.py]
     docs: [docs/ARCHITECTURE.md, docs/SAFETY.md]
