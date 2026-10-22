@@ -20,7 +20,7 @@ jobs:
           echo "LABPIPE_VENV=$RUNNER_TEMP/labpipe-venv" >> "$GITHUB_ENV"
           echo "LABPIPE_NO_SETUP=1" >> "$GITHUB_ENV"
           echo "LABPIPE_FULL=1" >> "$GITHUB_ENV"     # the analysis libraries: CI tests the analysis
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
       # The installers are what users run, so CI installs with them.
@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.10"
       - name: Install the host part (install.sh, no --full)
