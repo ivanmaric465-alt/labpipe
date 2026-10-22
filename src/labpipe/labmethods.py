@@ -11,6 +11,10 @@ Its modules are imported as `labpipe_lab.<name>…`. `labpipe_lab` is a package 
 at run time: its path is the project's `lab/methods/` folder (`register()`), so nothing is
 installed or copied, and the prefix cannot clash with the standard library or with `labpipe`.
 Each entry is marked `"lab": True` when loaded (not in the file).
+
+An entry with `kind: imported` (your own analyses made outside labpipe, `labpipe methods import`)
+has no Python in the project: `defaults()` gives it the shipped module, summary, settings file
+(`lab/methods/<name>/config.yaml`), outputs and analyst, so the file only names the patterns.
 """
 
 from __future__ import annotations
@@ -41,6 +45,9 @@ RESERVED = frozenset({
 NAME = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
 # Entries of the registry that name a Python module (or module:function).
 MODULE_KEYS = ("module", "summary", "gallery", "recognise", "cli_extension", "compare")
+KINDS = ("imported",)
+IMPORTED_MODULE = "labpipe.methods.imported"
+SAMPLE_FROM = ("file", "folder")
 
 
 class MethodsError(safety.SetupError):
@@ -86,6 +93,34 @@ def module_file(name: str) -> Path | None:
     return None
 
 
+def defaults(name: str, spec: dict[str, Any]) -> dict[str, Any]:
+    """The entry with what `kind: imported` implies filled in (other entries unchanged)."""
+    if spec.get("kind") != "imported":
+        return spec
+    analyst = spec.get("subagent", f"{name}-analyst")
+    return {"sample_from": "file", "cli": f"labpipe {name} analyze --entry {{entry_id}}",
+            **({"notes": False} if not analyst and "notes" not in spec else {}), **spec,
+            "subagent": analyst, "module": f"{IMPORTED_MODULE}.analyze",
+            "summary": f"{IMPORTED_MODULE}.summary", "config": f"{METHODS_DIR}/{name}/config.yaml",
+            "analysis_data": [f"{METHODS_DIR}/{name}/README.md"],
+            "outputs": ["results.json", "plot.png", "provenance.json", "notes.md"]}
+
+
+def _check_imported(where: str, name: str, spec: dict[str, Any]) -> None:
+    if not isinstance(spec.get("patterns"), list) or not spec["patterns"] or not all(
+            isinstance(p, str) for p in spec["patterns"]):
+        raise MethodsError(f"{where}: `patterns` is missing: a list of folder and extension, "
+                           'e.g. ["Raman/fits/**/*.png", "Raman/fits/**/*.csv"]')
+    if spec.get("sample_from", "file") not in SAMPLE_FROM:
+        raise MethodsError(f"{where}: `sample_from` is 'file' (the sample ID is in the file name) "
+                           f"or 'folder' (in the folder name), not {spec['sample_from']!r}")
+    for key in ("module", "summary", "config", "gallery", "recognise", "cli_extension"):
+        if spec.get(key):
+            raise MethodsError(f"{where}: `kind: imported` brings its own `{key}`; remove it "
+                               "(your own code would be a method of its own: "
+                               "docs/ADDING_A_METHOD.md)")
+
+
 def _check(name: str, spec: Any, shipped: dict[str, Any]) -> dict[str, Any]:
     where = f"{REGISTRY_FILE}: method '{name}'"
     if not NAME.match(str(name)):
@@ -98,6 +133,11 @@ def _check(name: str, spec: Any, shipped: dict[str, Any]) -> dict[str, Any]:
                            f"of labpipe and {REGISTRY_FILE} of this project): choose another name")
     if not isinstance(spec, dict):
         raise MethodsError(f"{where}: expected a list of settings (patterns, module, …)")
+    if spec.get("kind") is not None and spec["kind"] not in KINDS:
+        raise MethodsError(f"{where}: `kind` can only be {', '.join(KINDS)}, not {spec['kind']!r}")
+    if spec.get("kind") == "imported":
+        _check_imported(where, name, spec)
+        return {**defaults(name, spec), "lab": True}
     for key in ("patterns", "module", "config"):
         if not spec.get(key):
             raise MethodsError(f"{where}: `{key}` is missing")
@@ -150,4 +190,6 @@ def lab_spec(method: str) -> dict[str, Any] | None:
         spec = entries.get(method)
     except (OSError, UnicodeDecodeError, yaml.YAMLError, AttributeError) as exc:
         raise MethodsError(f"{REGISTRY_FILE} cannot be read: {str(exc).splitlines()[0]}") from exc
+    if isinstance(spec, dict) and spec.get("kind") == "imported":
+        spec = defaults(method, spec)
     return {**spec, "lab": True} if isinstance(spec, dict) and spec.get("config") else None

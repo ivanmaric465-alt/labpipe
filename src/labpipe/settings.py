@@ -75,7 +75,7 @@ def _check_keys(override: dict[str, Any], base: dict[str, Any], where: str, pref
         path = f"{prefix}{key}"
         if key not in base:
             raise SettingsError(f"{where}: unknown setting '{path}'")
-        if isinstance(value, dict) and isinstance(base[key], dict):
+        if isinstance(value, dict) and isinstance(base[key], dict) and base[key]:   # `{}`: free-form
             _check_keys(value, base[key], where, path + ".")
 
 
