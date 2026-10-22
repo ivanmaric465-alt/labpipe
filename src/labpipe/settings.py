@@ -143,9 +143,6 @@ def _check_compare_style(block: dict[str, Any]) -> None:
     if not (colours == "okabe-ito" or (isinstance(colours, list) and colours
                                        and all(isinstance(c, str) for c in colours))):
         raise SettingsError("plots.compare.palette: 'okabe-ito' or a list of colours")
-    markers = block["marker_cycle"]
-    if not (isinstance(markers, list) and markers and all(isinstance(m, str) and m for m in markers)):
-        raise SettingsError("plots.compare.marker_cycle: a list of marker names, e.g. [o, s, ^]")
 
 
 def plot_style() -> tuple[dict[str, Any], list[dict[str, Any]]]:

@@ -159,11 +159,23 @@ def describe(method: str, methods: dict[str, dict[str, Any]] | None = None) -> d
     }
 
 
-def compare_version() -> dict[str, Any]:
-    """The version of the comparison figures (`labpipe compare`): a hash of labpipe.compare and
-    the plotting modules. It belongs to no method: a change here redraws comparison figures
-    and changes no analysis or plot version."""
-    modules = sorted({"labpipe.compare", *plotting_modules()})
+def comparekinds_modules() -> list[str]:
+    folder = SOURCE_ROOT / "labpipe" / "comparekinds"
+    return sorted(f"labpipe.comparekinds.{p.stem}" if p.stem != "__init__" else "labpipe.comparekinds"
+                  for p in folder.glob("*.py"))
+
+
+def compare_version(methods: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
+    """The version of the comparison figures (`labpipe compare`): a hash of labpipe.compare, the
+    plotting modules, the figure kinds (`labpipe.comparekinds`) and each method's `compare`
+    module with what it imports. It belongs to no method: a change here redraws comparison
+    figures and changes no analysis or plot version."""
+    methods = methods if methods is not None else load_methods()
+    modules = {"labpipe.compare", *plotting_modules(), *comparekinds_modules()}
+    for spec in methods.values():
+        if spec.get("compare"):
+            modules.update(closure(spec["compare"], set()))
+    modules = sorted(m for m in modules if _module_file(m))
     return {"compare_version": _digest([(n, read_source(n)) for n in modules]),
             "compare_modules": modules}
 

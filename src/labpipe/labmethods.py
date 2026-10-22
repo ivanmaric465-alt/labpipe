@@ -40,7 +40,7 @@ RESERVED = frozenset({
 })
 NAME = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
 # Entries of the registry that name a Python module (or module:function).
-MODULE_KEYS = ("module", "summary", "gallery", "recognise", "cli_extension")
+MODULE_KEYS = ("module", "summary", "gallery", "recognise", "cli_extension", "compare")
 
 
 class MethodsError(safety.SetupError):

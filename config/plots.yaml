@@ -12,9 +12,8 @@ dpi: 300                 # default of the method plot: dpi (a method's own value
 formats: [png, pdf]      # png is always written (the report uses it); svg also possible
 compare:                 # the comparison figures across samples (analysis/_compare/); no analysis depends on them
   width_in: single       # inches, or single | double (the column widths above)
-  height_per_sample_in: 0.3   # one row per sample; the figure grows with the number of samples
+  height_per_sample_in: 0.3   # dot plots, bars: one row per sample; the figure grows with the number of samples
   min_height_in: 1.6
-  palette: okabe-ito     # one colour per sample, in the report's sample order; or a list of colours
-  marker_cycle: [o, s, ^, D, v, P]   # one marker per sample (matplotlib marker names), used with the palette
+  palette: okabe-ito     # the colours that tell traces apart (patterns); dot plots are one dark colour; or a list of colours
   marker_size: 4.5       # pt
   point_offset: 0.2      # vertical spacing of the measurements of one sample (1 = one row)

@@ -85,7 +85,7 @@ def provenance(project, method, quantity):
 
 
 def figures(result):
-    return {(f["method"], f["quantity"]): f for f in result["figures"]}
+    return {(f["method"], f["name"]): f for f in result["figures"]}
 
 
 # --- what is drawn -------------------------------------------------------------------------------
@@ -95,11 +95,12 @@ def test_figures_for_quantities_with_two_samples_and_skips_with_reasons(project)
     drawn = figures(result)
     assert set(drawn) == {("xrd", "xrd.a.fcc"), ("eds", "eds.at.Pd"), ("eds", "eds.at.Pt")}
     assert all(f["status"] == "drawn" for f in drawn.values())
-    assert {(s["quantity"], s["reason"]) for s in result["skipped"]} == {
+    assert {(s["name"], s["reason"]) for s in result["skipped"]} == {
         ("xrd.size.fcc", "only 1 sample")}
     for (method, quantity), figure in drawn.items():
         folder = project / FOLDER / method / quantity
-        assert {p.name for p in folder.iterdir()} == {"plot.png", "plot.pdf", "provenance.json"}
+        assert {p.name for p in folder.iterdir()} == {"plot.png", "plot.pdf", "figure.html",
+                                                       "provenance.json"}
         assert figure["png"] == f"{FOLDER}/{method}/{quantity}/plot.png"
     assert result["moved_aside"] == [] and result["unmatched"] == []
 
@@ -107,53 +108,56 @@ def test_figures_for_quantities_with_two_samples_and_skips_with_reasons(project)
 def test_samples_in_the_reports_sample_order_with_one_point_per_measurement(project):
     compare.build(CONFIG)
     prov = provenance(project, "xrd", "xrd.a.fcc")
-    assert [s["sample"] for s in prov["samples"]] == ["S-1", "S-2", "S-3", "S-10"]  # natural
-    assert [(p["sample"], p["measurement_id"]) for p in prov["points"]] == [
+    spec = prov["spec"]
+    assert spec["kind"] == "dots" and spec["samples"] == ["S-1", "S-2", "S-3", "S-10"]  # natural
+    assert [(p["sample"], p["measurement_id"]) for p in spec["points"]] == [
         ("S-1", "S-1_a"), ("S-2", "S-2_a"), ("S-2", "S-2_b"), ("S-3", "S-3_a"), ("S-10", "S-10_a")]
     (project / "config" / "samples.yaml").write_text(
         "samples:\n  S-10: {}\n  S-3: {}\n", encoding="utf-8")
     lab(project, "report: {sample_order: samples}\n")
     result = compare.build(CONFIG)
     assert figures(result)[("xrd", "xrd.a.fcc")]["status"] == "redrawn"      # the order is an input
-    assert [s["sample"] for s in provenance(project, "xrd", "xrd.a.fcc")["samples"]] == [
+    assert provenance(project, "xrd", "xrd.a.fcc")["spec"]["samples"] == [
         "S-10", "S-3", "S-1", "S-2"]
 
 
-def test_a_sample_keeps_its_colour_and_marker_in_every_figure(project):
+def test_dot_plots_have_no_per_sample_styles(project):
     compare.build(CONFIG)
-    styles = [{s["sample"]: (s["color"], s["marker"]) for s in provenance(project, m, q)["samples"]}
-              for m, q in (("xrd", "xrd.a.fcc"), ("eds", "eds.at.Pt"))]
-    assert styles[0]["S-2"] == styles[1]["S-2"] and styles[0]["S-3"] == styles[1]["S-3"]
-    assert len({v for v in styles[0].values()}) == len(styles[0])        # all different here
-    assert styles[0]["S-1"][0] == "#0072B2"                                # Okabe-Ito, first
+    spec = provenance(project, "xrd", "xrd.a.fcc")["spec"]
+    assert not any("color" in str(k) or "marker" in str(k) for k in spec)
+    assert all(set(p) >= {"nominal", "sigma"} for p in spec["points"])
+    html = (project / FOLDER / "xrd" / "xrd.a.fcc" / "figure.html").read_text(encoding="utf-8")
+    assert html.count("<circle") == 5 and 'data-m="S-2_b"' in html and 'data-s="S-2"' in html
 
 
 def test_no_sigma_points_and_the_caption_says_so(project):
     compare.build(CONFIG)
     prov = provenance(project, "xrd", "xrd.a.fcc")
-    assert [p["sigma"] for p in prov["points"]] == [0.0035, 0.0035, 0.002, None, 0.0035]
-    assert "hollow markers have no σ (S-3_a)" in prov["caption"]
+    assert [p["sigma"] for p in prov["spec"]["points"]] == [0.0035, 0.0035, 0.002, None, 0.0035]
+    assert "no σ, so no bar, for S-3_a" in prov["caption"]
     assert "Error bars: σ from the fit" in prov["caption"]
     assert "S-2 ×2" in prov["caption"] and "5 measurements of 4 samples" in prov["caption"]
-    assert "No σ for any point" in provenance(project, "eds", "eds.at.Pt")["caption"]
+    assert "No σ for any point, so no error bars" in provenance(project, "eds", "eds.at.Pt")["caption"]
 
 
 def test_provenance_holds_the_data_the_hashes_and_the_code(project):
     compare.build(CONFIG)
     prov = provenance(project, "xrd", "xrd.a.fcc")
-    assert prov["schema"] == "labpipe.compare-figure/1"
-    assert (prov["method"], prov["quantity"], prov["unit"]) == ("xrd", "xrd.a.fcc", "Å")
-    point = prov["points"][0]
+    assert prov["schema"] == "labpipe.compare-figure/2"
+    assert (prov["method"], prov["name"], prov["kind"], prov["spec"]["unit"]) == (
+        "xrd", "xrd.a.fcc", "dots", "Å")
+    point = prov["spec"]["points"][0]
     assert point["results_path"] == "analysis/S-1/xrd/S-1_a/results.json"
     assert point["results_sha256"] == sha256_file(project / point["results_path"])
     assert (point["entry_id"], point["key"], point["value"]) == (
         "xrd:lab:S-1_a", "phases.fcc_indexed[0].a_angstrom", 3.90)
-    assert prov["plot"]["compare"]["palette"] == "okabe-ito" and prov["plot"]["dpi"] == 300
+    assert prov["spec"]["plot"]["compare"]["palette"] == "okabe-ito"
+    assert prov["spec"]["plot"]["dpi"] == 300
     assert prov["code"]["compare_version"] == versions.compare_version()["compare_version"]
     assert prov["code"]["labpipe_entry"] == "labpipe.compare.render" and "commit" in prov["code"]
     folder = project / FOLDER / "xrd" / "xrd.a.fcc"
-    assert prov["outputs"] == {"plot.pdf": sha256_file(folder / "plot.pdf"),
-                               "plot.png": sha256_file(folder / "plot.png")}
+    assert prov["outputs"] == {name: sha256_file(folder / name)
+                               for name in ("figure.html", "plot.pdf", "plot.png")}
     assert prov["replay"] == f"labpipe replay {FOLDER}/xrd/xrd.a.fcc/provenance.json"
     assert prov["runtime"]["mode"] in ("native", "container")
 
@@ -163,8 +167,8 @@ def test_the_same_inputs_give_the_same_bytes(project, tmp_path):
     prov = provenance(project, "xrd", "xrd.a.fcc")
     again = tmp_path / "again"
     again.mkdir()
-    compare.render(prov, again / "plot")
-    for name in ("plot.png", "plot.pdf"):
+    compare.render(prov["spec"], again / "plot")
+    for name in ("plot.png", "plot.pdf", "figure.html"):
         assert (again / name).read_bytes() == (project / FOLDER / "xrd" / "xrd.a.fcc" / name).read_bytes()
 
 
@@ -183,7 +187,7 @@ def test_kept_when_nothing_changed_redrawn_with_the_old_one_moved_aside(project)
     assert status == {"xrd.a.fcc": "redrawn", "eds.at.Pd": "kept", "eds.at.Pt": "kept"}
     old = list((project / FOLDER / "_superseded").glob("*/xrd/xrd.a.fcc/provenance.json"))
     assert len(old) == 1 and json.loads(old[0].read_text(encoding="utf-8"))["created_utc"] == stamp
-    assert provenance(project, "xrd", "xrd.a.fcc")["points"][0]["value"] == 3.95
+    assert provenance(project, "xrd", "xrd.a.fcc")["spec"]["points"][0]["value"] == 3.95
     # a plot style change redraws the figures too; a figure edited by hand is redrawn
     lab(project, "plots: {compare: {marker_size: 6}}\n")
     assert {f["status"] for f in compare.build(CONFIG)["figures"]} == {"redrawn"}
@@ -205,12 +209,12 @@ def test_a_quantity_that_no_longer_exists_is_moved_aside_not_deleted(project):
     data["entries"]["eds:lab:S-3_e"]["status"] = "failed"
     (project / "manifest.json").write_text(json.dumps(data), encoding="utf-8")
     result = compare.build(CONFIG)
-    assert {(m["method"], m["quantity"]) for m in result["moved_aside"]} == {
+    assert {(m["method"], m["name"]) for m in result["moved_aside"]} == {
         ("eds", "eds.at.Pd"), ("eds", "eds.at.Pt")}
     assert not (project / FOLDER / "eds" / "eds.at.Pt").exists()
     moved = project / result["moved_aside"][0]["to"]
     assert (moved / "plot.png").exists() and (moved / "provenance.json").exists()
-    assert [s["quantity"] for s in result["skipped"] if s["method"] == "eds"] == [
+    assert [s["name"] for s in result["skipped"] if s["method"] == "eds"] == [
         "eds.at.Pd", "eds.at.Pt"]
 
 
@@ -238,7 +242,7 @@ def test_replay_from_the_provenance_alone_is_identical(project):
     path = project / FOLDER / "xrd" / "xrd.a.fcc" / "provenance.json"
     result = replay.replay(path, CONFIG)
     assert result["all_outputs_identical"] and result["problems"] == [] and result["notes"] == []
-    assert set(result["comparison"]) == {"plot.png", "plot.pdf"}
+    assert set(result["comparison"]) == {"plot.png", "plot.pdf", "figure.html"}
     assert (project / result["replay_dir"] / "out" / "plot.png").exists()
 
 
@@ -322,15 +326,15 @@ def test_the_setting_decides_what_is_drawn_and_unmatched_names_are_listed(projec
     lab(project, "report: {compare: {xrd: [xrd.a.fcc, xrd.size.fcc, xrd.a.hcp], eds: false}}\n")
     result = compare.build(CONFIG)
     assert set(figures(result)) == {("xrd", "xrd.a.fcc")}
-    assert result["unmatched"] == [{"method": "xrd", "quantity": "xrd.a.hcp",
+    assert result["unmatched"] == [{"method": "xrd", "name": "xrd.a.hcp",
                                     "reason": "no measurement offers it"}]
-    assert [s["quantity"] for s in result["skipped"]] == ["xrd.size.fcc"]
+    assert [s["name"] for s in result["skipped"]] == ["xrd.size.fcc"]
     assert not (project / FOLDER / "eds").exists()                    # hidden: never drawn
 
 
 @pytest.mark.parametrize("text, message", [
     ("plots: {compare: {width_in: -1}}\n", "plots.compare.width_in"),
-    ("plots: {compare: {marker_cycle: []}}\n", "plots.compare.marker_cycle"),
+    ("plots: {compare: {marker_cycle: [o]}}\n", "marker_cycle"),
     ("plots: {compare: {palette: red}}\n", "plots.compare.palette"),
     ("plots: {compare: {point_offset: 3}}\n", "plots.compare.point_offset"),
     ("plots: {compare: {colour: x}}\n", "colour"),
@@ -394,11 +398,13 @@ def test_report_section_per_method_with_captions_and_the_skipped_line(project):
     assert "<h2 class=sec>Compare samples</h2>" in section
     assert section.index('id="compare-eds"') < section.index('id="compare-xrd"')
     assert section.count("<figure>") == 3
-    alts = re.findall(r'<figure><img alt="([^"]*)" src="[^"]*"><figcaption>([^<]*)</figcaption>',
-                      section)
-    assert len(alts) == 3 and all(alt == caption and caption for alt, caption in alts)
-    assert any("5 measurements of 4 samples" in c and "hollow markers have no σ" in c
-               for _, c in alts)
+    captions = re.findall(r"<figcaption>([^<]*)</figcaption>", section)
+    assert len(captions) == 3 and all(captions)
+    assert any("5 measurements of 4 samples" in c and "no σ, so no bar" in c for c in captions)
+    assert section.count("<svg") == 3 and section.count("<div class=cf ") == 3
+    assert re.findall(r'data-chip="([^"]*)"', section) == ["S-1", "S-2", "S-3", "S-10"]
+    assert "data-chips=all" in section and 'href="_compare/xrd/xrd.a.fcc/plot.png"' in section
+    assert ">PDF</a>" in section and ">provenance</a>" in section
     assert "Not drawn: xrd.size.fcc (only 1 sample)." in section
     assert (project / FOLDER / "xrd" / "xrd.a.fcc" / "plot.png").exists()
 
@@ -409,9 +415,9 @@ def test_report_nav_how_to_read_and_folding(project):
     assert 'href="#compare"' in nav and nav.index("#postdoc") < nav.index("#compare") < nav.index("#overview")
     assert "<span class=sep>" in nav and "Methods" in nav and "Samples" in nav
     box = re.search(r"<details class=howto>.*?</details>", page, re.S).group(0)
-    assert "<b>Compare samples</b>" in box and "hollow marker" in box
+    assert "<b>Compare samples</b>" in box and "grey diamond" in box
     assert page.count('<details class="blk cmp" open') == 2
-    assert "IntersectionObserver" in page and "@media print{nav.top{display:none}" in page
+    assert "IntersectionObserver" in page and "@media print{nav.top,.chips{display:none}" in page
 
 
 def test_report_without_the_section_has_no_figures_link_or_bullet(project):
@@ -450,11 +456,11 @@ def test_cli_compare_prints_the_figures_and_what_was_kept(project, capsys):
     assert cli.cmd_compare(SimpleNamespace(method=None), CONFIG) == 0
     first = json.loads(capsys.readouterr().out)
     assert {f["status"] for f in first["figures"]} == {"drawn"} and first["dir"] == FOLDER
-    assert first["skipped"] == [{"method": "xrd", "quantity": "xrd.size.fcc",
-                                 "reason": "only 1 sample"}]
+    assert first["skipped"] == [{"method": "xrd", "name": "xrd.size.fcc",
+                                 "reason": "only 1 sample", "covered": False}]
     assert cli.cmd_compare(SimpleNamespace(method="xrd"), CONFIG) == 0
     second = json.loads(capsys.readouterr().out)
-    assert [(f["quantity"], f["status"]) for f in second["figures"]] == [("xrd.a.fcc", "kept")]
+    assert [(f["name"], f["status"]) for f in second["figures"]] == [("xrd.a.fcc", "kept")]
     assert cli.cmd_compare(SimpleNamespace(method="nope"), CONFIG) == 1
     assert "unknown method" in json.loads(capsys.readouterr().out)["error"]
 
@@ -465,3 +471,172 @@ def test_cli_replay_takes_a_comparison_figure(project, capsys):
                            force=False)
     assert cli.cmd_replay(args, CONFIG) == 0
     assert json.loads(capsys.readouterr().out)["all_outputs_identical"] is True
+
+
+# --- the methods' own figures (the `compare:` hook) ---------------------------------------------
+
+@pytest.fixture
+def hook(project, monkeypatch):
+    """A fake `compare` module on the eds method: a bars figure from results.json, covering
+    eds.at.*; its behaviour is set through the returned dict."""
+    import sys
+    import types
+    from labpipe import registry, versions as versions_mod
+    state = {"raise": None, "extra": [], "seen": None}
+    module = types.ModuleType("fake_eds_compare")
+    module.COVERS = ["eds.at.*"]
+
+    def figures(measurements, context):
+        state["seen"] = (measurements, context)
+        if state["raise"]:
+            raise state["raise"]
+        cats = [{"name": "Pd", "color": "#D55E00"}, {"name": "Pt", "color": "#0072B2"}]
+        rows = [{"sample": m["sample"], "measurement_id": m["measurement_id"],
+                 "entry_id": m["entry_id"],
+                 "segments": [{"category": c["name"], "value": m["results"]["metal_basis"]["at_percent"][c["name"]]}
+                              for c in cats],
+                 "nominal_segments": None, "results_path": m["results_path"],
+                 "results_sha256": m["results_sha256"]} for m in measurements]
+        return [{"kind": "bars", "name": "composition", "title": "EDS composition",
+                 "unit_label": "at%", "categories": cats, "rows": rows}] + state["extra"]
+    module.figures = figures
+    monkeypatch.setitem(sys.modules, "fake_eds_compare", module)
+    real = registry.load_methods
+
+    def patched():
+        methods = real()
+        methods["eds"] = methods["eds"] | {"compare": "fake_eds_compare"}
+        return methods
+    for mod in (compare, report, dataset, versions_mod):
+        monkeypatch.setattr(mod, "load_methods", patched)
+    return state
+
+
+def test_a_hook_figure_is_drawn_with_all_outputs_and_the_covered_quantities_are_left_out(project, hook):
+    result = compare.build(CONFIG)
+    assert set(figures(result)) == {("xrd", "xrd.a.fcc"), ("eds", "composition")}   # not eds.at.*
+    folder = project / FOLDER / "eds" / "composition"
+    assert {p.name for p in folder.iterdir()} == {"plot.png", "plot.pdf", "figure.html", "provenance.json"}
+    prov = provenance(project, "eds", "composition")
+    assert prov["kind"] == "bars" and set(prov["outputs"]) == {"plot.png", "plot.pdf", "figure.html"}
+    assert prov["spec"]["method"] == "eds" and prov["spec"]["plot"]["dpi"] == 300
+    assert prov["outputs"]["figure.html"] == sha256_file(folder / "figure.html")
+    measurements, context = hook["seen"]
+    assert [m["sample"] for m in measurements] == ["S-1", "S-2", "S-3"]
+    assert set(measurements[0]) == {"sample", "entry_id", "measurement_id", "status", "results",
+                                    "results_path", "results_sha256", "output_dir", "input",
+                                    "raw_path"}
+    assert measurements[0]["raw_path"] is None and set(context) == {"plot", "config"}
+    assert context["plot"]["compare"]["palette"] == "okabe-ito"
+
+
+def test_covered_quantities_are_drawn_when_the_setting_names_them(project, hook):
+    lab(project, "report: {compare: {eds: [composition, eds.at.Pt]}}\n")
+    result = compare.build(CONFIG)
+    assert {n for (m, n) in figures(result) if m == "eds"} == {"composition", "eds.at.Pt"}
+    assert figures(result)[("eds", "eds.at.Pt")]["covered"] is True
+    lab(project, "report: {compare: {eds: [eds.at.*]}}\n")
+    assert {n for (m, n) in figures(compare.build(CONFIG)) if m == "eds"} == {"eds.at.Pd", "eds.at.Pt"}
+
+
+def test_replay_of_a_hook_figure_is_identical_and_notes_a_changed_source(project, hook):
+    compare.build(CONFIG)
+    path = project / FOLDER / "eds" / "composition" / "provenance.json"
+    result = replay.replay(path, CONFIG)
+    assert result["all_outputs_identical"] and result["notes"] == []
+    (project / "analysis" / "S-1" / "eds" / "S-1_e" / "results.json").write_text(
+        json.dumps(_eds(40.0)), encoding="utf-8")
+    again = replay.replay(path, CONFIG)
+    assert again["all_outputs_identical"] and any("S-1_e/results.json has changed" in n for n in again["notes"])
+
+
+def test_a_figure_is_redrawn_when_the_hook_data_change_and_kept_otherwise(project, hook):
+    compare.build(CONFIG)
+    assert figures(compare.build(CONFIG))[("eds", "composition")]["status"] == "kept"
+    (project / "analysis" / "S-1" / "eds" / "S-1_e" / "results.json").write_text(
+        json.dumps(_eds(40.0)), encoding="utf-8")
+    assert figures(compare.build(CONFIG))[("eds", "composition")]["status"] == "redrawn"
+
+
+def test_a_failing_hook_is_skipped_with_its_reason_and_keeps_its_folder(project, hook):
+    compare.build(CONFIG)
+    hook["raise"] = RuntimeError("no raw file")
+    result = compare.build(CONFIG)
+    assert {"method": "eds", "name": "(compare hook)", "reason": "RuntimeError: no raw file",
+            "covered": False} in result["skipped"]
+    assert ("xrd", "xrd.a.fcc") in figures(result) and result["moved_aside"] == []
+    assert (project / FOLDER / "eds" / "composition" / "provenance.json").exists()
+    assert "(compare hook)" in build_report(project)[1] and "RuntimeError: no raw file" in build_report(project)[1]
+
+
+def test_bad_hook_specs_and_names_are_skipped_one_by_one(project, hook):
+    hook["extra"] = [{"kind": "pie", "name": "x"}, {"kind": "dots", "name": "bad name"},
+                     {"kind": "bars", "name": "composition", "categories": [], "rows": []},
+                     {"kind": "lines", "name": "nan", "traces": [{"sample": "S-1", "measurement_id": "m",
+                                                                 "x": [1, 2], "y": [1, float("nan")]}]}]
+    result = compare.build(CONFIG)
+    reasons = {s["name"]: s["reason"] for s in result["skipped"]}
+    assert "unknown figure kind 'pie'" in reasons["x"] and "letters, digits" in reasons["bad name"]
+    assert "another figure of this method has this name" in reasons["composition"]
+    assert "not plain JSON" in reasons["nan"]
+    assert ("eds", "composition") in figures(result)
+
+
+def test_a_figure_that_cannot_be_drawn_is_skipped_not_fatal(project, monkeypatch):
+    real = compare.render
+
+    def broken(spec, stem):
+        if spec["name"] == "eds.at.Pt":
+            raise RuntimeError("boom")
+        return real(spec, stem)
+    monkeypatch.setattr(compare, "render", broken)
+    result = compare.build(CONFIG)
+    assert ("eds", "eds.at.Pd") in figures(result) and ("eds", "eds.at.Pt") not in figures(result)
+    assert any(s["name"] == "eds.at.Pt" and "RuntimeError: boom" in s["reason"] for s in result["skipped"])
+
+
+def test_settings_check_accepts_figure_names_of_a_method_with_a_hook(project, hook):
+    lab(project, "report: {compare: {eds: [composition, patterns-anything]}}\n")
+    assert report.report_settings()["report"]["compare"]["eds"] == ["composition", "patterns-anything"]
+    lab(project, "report: {compare: {xrd: [composition]}}\n")
+    with pytest.raises(settings_mod.SettingsError, match="'composition' is not a xrd quantity"):
+        report.report_settings()
+    lab(project, "report: {compare: {sem: true}}\n")
+    with pytest.raises(settings_mod.SettingsError, match="names no quantities or figures"):
+        report.report_settings()
+    lab(project, "report: {compare: {eds: [composition, nothing-here]}}\n")
+    assert [u["name"] for u in compare.build(CONFIG)["unmatched"]] == ["nothing-here"]
+
+
+def test_compare_selection_covered_quantities():
+    wanted = report.compare_wanted
+    assert not wanted("all", "eds", "eds.at.Pt", True) and wanted("all", "eds", "composition")
+    assert not wanted({"eds": True}, "eds", "eds.at.Pt", True)
+    assert wanted({"eds": ["eds.at.Pt"]}, "eds", "eds.at.Pt", True)
+    assert not wanted({"eds": ["composition"]}, "eds", "eds.at.Pt", True)
+
+
+def test_the_compare_version_covers_the_kinds_and_the_hook_but_no_analysis_version(project, hook):
+    now = versions.compare_version()
+    assert {"labpipe.comparekinds", "labpipe.comparekinds.dots", "labpipe.comparekinds.lines",
+            "labpipe.comparekinds.bars", "labpipe.comparekinds.images"} <= set(now["compare_modules"])
+    for info in versions.all_versions().values():
+        assert not any(m.startswith("labpipe.comparekinds") for m in info["analysis_modules"]
+                       + info["plot_modules"])
+
+
+def test_a_lab_method_may_name_a_compare_module(tmp_path):
+    from labpipe import labmethods
+    assert "compare" in labmethods.MODULE_KEYS
+    entry = {"patterns": ["*.x"], "module": "labpipe_lab.demo.analyze", "config": "lab/methods/demo/config.yaml",
+             "compare": "elsewhere.module"}
+    with pytest.raises(labmethods.MethodsError, match="`compare` must name a module under"):
+        labmethods._check("demo", entry, {})
+    assert labmethods._check("demo", entry | {"compare": "labpipe_lab.demo.compare"}, {})["lab"]
+
+
+def test_report_has_the_script_for_chips_and_the_thicker_scroll_bar(project):
+    page = build_report(project)[1]
+    assert "scrollbar-width:auto" in page and "nav.top::-webkit-scrollbar{height:10px}" in page
+    assert "scrollbar-width:thin" not in page
+    assert "data-chip" in page and "beforeprint" in page and ".chips" in page

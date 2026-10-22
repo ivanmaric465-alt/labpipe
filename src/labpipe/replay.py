@@ -40,7 +40,7 @@ def _input_path(recorded: dict, config: dict) -> Path:
 
 def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[str, Any]:
     record = json.loads(provenance_path.read_text(encoding="utf-8"))
-    if record.get("schema") == "labpipe.compare-figure/1":      # a comparison figure of samples
+    if str(record.get("schema")).startswith("labpipe.compare-figure/"):      # a comparison figure of samples
         from labpipe import compare
         return compare.replay(provenance_path, config, force=force)
     problems, notes = [], []
