@@ -128,7 +128,10 @@ def html(spec: dict[str, Any], fig_id: str) -> str:
     head = "".join(f'<div class=hd>{ck.esc(c["label"])}</div>' for c in columns)
     body = []
     for row in spec["rows"]:
-        body.append(f'<div class=rl>{ck.esc(row["sample"])}</div>')
+        # a row is a `display: contents` group, so switching a sample off removes the whole row;
+        # a cell switched off keeps its place (visibility), so the columns stay aligned
+        body.append(f'<div class=gr data-row="{ck.esc(row["sample"])}">'
+                    f'<div class=rl>{ck.esc(row["sample"])}</div>')
         for column in columns:
             cell = (row.get("cells") or {}).get(column["key"])
             if not cell:
@@ -146,6 +149,7 @@ def html(spec: dict[str, Any], fig_id: str) -> str:
             label = f'<figcaption class=m>{ck.esc(cell.get("label", ""))}</figcaption>'
             body.append(ck.mark(cell["measurement_id"], row["sample"],
                                 f"<figure>{inner}{label}</figure>", tag="div"))
+        body.append("</div>")
     grid = (f'<div class=grid style="grid-template-columns:auto repeat({len(columns)},minmax(0,1fr))">'
             f'<div></div>{head}{"".join(body)}</div>')
     items = [(s, m, None) for s, m in inventory(spec)]

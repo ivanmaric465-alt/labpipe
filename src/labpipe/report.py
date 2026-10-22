@@ -266,7 +266,9 @@ new Set(of.values()).forEach(t=>t&&io.observe(t))})();
 (()=>{const S=document.getElementById('compare');if(!S)return;
 const figs=[...S.querySelectorAll('.cf')],boxes=f=>[...f.querySelectorAll('input[data-cm]')];
 const apply=f=>{const on=new Set(boxes(f).filter(c=>c.checked).map(c=>c.dataset.cm));
-f.querySelectorAll('[data-m]').forEach(e=>e.style.display=on.has(e.dataset.m)?'':'none');
+f.querySelectorAll('[data-m]').forEach(e=>e.closest('svg')?e.style.display=on.has(e.dataset.m)?'':'none'
+:e.style.visibility=on.has(e.dataset.m)?'':'hidden');const cs=new Set(boxes(f).filter(c=>c.checked).map(c=>c.dataset.cs));
+f.querySelectorAll('[data-row]').forEach(r=>r.style.display=cs.has(r.dataset.row)?'':'none');
 f.querySelectorAll('svg').forEach(v=>{const st=+v.dataset.step;if(!st)return;
 v.querySelectorAll('.v').forEach(g=>{let k=0;g.querySelectorAll('g[data-i]').forEach(t=>{
 const here=on.has(t.dataset.m);t.setAttribute('transform','translate(0 '+(here?(+t.dataset.i-k)*st:0)+')');if(here)k++})})})};
