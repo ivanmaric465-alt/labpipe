@@ -171,16 +171,25 @@ def fig_id(spec: dict[str, Any]) -> str:
     return f"cf-{spec['method']}-{folder_name(spec['name'])}"
 
 
+RAW_PREFIX = "raw:"
+
+
 def sources(spec: dict[str, Any]) -> dict[str, str]:
     """{path: sha256} of every file the spec says its data came from (results.json, a raw
-    file, an image): any dict with `results_path`/`results_sha256` or `path`/`sha256`."""
+    file, an image): any dict with `results_path`/`results_sha256` or `path`/`sha256`. Paths are
+    project-relative; a raw file is recorded by its data root, `{raw_root, path (relative to
+    that root), sha256}`, here "raw:<root id>/<path>", so the record is the same on the host and
+    in the container."""
     found: dict[str, str] = {}
 
     def walk(node: Any) -> None:
         if isinstance(node, dict):
             for path_key, hash_key in (("results_path", "results_sha256"), ("path", "sha256")):
                 if isinstance(node.get(path_key), str) and isinstance(node.get(hash_key), str):
-                    found.setdefault(node[path_key], node[hash_key])
+                    key = node[path_key]
+                    if path_key == "path" and isinstance(node.get("raw_root"), str):
+                        key = f"{RAW_PREFIX}{node['raw_root']}/{key}"
+                    found.setdefault(key, node[hash_key])
             for value in node.values():
                 walk(value)
         elif isinstance(node, list):
@@ -191,6 +200,15 @@ def sources(spec: dict[str, Any]) -> dict[str, str]:
 
 
 # --- the methods' own figures ------------------------------------------------------------------
+
+def _source_file(key: str, config: dict) -> Path | None:
+    """Where a recorded source is now (None: a raw root that is not configured here)."""
+    if not key.startswith(RAW_PREFIX):
+        return PROJECT_ROOT / key
+    root_id, _, relative = key[len(RAW_PREFIX):].partition("/")
+    root = next((r for r in config.get("raw_roots") or [] if r.get("id") == root_id), None)
+    return Path(root["path"]) / relative if root else None
+
 
 def _raw_path(config: dict, entry: dict[str, Any]) -> str | None:
     """The absolute path of the entry's raw file, when it resolves here (read-only: it is only
@@ -205,7 +223,8 @@ def _raw_path(config: dict, entry: dict[str, Any]) -> str | None:
 def measurements_of(config: dict, method: str, sample_order: list[str]) -> list[dict[str, Any]]:
     """What a method's hook gets: one dict per analysed measurement, in the report's sample order
     (then measurement id): sample, entry_id, measurement_id, status, results (the loaded dict),
-    results_path, results_sha256, output_dir, input (results["input"] or None), raw_path."""
+    results_path, results_sha256, output_dir, input (results["input"] or None), raw_path, and
+    raw_root (the id of its data root; a raw source is recorded as {raw_root, path, sha256})."""
     rank = {s: i for i, s in enumerate(sample_order)}
     items = []
     for entry in mf.load(config)["entries"].values():
@@ -220,7 +239,8 @@ def measurements_of(config: dict, method: str, sample_order: list[str]) -> list[
             "measurement_id": entry["measurement_id"], "status": entry["status"],
             "results": results, "results_path": f"{folder}/results.json",
             "results_sha256": sha256_file(path), "output_dir": folder,
-            "input": results.get("input"), "raw_path": _raw_path(config, entry)})
+            "input": results.get("input"), "raw_path": _raw_path(config, entry),
+            "raw_root": entry.get("raw_root")})
     return sorted(items, key=lambda m: (rank.get(m["sample"], len(rank)), m["sample"],
                                         m["measurement_id"], m["entry_id"]))
 
@@ -483,8 +503,8 @@ def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[
                 "hint": "use the code that made it (its release or commit), or pass --force to "
                         "compare anyway"}
     for path, digest in sorted(sources(record["spec"]).items()):
-        target = PROJECT_ROOT / path
-        if not target.exists():
+        target = _source_file(path, config)
+        if target is None or not target.exists():
             notes.append(f"{path} is no longer there; the figure is drawn from the recorded values")
         elif sha256_file(target) != digest:
             notes.append(f"{path} has changed since the figure was made; the figure is drawn "

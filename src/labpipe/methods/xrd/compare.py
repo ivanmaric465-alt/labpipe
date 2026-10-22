@@ -78,8 +78,8 @@ def _trace(m: dict[str, Any], config: dict[str, Any]) -> tuple[dict[str, Any] | 
     return ({"sample": m["sample"], "measurement_id": m["measurement_id"],
              "entry_id": m["entry_id"], "x": xs, "y": ys, "n_points_in_file": int(ok.sum()),
              "thinning": THINNING if int(ok.sum()) > MAX_POINTS else "none (all points)",
-             "source": {"path": path, "sha256": recorded,
-                        "relative_path": (m.get("input") or {}).get("relative_path")}}, "")
+             "source": {"raw_root": m.get("raw_root"), "sha256": recorded,
+                        "path": (m.get("input") or {}).get("relative_path")}}, "")
 
 
 def _candidates(m: dict[str, Any]) -> list[dict[str, Any]]:

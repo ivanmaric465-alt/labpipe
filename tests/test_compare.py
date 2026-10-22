@@ -544,7 +544,7 @@ def test_a_hook_figure_is_drawn_with_all_outputs_and_the_covered_quantities_are_
     assert [m["sample"] for m in measurements] == ["S-1", "S-2", "S-3"]
     assert set(measurements[0]) == {"sample", "entry_id", "measurement_id", "status", "results",
                                     "results_path", "results_sha256", "output_dir", "input",
-                                    "raw_path"}
+                                    "raw_path", "raw_root"}
     assert measurements[0]["raw_path"] is None and set(context) == {"plot", "config"}
     assert context["plot"]["compare"]["palette"] == "okabe-ito"
 

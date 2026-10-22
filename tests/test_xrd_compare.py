@@ -45,7 +45,7 @@ def _measurement(tmp_path, sample, mid, x, y, **kw):
             "status": "done", "results": _results(raw, **kw),
             "results_path": f"analysis/{sample}/xrd/{mid}/results.json",
             "results_sha256": "r" * 64, "output_dir": f"analysis/{sample}/xrd/{mid}",
-            "input": _results(raw)["input"], "raw_path": str(path)}
+            "input": _results(raw)["input"], "raw_path": str(path), "raw_root": "lab"}
 
 
 @pytest.fixture
@@ -147,3 +147,15 @@ def test_figures_draw_and_redraw_identically(pair, tmp_path):
         for f in ("plot.png", "figure.html"):
             assert (out[0] / f).read_bytes() == (out[1] / f).read_bytes()
         assert compare.sources(valid)         # the raw file / results.json are checked on replay
+
+
+def test_a_raw_source_is_recorded_by_its_data_root_not_an_absolute_path(tmp_path, pair):
+    m = pair[0][0]
+    trace, _ = xrd_compare._trace(m, {})
+    assert trace["source"] == {"raw_root": "lab", "path": "XRD/x.xrdml",
+                               "sha256": m["input"]["sha256"]}
+    assert str(tmp_path) not in json.dumps(trace)
+    assert compare.sources({"traces": [trace]}) == {"raw:lab/XRD/x.xrdml": m["input"]["sha256"]}
+    config = {"raw_roots": [{"id": "lab", "path": str(tmp_path / "data")}]}
+    assert compare._source_file("raw:lab/XRD/x.xrdml", config) == tmp_path / "data/XRD/x.xrdml"
+    assert compare._source_file("raw:other/x", config) is None
