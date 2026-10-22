@@ -38,11 +38,36 @@ def _input_path(recorded: dict, config: dict) -> Path:
     return path
 
 
+def _check_outside(record: dict, provenance_path: Path, config: dict) -> dict[str, Any]:
+    """An analysis made outside labpipe (kind imported) cannot be redrawn. Check instead that
+    each source file is still there with the recorded sha256, and that the copies labpipe made
+    from them (results.json, the figures) still match the hashes in the record."""
+    def state(path: Path, recorded: str) -> str:
+        if not path.is_file():
+            return "missing"
+        return "unchanged" if sha256_file(path) == recorded else "changed"
+
+    sources = [{"file": s.get("relative_path") or s["path"], "recorded": s["sha256"],
+                "state": state(_input_path(s, config), s["sha256"])}
+               for s in record.get("sources") or []]
+    copies = [{"file": name, "recorded": digest,
+               "state": state(provenance_path.parent / name, digest)}
+              for name, digest in record["outputs"].items()]
+    problems = [f"{item['file']}: {item['state']}" for item in sources + copies
+                if item["state"] != "unchanged"]
+    return {"made_by": "outside labpipe", "redrawn": False, "checked": True,
+            "message": "made outside labpipe: checked, not redrawn",
+            "sources": sources, "copies": copies, "problems": problems,
+            "all_outputs_identical": not problems}
+
+
 def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[str, Any]:
     record = json.loads(provenance_path.read_text(encoding="utf-8"))
     if str(record.get("schema")).startswith("labpipe.compare-figure/"):      # a comparison figure of samples
         from labpipe import compare
         return compare.replay(provenance_path, config, force=force)
+    if record.get("made_by") == "outside labpipe":       # made elsewhere: checked, not redrawn
+        return _check_outside(record, provenance_path, config)
     problems, notes = [], []
     code = git_info()
     recorded = record["code"]
@@ -89,7 +114,8 @@ def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[
                settings_sources=record["parameters"].get("sources"), context={
         "sample_id": record.get("sample_id"), "measurement_id": record.get("measurement_id"),
         "relative_path": record["input"].get("relative_path"),
-        "raw_root": record["input"].get("raw_root")}, pipeline=True)
+        "raw_root": record["input"].get("raw_root"), "method": record.get("method")},
+        pipeline=True)
     comparison = {}
     for name in _compared(record):
         recorded = record["outputs"].get(name)

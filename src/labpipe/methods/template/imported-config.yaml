@@ -1,0 +1,13 @@
+# Settings of {{method}}: your own analyses, made outside labpipe, shown in the report.
+# Per sample or measurement they can be overridden like every method's settings (docs/settings/).
+schema: labpipe.imported.config/1
+max_rows: 200          # at most this many rows of a table are copied into results.json and the report
+# Named numbers from a table column, for `labpipe dataset` and the comparison figures. Values are
+# copied from the table as you wrote them (nothing is computed); the column is its header text.
+# To use it, change the next line to `quantities:` and indent, e.g.:
+#   raman.id_ig:
+#     column: "ID/IG"            # header of the column in your table
+#     unit: ""                   # shown with the number
+#     sigma_column: "ID/IG sd"   # optional: a column with the uncertainty
+#     row: 1                     # optional: which data row (default 1, the first)
+quantities: {}

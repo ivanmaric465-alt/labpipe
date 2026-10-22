@@ -73,7 +73,7 @@ def analyze_entry(config: dict, eid: str, *, rerun: bool = False) -> dict[str, A
         summary = module.run(input_path, staging, context={
             "sample_id": entry["sample_id"], "measurement_id": entry["measurement_id"],
             "relative_path": entry["relative_path"], "raw_root": root["id"],
-            "entry_id": eid, "output_dir": final.relative_to(PROJECT_ROOT).as_posix(),
+            "method": entry["method"], "entry_id": eid, "output_dir": final.relative_to(PROJECT_ROOT).as_posix(),
         }, pipeline=True)
         status = "done"
     except Exception as exc:  # recorded, never retried endlessly
@@ -177,7 +177,7 @@ def replot_entry(config: dict, eid: str) -> dict[str, Any]:
         summary = module.run(input_path, staging, context={
             "sample_id": entry["sample_id"], "measurement_id": mid,
             "relative_path": entry["relative_path"], "raw_root": root["id"],
-            "entry_id": eid, "output_dir": final.relative_to(PROJECT_ROOT).as_posix(),
+            "method": entry["method"], "entry_id": eid, "output_dir": final.relative_to(PROJECT_ROOT).as_posix(),
         }, pipeline=True)
         old_results = (final / "results.json").read_bytes()
         new_results = (staging / "results.json").read_bytes()
@@ -309,7 +309,9 @@ def review_queue(config: dict) -> dict[str, Any]:
                           key=lambda r: (r["raw_root"], r["relative_path"]))
     lines.append(f"## Not recognised by any method ({len(unrecognised)})")
     lines.append("Tell the agent what these are (it can add them to a method or create one), "
-                 "or list them in config/ignore.yaml to leave them alone.")
+                 "or list them in config/ignore.yaml to leave them alone. Your own analyses "
+                 "(a figure, a table): tell the agent \"include my own analyses in <folder>\" "
+                 "(`labpipe methods import`).")
     for record in unrecognised:
         lines.append(f"- `{record['relative_path']}` ({record['raw_root']}, first seen "
                      f"{record['first_seen_utc']})")
