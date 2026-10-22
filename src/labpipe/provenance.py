@@ -134,6 +134,7 @@ def build_record(*, method: str, entry_point: str, input_path: Path, input_sha25
         "input": {"path": str(input_path), "relative_path": context.get("relative_path"),
                   "raw_root": context.get("raw_root"), "sha256": input_sha256,
                   "size_bytes": Path(input_path).stat().st_size},
+        "entry_id": context.get("entry_id"),
         "sample_id": context.get("sample_id"),
         "measurement_id": context.get("measurement_id"),
         "code": git_info() | method_versions(method) | {"labpipe_entry": entry_point},

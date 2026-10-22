@@ -114,7 +114,8 @@ def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[
                settings_sources=record["parameters"].get("sources"), context={
         "sample_id": record.get("sample_id"), "measurement_id": record.get("measurement_id"),
         "relative_path": record["input"].get("relative_path"),
-        "raw_root": record["input"].get("raw_root"), "method": record.get("method")},
+        "raw_root": record["input"].get("raw_root"), "method": record.get("method"),
+        "entry_id": record.get("entry_id")},
         pipeline=True)
     comparison = {}
     for name in _compared(record):

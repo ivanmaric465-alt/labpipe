@@ -34,7 +34,7 @@ docs belong to which code: `docs/docmap.yaml` (`scripts/check_docs.py` checks it
 ```
 data folder (read-only)
   └─ scan ─────────► manifest.json          one entry per raw file: hash, method, sample, status
-       └─ analyze ─► analysis/<sample>/<method>/<measurement>/
+       └─ analyze ─► analysis/<sample>/<method>/<folder>/   (one folder per entry, see below)
                        results.json, plot.png/pdf, provenance.json      (code)
                        notes.md                                         (analyst agent, verified)
             └─ review ─► logs/review_queue.md
@@ -43,6 +43,18 @@ data folder (read-only)
   method `compare:` hook ─► figure specs ─► compare (kinds: dots, lines, bars, images)
   dataset ─► quantities across samples ─► postdoc run ─► analysis/_postdoc/<run>/analysis.md
 ```
+
+**Output folder rule.** An entry's folder is chosen once, at its first analysis, and kept in the
+manifest (`output_dir`; `manifest.choose_output_dir`): `<measurement_id>`, or
+`<measurement_id>~<first 6 characters of the entry id's hash>` when another entry holds that
+name (compared without case) or the folder's `provenance.json` names another entry. Two files
+with one name in different folders therefore never share a folder. Ownership is the
+provenance's `entry_id` (older records: the input's relative path); publication into a folder
+owned by another entry fails the analysis and moves nothing (`pipeline._refuse_foreign`).
+`_superseded/` and `_failed/` are keyed by the folder name. `labpipe scan` separates entries of
+older projects that share a folder (`manifest.separate_shared_output_dirs`: the owner keeps it,
+the others go back to pending; `shared_output_dirs` only reports). The report's anchors and
+card titles use the folder name.
 
 **Automatic processing** (inside the container):
 1. The watcher notices new files and waits until they settle.
@@ -187,7 +199,7 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | Area | Module | Role |
 |---|---|---|
 | Entry | `cli.py` | argparse commands; forwards host commands into the container in container mode |
-| State | `manifest.py` | load, save and lock `manifest.json`; status changes |
+| State | `manifest.py` | load, save and lock `manifest.json`; status changes; the output folder rule (`choose_output_dir`, `other_owner`, `shared_output_dirs`) |
 | | `scanner.py` | raw roots → manifest; settle time, hashes, duplicates (identical content of one method; for an imported kind only within one sample; also the files of one measurement of an imported kind, and its sample from the folder name), stale (analysis version or settings), plot out of date (plot version or settings), unrecognised files |
 | | `registry.py` | `methods.yaml` and the lab's `lab/methods.yaml` (shipped first): patterns, `recognise:` hooks, ignore rules |
 | | `labmethods.py` | the lab's own methods: reads and checks `lab/methods.yaml`, makes `labpipe_lab.<name>` importable; fills in an entry `kind: imported` (module, summary, settings file, analyst) |
@@ -465,7 +477,7 @@ One container per project.
 | `backups/migrate-<UTC>/` | `labpipe migrate --apply` (copies of the settings files it changed) |
 | `AGENTS.md`, `CLAUDE.md`, `.labpipe/`, `.claude/*.json`, `.codex/`, `.agents/` | `project sync` (generated; agents never write them) |
 | `manifest.json` | scanner, pipeline (locked) |
-| `analysis/<sample>/<method>/<m>/` | pipeline (code); `notes.md` by the analyst agent |
+| `analysis/<sample>/<method>/<folder>/` | pipeline (code); `notes.md` by the analyst agent |
 | `analysis/_postdoc/<run>/` | postdoc (code), `analysis.md` by the postdoc agent |
 | `analysis/report*.html` | report |
 | `analysis/_compare/<method>/<name>/` | `compare` (code), through `labpipe report` or `labpipe compare` |

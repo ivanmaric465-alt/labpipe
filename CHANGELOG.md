@@ -23,6 +23,8 @@ What changed in each release, in four fixed parts. How it is kept: [docs/RELEASI
 
 ### Needs your action
 
+- Two raw files with the same name in different folders (`XRD/S-1_scan.xrdml` and `XRD/old/S-1_scan.xrdml`) used to share one output folder, and the second analysis moved the first one's outputs aside. Each measurement now has its own folder, chosen at its first analysis and kept in the manifest: `<measurement_id>`, or `<measurement_id>~<6 characters of the entry id>` when another file already holds that name. labpipe refuses to write into a folder whose `provenance.json` names another file (the analysis fails with the reason). In an existing project `labpipe scan` finds measurements that share a folder: the one whose provenance is in the folder keeps it, the others go back to pending ("shared an output folder with <path>; analysed again into its own folder") and are analysed again into their own folder; nothing is deleted. A moved raw file (a new path) is a new measurement and also gets its own folder once. No analysis result changes.
+
 ## v0.2.0 — 2026-10-20
 
 ### New

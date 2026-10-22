@@ -217,7 +217,7 @@ def retire(config: dict, eid: str) -> dict[str, Any]:
     notes = PROJECT_ROOT / entry["output_dir"] / "notes.md"
     if not notes.exists():
         return {"entry_id": eid, "retired": None, "problem": "no notes.md"}
-    target = (notes.parent.parent / "_superseded" / entry["measurement_id"]
+    target = (notes.parent.parent / "_superseded" / notes.parent.name
               / f"{_stamp()}-notes" / "notes.md")
     _move(notes, target, config)
     return {"entry_id": eid, "retired": target.relative_to(PROJECT_ROOT).as_posix()}

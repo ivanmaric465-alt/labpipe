@@ -178,9 +178,16 @@ def _inline(text: str) -> str:
     return re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", text)
 
 
+def _folder(entry: dict) -> str:
+    """The name of the entry's output folder: its measurement ID, plus ~<id> when two entries share
+    the ID. Unique per method and sample, so it is the card's anchor and title."""
+    return (entry.get("output_dir") or "").rsplit("/", 1)[-1] or entry["measurement_id"]
+
+
 def _title(entry: dict) -> str:
-    """The measurement ID, prefixed with the sample only if it does not already start with it."""
-    sample, measurement = entry.get("sample_id") or "?", entry["measurement_id"]
+    """The folder name (the measurement ID), prefixed with the sample only if it does not already
+    start with it."""
+    sample, measurement = entry.get("sample_id") or "?", _folder(entry)
     return measurement if measurement.startswith(sample) else f"{sample} · {measurement}"
 
 
@@ -466,7 +473,7 @@ def _card(entry: dict, results: dict, summary: dict, notes_text: str | None,
     settings_used = [] if results.get("made_by") == "outside labpipe" else _settings_used(out)
     steer_html = ("<h3>Settings beyond the defaults</h3><ul class=know>" + "".join(
         f"<li>{html.escape(line)}</li>" for line in settings_used) + "</ul>") if settings_used else ""
-    anchor = html.escape(entry["measurement_id"])
+    anchor = html.escape(_folder(entry))
     notes_path = out / "notes.md"
     full_notes = (f'<details><summary>Full notes</summary><div class=notes>'
                   f'{_markdown(notes_path.read_text(encoding="utf-8"))}</div></details>'
@@ -528,7 +535,7 @@ def sample_sorter(order: str, samples: dict | None = None):
 
 
 def _sample_key(entry: dict) -> tuple:
-    return (*_sample_order(entry.get("sample_id") or ""), entry["measurement_id"])
+    return (*_sample_order(entry.get("sample_id") or ""), _folder(entry))
 
 
 def _gallery(method: str, spec: dict, sample: str, items: list[dict]) -> tuple[str, str, dict]:
@@ -1164,11 +1171,11 @@ def build(config: dict) -> dict[str, Any]:
         flag = (f'<span class="flag r">{n_checks} to check</span>' if n_checks
                 else '<span class="flag o">ok</span>')
         stale = ' <span class="flag">stale</span>' if entry["status"] == "stale" else ""
-        row = {"Measurement": (html.escape(entry["measurement_id"]), html.escape(title))}
+        row = {"Measurement": (html.escape(_folder(entry)), html.escape(title))}
         row |= {k: html.escape(str(v)) for k, v in summary.get("overview", {}).items()}
         row["Review"] = flag + stale
         records.append({"sample": entry.get("sample_id") or "?", "method": entry["method"],
-                        "mid": entry["measurement_id"], "card": card, "compact": compact,
+                        "mid": _folder(entry), "card": card, "compact": compact,
                         "row": row, "gallery": False, "figures": figures > 1,
                         "stale": entry["status"] == "stale", "results": results,
                         "states": _spec_states(spec) if spec else set(),

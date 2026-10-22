@@ -1,11 +1,13 @@
 """Analyse manifest entries; maintain index.json files and the review queue.
 
-Output layout: analysis/<sample_id>/<method>/<measurement_id>/{results.json, plot.png,
-plot.pdf, provenance.json, notes.md}. Each run writes into a staging folder
-next to the final one and is renamed into place only when complete. Earlier
-outputs are moved to analysis/<sample_id>/<method>/_superseded/<measurement_id>/<stamp>/,
-failed attempts to .../_failed/<measurement_id>/<stamp>/. Nothing is deleted.
-`replot_entry` redraws the figures of a done entry (old ones to .../_superseded/<id>/<stamp>-plot/).
+Output layout: analysis/<sample_id>/<method>/<folder>/{results.json, plot.png, plot.pdf,
+provenance.json, notes.md}. <folder> is the entry's own, chosen at its first analysis and kept in
+the manifest (manifest.choose_output_dir): the measurement_id, plus ~<6 characters of the entry id
+when another entry holds that name. A folder whose provenance.json names another entry is
+refused. Each run writes into a staging folder next to the final one and is renamed into place
+only when complete. Earlier outputs are moved to analysis/<sample_id>/<method>/_superseded/
+<folder>/<stamp>/, failed attempts to .../_failed/<folder>/<stamp>/. Nothing is deleted.
+`replot_entry` redraws the figures of a done entry (old ones to .../_superseded/<folder>/<stamp>-plot/).
 """
 
 from __future__ import annotations
@@ -47,8 +49,15 @@ def _move(source: Path, target: Path, config: dict) -> None:
 
 
 def output_dir_for(config: dict, entry: dict[str, Any]) -> Path:
-    return (PROJECT_ROOT / config["analysis_dir"] / entry["sample_id"] / entry["method"]
-            / entry["measurement_id"])
+    """The entry's output folder: the one kept in the manifest (chosen at its first analysis)."""
+    return PROJECT_ROOT / entry["output_dir"]
+
+
+def _refuse_foreign(final: Path, entry: dict[str, Any]) -> None:
+    owner = mf.other_owner(final, entry)
+    if owner:
+        raise RuntimeError(f"output folder {final.relative_to(PROJECT_ROOT).as_posix()} holds "
+                           f"the analysis of {owner}; nothing was changed there")
 
 
 def analyze_entry(config: dict, eid: str, *, rerun: bool = False) -> dict[str, Any]:
@@ -62,6 +71,7 @@ def analyze_entry(config: dict, eid: str, *, rerun: bool = False) -> dict[str, A
         if entry["status"] not in allowed:
             return {"entry_id": eid, "status": "skipped",
                     "reason": f"status is {entry['status']}, not {sorted(allowed)}"}
+        entry["output_dir"] = mf.choose_output_dir(config, data, entry)   # once; kept
         entry = json.loads(json.dumps(entry))  # snapshot outside the lock
     spec = methods[entry["method"]]
     root = next(r for r in config["raw_roots"] if r["id"] == entry["raw_root"])
@@ -69,12 +79,13 @@ def analyze_entry(config: dict, eid: str, *, rerun: bool = False) -> dict[str, A
     final = output_dir_for(config, entry)
     method_dir = final.parent
     stamp = _stamp()
-    staging = method_dir / f".staging-{entry['measurement_id']}-{stamp}"
+    staging = method_dir / f".staging-{final.name}-{stamp}"
     assert_pipeline_writable(staging, config)
 
     status, reason, summary = "failed", None, None
     versions = versions_mod.current(entry["method"])   # of the code this run uses
     try:
+        _refuse_foreign(final, entry)
         digest = sha256_file(input_path)
         if digest != entry["sha256"]:
             raise RuntimeError("file changed since the last scan; run `labpipe scan` first")
@@ -84,6 +95,7 @@ def analyze_entry(config: dict, eid: str, *, rerun: bool = False) -> dict[str, A
             "relative_path": entry["relative_path"], "raw_root": root["id"],
             "method": entry["method"], "entry_id": eid, "output_dir": final.relative_to(PROJECT_ROOT).as_posix(),
         }, pipeline=True)
+        _refuse_foreign(final, entry)
         status = "done"
     except Exception as exc:  # recorded, never retried endlessly
         reason = f"{type(exc).__name__}: {exc}"
@@ -96,11 +108,11 @@ def analyze_entry(config: dict, eid: str, *, rerun: bool = False) -> dict[str, A
 
     if status == "done":
         if final.exists() and any(final.iterdir()):
-            _move(final, _free(method_dir / "_superseded" / entry["measurement_id"] / stamp),
+            _move(final, _free(method_dir / "_superseded" / final.name / stamp),
                   config)
         _move(staging, final, config)
     elif staging.exists():
-        _move(staging, _free(method_dir / "_failed" / entry["measurement_id"] / stamp), config)
+        _move(staging, _free(method_dir / "_failed" / final.name / stamp), config)
 
     with mf.locked(config) as data:
         stored = data["entries"][eid]
@@ -155,7 +167,7 @@ def replot_entry(config: dict, eid: str) -> dict[str, Any]:
     The analysis code runs again into a staging folder (the plotting is part of it). Only if
     that gives the same results.json (byte for byte; for the list of `figures` alone a
     different list is accepted) are the figures replaced: the old ones and the old
-    provenance.json move to _superseded/<measurement_id>/<stamp>-plot/, notes.md stays.
+    provenance.json move to _superseded/<folder>/<stamp>-plot/, notes.md stays.
     Otherwise nothing is replaced: the new run is kept in _failed/ and the entry records a
     `replot_problem` for a human (its status stays done: the earlier outputs are still good).
     """
@@ -175,17 +187,18 @@ def replot_entry(config: dict, eid: str) -> dict[str, Any]:
     spec = methods[entry["method"]]
     root, input_path = _input_for(config, entry)
     stamp = _stamp()
-    mid = entry["measurement_id"]
+    mid = final.name
     staging = method_dir / f".staging-{mid}-{stamp}-plot"
     assert_pipeline_writable(staging, config)
 
     problem, summary = None, None
     try:
+        _refuse_foreign(final, entry)
         if sha256_file(input_path) != entry["sha256"]:
             raise RuntimeError("file changed since the last scan; run `labpipe scan` first")
         module = importlib.import_module(spec["module"])
         summary = module.run(input_path, staging, context={
-            "sample_id": entry["sample_id"], "measurement_id": mid,
+            "sample_id": entry["sample_id"], "measurement_id": entry["measurement_id"],
             "relative_path": entry["relative_path"], "raw_root": root["id"],
             "method": entry["method"], "entry_id": eid, "output_dir": final.relative_to(PROJECT_ROOT).as_posix(),
         }, pipeline=True)

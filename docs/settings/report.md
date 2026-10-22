@@ -70,6 +70,7 @@ Style (size, palette): `plots.compare` in [plots.md](plots.md). No AI is involve
 - A slim bar (its scroll bar is a little thicker) stays at the top while you scroll, in three groups: the sections (postdoc, compare, overview), the methods and the samples, only for the sections that are on. The part you are reading is highlighted. On a narrow screen the bar scrolls sideways. Table headers stay in view inside tall tables.
 - Each sample (or method, with `group_by: method`) folds; open by default. "Fold all" / "Unfold all" in the bar. A link to a card in a closed block opens it.
 - Every figure has a caption under it (what it shows; for EDS and XRD what the bars and ± are), and the same text is the image's alt text. A method's own wording is `CAPTION` in its summary module.
+- A card's title and link are its output folder's name: the measurement ID, plus `~` and 6 characters when two files have the same name (they get separate folders).
 - Printing (browser, "save as PDF"): no bar or fold buttons, one card per page, everything open.
 - Plain style: the same fonts and colours as before; the figure style is `config/plots.yaml`, unchanged. The page has a little plain JavaScript (figures one at a time, fold all, print) and no framework.
 

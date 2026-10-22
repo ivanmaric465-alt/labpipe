@@ -16,6 +16,9 @@
 * needs_review: back to pending once a human override resolves it;
 * files modified within settle_minutes are skipped (a sync client or the instrument PC may still be writing);
 * entries whose file disappeared: status missing (outputs are kept);
+* entries that share an output folder (projects made before one folder per entry): the one whose
+  provenance is in the folder keeps it, the others get their own folder and go back to pending
+  (manifest.separate_shared_output_dirs; nothing is deleted);
 * an imported kind (your own analyses, `kind: imported`): the files of one stem in one folder
   are one measurement. The primary file (table, then image, then text, then PDF) is the entry;
   the others are recorded as duplicate ("part of the measurement"), and when one of them is new
@@ -353,6 +356,10 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                 counts["pending"] += 1
         _content_duplicates(entries, changes, counts, frozenset(
             name for name, spec in methods.items() if spec.get("kind") == "imported"))
+        for change in mf.separate_shared_output_dirs(config, data):
+            changes.append(change)
+            counts[change["from"]] -= 1
+            counts["pending"] += 1
         for key in [k for k in unrecognised if k not in seen_unrecognised]:
             del unrecognised[key]       # gone, now recognised, or ignored
         for eid, entry in entries.items():

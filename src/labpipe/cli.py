@@ -340,7 +340,8 @@ def cmd_report(args, config) -> int:
 def cmd_method_summary(args, config) -> int:
     entry = mf.load(config)["entries"].get(args.entry)
     spec = load_methods()[args.method]
-    if not entry or not entry.get("output_dir"):
+    if not entry or not entry.get("output_dir") or not (
+            PROJECT_ROOT / entry["output_dir"] / "results.json").is_file():
         _print({"error": f"no analysed output for {args.entry}"})
         return 1
     if not spec.get("summary"):
@@ -417,7 +418,8 @@ def cmd_method_analyze(args, config) -> int:
 
 def cmd_method_check(args, config) -> int:
     entry = mf.load(config)["entries"].get(args.entry)
-    if not entry or not entry.get("output_dir"):
+    if not entry or not entry.get("output_dir") or not (
+            PROJECT_ROOT / entry["output_dir"] / "results.json").is_file():
         _print({"error": f"no analysed output for {args.entry}"})
         return 1
     results = json.loads((PROJECT_ROOT / entry["output_dir"] / "results.json").read_text(encoding="utf-8"))

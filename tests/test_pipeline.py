@@ -533,3 +533,95 @@ def test_two_moves_aside_in_one_second_do_not_collide(tmp_path):
     assert _free(target).name == "20261022T101010Z-2"
     (target.parent / "20261022T101010Z-2").mkdir()
     assert _free(target).name == "20261022T101010Z-3"
+
+
+def _two_scans(tmp_path):
+    """Two different files with the same name in different folders, scanned and analysed."""
+    project, raw, env = _project(tmp_path)
+    positions = fcc_positions(3.8898)
+    peaks = [(positions[i], h, 1.2 + 0.3 * i, 0.6) for i, h in enumerate((6000.0, 3000.0, 2200.0, 2000.0))]
+    (raw / "XRD" / "old").mkdir()
+    for name, seed in (("S-1_scan.xrdml", 3), ("old/S-1_scan.xrdml", 4)):
+        x, y = synthetic_pattern(peaks, seed=seed)
+        (raw / "XRD" / name).write_text(xrdml_text(x, y, "S-1"), encoding="utf-8")
+    _labpipe(env, "scan")
+    ids = {row["relative_path"]: row["entry_id"] for row in _labpipe(env, "pending")}
+    results = {path: _labpipe(env, "xrd", "analyze", "--entry", eid) for path, eid in ids.items()}
+    return project, raw, env, ids, results
+
+
+def _manifest(project):
+    return json.loads((project / "manifest.json").read_text(encoding="utf-8"))["entries"]
+
+
+def test_same_file_name_in_two_folders_gets_two_output_folders(tmp_path):
+    project, raw, env, ids, results = _two_scans(tmp_path)
+    assert {r["status"] for r in results.values()} == {"done"}
+    first, second = (results[p]["output_dir"] for p in ("XRD/S-1_scan.xrdml", "XRD/old/S-1_scan.xrdml"))
+    folders = sorted([first, second], key=len)
+    assert folders[0] == "analysis/S-1/xrd/S-1_scan"
+    digest = ids["XRD/old/S-1_scan.xrdml" if folders[1] == second else "XRD/S-1_scan.xrdml"].split("-")[1]
+    assert folders[1] == f"analysis/S-1/xrd/S-1_scan~{digest[:6]}"
+    for path, eid in ids.items():
+        record = json.loads((project / results[path]["output_dir"] / "provenance.json").read_text(encoding="utf-8"))
+        assert record["entry_id"] == eid
+    assert not list((project / "analysis" / "S-1" / "xrd").rglob("_superseded"))
+
+    # a rerun reuses the folder and supersedes only its own earlier outputs
+    for path, eid in ids.items():
+        again = _labpipe(env, "xrd", "analyze", "--entry", eid, "--rerun")
+        assert again["output_dir"] == results[path]["output_dir"]
+    assert len(list((project / "analysis" / "S-1" / "xrd").rglob("_superseded/*/*/results.json"))) == 2
+    assert _labpipe(env, "scan")["changes"] == []
+
+
+def test_publication_into_a_folder_of_another_entry_is_refused(tmp_path):
+    project, raw, env, ids, results = _two_scans(tmp_path)
+    a, b = ids["XRD/S-1_scan.xrdml"], ids["XRD/old/S-1_scan.xrdml"]
+    entries = _manifest(project)
+    victim = project / entries[b]["output_dir"]
+    entries[b]["output_dir"] = entries[a]["output_dir"]       # b now points into a's folder
+    (project / "manifest.json").write_text(
+        json.dumps({"schema": "labpipe.manifest/1", "entries": entries}), encoding="utf-8")
+    before = {p.name: p.read_bytes() for p in (project / entries[a]["output_dir"]).iterdir()}
+    result = _labpipe(env, "xrd", "analyze", "--entry", b, "--rerun")
+    assert result["status"] == "failed" and "holds the analysis of XRD/S-1_scan.xrdml" in result["reason"]
+    assert {p.name: p.read_bytes() for p in (project / entries[a]["output_dir"]).iterdir()} == before
+    assert victim.is_dir()
+
+
+def test_scan_separates_entries_that_share_an_output_folder(tmp_path):
+    project, raw, env, ids, results = _two_scans(tmp_path)
+    a, b = ids["XRD/S-1_scan.xrdml"], ids["XRD/old/S-1_scan.xrdml"]
+    entries = _manifest(project)
+    shared = entries[a]["output_dir"]
+    entries[b]["output_dir"] = shared                          # a project from before the rule
+    owner_file = project / shared / "provenance.json"
+    record = json.loads(owner_file.read_text(encoding="utf-8"))
+    del record["entry_id"]                                     # an old record names its input only
+    owner_file.write_text(json.dumps(record), encoding="utf-8")
+    (project / "manifest.json").write_text(
+        json.dumps({"schema": "labpipe.manifest/1", "entries": entries}), encoding="utf-8")
+    scan = _labpipe(env, "scan")
+    assert [(c["entry_id"], c["to"]) for c in scan["changes"]] == [(b, "pending")]
+    assert scan["changes"][0]["reason"] == ("shared an output folder with XRD/S-1_scan.xrdml; "
+                                           "analysed again into its own folder")
+    entries = _manifest(project)
+    assert entries[a]["status"] == "done" and entries[a]["output_dir"] == shared
+    assert entries[b]["output_dir"] == f"{shared}~{b.split('-')[1][:6]}"
+    redone = _labpipe(env, "xrd", "analyze", "--entry", b)
+    assert redone["status"] == "done" and redone["output_dir"] == entries[b]["output_dir"]
+    assert (project / shared / "results.json").is_file()
+    assert _labpipe(env, "scan")["changes"] == []
+
+
+def test_report_cards_stay_unique_and_replay_works(tmp_path):
+    project, raw, env, ids, results = _two_scans(tmp_path)
+    page = (project / _labpipe(env, "report")["report"]).read_text(encoding="utf-8")
+    import re
+    anchors = re.findall(r'<section class=card id="([^"]+)"', page)
+    assert len(anchors) == len(set(anchors)) and len(anchors) >= 2
+    assert {r["output_dir"].rsplit("/", 1)[1] for r in results.values()} <= set(anchors)
+    out = project / results["XRD/old/S-1_scan.xrdml"]["output_dir"]
+    replay = _labpipe(env, "replay", str(out / "provenance.json"))
+    assert replay["all_outputs_identical"], replay

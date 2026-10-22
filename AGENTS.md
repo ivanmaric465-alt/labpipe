@@ -130,7 +130,8 @@ The postdoc answers the user's questions about the whole project, with its conte
 A project is a folder with `labpipe.yaml`; labpipe finds it from the folder you are in. The code (defaults, `docs/`, agent roles, `methods.yaml`) is elsewhere: in a project, what you may read of it is copied to `.labpipe/` (`.labpipe/docs/`, `.labpipe/config/<method>.yaml`, `.labpipe/methods.yaml`), and `AGENTS.md`, `CLAUDE.md`, `.labpipe/` and the harness files are **generated: never edit them**, add to `lab/LAB.md` or `lab/agents/` and run `labpipe project sync`. In the labpipe repository itself (dev mode) the sources are the files themselves.
 
 ```
-analysis/<sample_id>/<method>/<measurement_id>/   results.json, plot.png, plot.pdf, provenance.json, notes.md
+analysis/<sample_id>/<method>/<folder>/   results.json, plot.png, plot.pdf, provenance.json, notes.md
+                                          (<folder> = measurement_id, plus ~<6 characters of the entry id when another file has the same name)
 analysis/<sample_id>/<method>/_superseded|_failed/ older or failed outputs (never deleted)
 analysis/_compare/<method>/<name>/              comparison figure of the samples: plot.png, plot.pdf, figure.html, provenance.json (the spec: the plotted data)
 analysis/_postdoc/<run>/                           the postdoc's runs: request.md, inputs.json, dataset.json, compare-N.json, analysis.md, verify.json

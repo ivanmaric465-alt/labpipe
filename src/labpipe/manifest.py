@@ -20,6 +20,11 @@ hold the old single fingerprint and are converted by the next scan, settings.com
 `plot_outdated` (the plot settings changed: `labpipe replot`, status stays done) and, if a
 replot could not be done, `replot_problem`.
 
+`output_dir` is chosen once, at an entry's first analysis (`choose_output_dir`), and kept: the
+readable `<measurement_id>`, or `<measurement_id>~<6 characters of the entry id>` when another
+entry holds that folder. A folder whose provenance.json names another entry is never written to
+(`other_owner`); `shared_output_dirs` finds projects made before that rule.
+
 Writes are atomic and serialised with an exclusive lock on logs/.manifest.mutex
 (labpipe.locking: fcntl on Linux/macOS, msvcrt on Windows).
 """
@@ -28,6 +33,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -80,3 +86,91 @@ def set_status(entry: dict[str, Any], status: str, reason: str | None = None) ->
         entry["events"] = entry["events"][-30:]
     entry["status"] = status
     entry["status_reason"] = reason
+
+
+def other_owner(folder: Path, entry: dict[str, Any]) -> str | None:
+    """The raw file (relative path) whose analysis is in `folder` if that is not `entry`, else None.
+
+    Decided by the folder's provenance.json: its `entry_id`, or for older records the input's
+    relative path (the raw root's name can have been changed since). No provenance: no owner."""
+    try:
+        record = json.loads((folder / "provenance.json").read_text(encoding="utf-8"))
+        given = (record.get("input") or {}).get("relative_path")
+        if record.get("entry_id"):
+            same = record["entry_id"] == entry["entry_id"]
+        else:
+            same = given is None or given == entry["relative_path"]
+    except (OSError, ValueError, AttributeError):
+        return None
+    return None if same else str(given or record.get("entry_id"))
+
+
+def _held(data: dict[str, Any], entry: dict[str, Any]) -> set[str]:
+    return {e["output_dir"].lower() for e in data["entries"].values()
+            if e is not entry and e.get("output_dir")}
+
+
+def choose_output_dir(config: dict, data: dict[str, Any], entry: dict[str, Any]) -> str:
+    """The entry's output folder (relative to the project, posix), kept once chosen.
+
+    analysis/<sample>/<method>/<measurement_id>, or with ~<6..10 characters of the entry id's
+    hash> added when another entry holds that folder (names compared without case: Windows,
+    macOS) or its provenance.json names another entry. The same inputs give the same name."""
+    base = PROJECT_ROOT / config["analysis_dir"] / entry["sample_id"] / entry["method"]
+    stored = entry.get("output_dir")
+    if stored and (PROJECT_ROOT / stored).parent == base:
+        return stored
+    held, digest = _held(data, entry), entry["entry_id"].split("-", 1)[-1]
+    names = [entry["measurement_id"]] + [f"{entry['measurement_id']}~{digest[:n]}"
+                                         for n in range(6, max(len(digest), 6) + 1)]
+    for name in names:
+        rel = (base / name).relative_to(PROJECT_ROOT).as_posix()
+        if rel.lower() not in held and other_owner(base / name, entry) is None:
+            return rel
+    raise RuntimeError(f"no free output folder for {entry['entry_id']} under {base}")
+
+
+def shared_output_dirs(config: dict, data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Entries that share an output folder (projects from before one folder per entry).
+
+    One row per folder: `keeps` (the entry whose provenance is in the folder; else the one
+    analysed last) and `others` (entry ids). Changes nothing."""
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for entry in data["entries"].values():
+        if entry.get("output_dir"):
+            groups[entry["output_dir"].lower()].append(entry)
+    rows = []
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        folder = PROJECT_ROOT / members[0]["output_dir"]
+        mine = [e for e in members if (folder / "provenance.json").is_file()
+                and other_owner(folder, e) is None]
+        keeper = max(mine or members, key=lambda e: (e.get("last_processed_utc") or "",
+                                                     e["entry_id"]))
+        rows.append({"output_dir": members[0]["output_dir"], "keeps": keeper["entry_id"],
+                     "others": sorted(e["entry_id"] for e in members if e is not keeper)})
+    return sorted(rows, key=lambda row: row["output_dir"])
+
+
+def separate_shared_output_dirs(config: dict, data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Give every entry but the keeper of a shared folder its own (nothing is deleted).
+
+    An entry that was analysed, stale or failed goes back to pending ("shared an output folder
+    with <path>; analysed again into its own folder"); its new folder is chosen now. Returns
+    the changes made (as `labpipe scan` lists them)."""
+    changes = []
+    for row in shared_output_dirs(config, data):
+        keeper = data["entries"][row["keeps"]]
+        for eid in row["others"]:
+            entry = data["entries"][eid]
+            entry.pop("output_dir")
+            if entry.get("status") in ("done", "stale", "failed"):
+                old = entry["status"]
+                set_status(entry, "pending", f"shared an output folder with "
+                           f"{keeper['relative_path']}; analysed again into its own folder")
+                changes.append({"entry_id": eid, "relative_path": entry["relative_path"],
+                                "from": old, "to": "pending", "reason": entry["status_reason"]})
+            if entry.get("sample_id") and entry.get("status") != "missing":
+                entry["output_dir"] = choose_output_dir(config, data, entry)
+    return changes
