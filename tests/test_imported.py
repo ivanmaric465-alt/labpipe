@@ -31,8 +31,8 @@ def _files(raw: Path, sample: str = "S-1", table: str | None = TABLE, folder: st
     (raw / folder).mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (60, 40), (200, 30, 30)).save(raw / folder / f"{stem}.png")
     if table is not None:
-        (raw / folder / f"{stem}.csv").write_text(table, encoding="utf-8")
-    (raw / folder / f"{stem}.md").write_text("Two Lorentzians, Origin 2023.\n", encoding="utf-8")
+        (raw / folder / f"{stem}.csv").write_text(table, encoding="utf-8", newline="")
+    (raw / folder / f"{stem}.md").write_text("Two Lorentzians, Origin 2023.\n", encoding="utf-8", newline="")
 
 
 def _describe(project: Path, text: str = "Raman spectra of the S-series films, two Lorentzians "
