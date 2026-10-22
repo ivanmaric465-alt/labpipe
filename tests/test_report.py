@@ -617,3 +617,24 @@ def test_eds_elements_by_atomic_number_unknown_last_by_symbol():
     from labpipe.methods.eds import summary
     assert summary._by_atomic_number(["Pt", "Zz", "Ti", "Aa", "O", "C", "Ru"]) == [
         "C", "O", "Ti", "Ru", "Pt", "Aa", "Zz"]
+
+
+def test_sem_gallery_lists_review_checks_marks_the_image_and_counts_them(project, config):
+    folder = project / "analysis" / "S-1" / "sem" / "S-1_i1"
+    results = json.loads((folder / "results.json").read_text(encoding="utf-8"))
+    results["checks"] = [{"code": "scale_bar_unreadable", "severity": "review",
+                          "message": "scale bar not readable: no pixel size"},
+                         {"code": "sample_id_from_name_only", "severity": "info", "message": "x"}]
+    (folder / "results.json").write_text(json.dumps(results), encoding="utf-8")
+    _, page = build(project, config)
+    card = page[page.index('id="S-1-sem"'):]
+    card = card[:card.index("</section>")]
+    assert "<h3>Check before using</h3>" in card and "ul class=check" in card
+    assert "S-1_i1 · scale_bar_unreadable: scale bar not readable: no pixel size" in card
+    assert "sample_id_from_name_only" not in card                   # only review severity
+    assert "S-1_i1 · to check</figcaption>" in card                 # the mark on the caption
+    other = page[page.index('id="S-2-sem"'):]
+    assert "Check before using" not in other[:other.index("</section>")]
+    row = page[page.index("<h3>SEM</h3>"):]
+    row = row[:row.index("</table>")]
+    assert row.count('<span class="flag r">1 to check</span>') == 1 and "flag o" in row

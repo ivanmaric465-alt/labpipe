@@ -10,6 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 from labpipe import labmethods
@@ -250,3 +251,107 @@ def test_reading_the_plot_must_have_bullets(tmp_path):
     page.write_text("## Reading the plot\n- x is 2θ\n\n## Settings\n", encoding="utf-8")
     assert reading_the_plot_missing(page) is None
     assert reading_the_plot_missing(tmp_path / "gone.md")
+
+
+_DRIVER = """
+import json
+from labpipe import automation
+from labpipe.safety import load_pipeline_config
+config = load_pipeline_config()
+before = automation._statuses(config)
+done = automation._analyse_code_only(config, "test")
+state = automation._notify_news(config, before)
+again = automation._notify_news(config, state)      # nothing is new the second time
+print(json.dumps({"done": done}))
+"""
+
+
+def _code_only_pass(env) -> list[str]:
+    completed = subprocess.run([sys.executable, "-c", _DRIVER], env=env, capture_output=True,
+                               text=True, timeout=600)
+    assert completed.returncode == 0, completed.stderr
+    return json.loads(completed.stdout)["done"]
+
+
+def _told(project) -> list[dict]:
+    path = project / "logs" / "notifications.jsonl"
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()] \
+        if path.exists() else []
+
+
+def test_code_only_analysis_runs_edited_lab_code_and_tells_review_flags_once(tmp_path):
+    project, raw, env, example, _ = _scaffold(tmp_path)
+    registry = project / "lab/methods.yaml"
+    registry.write_text(registry.read_text(encoding="utf-8").replace(
+        "subagent: demo-analyst", "subagent: null"), encoding="utf-8")
+    _labpipe(env, "scan")
+    [eid] = [e["entry_id"] for e in _labpipe(env, "pending") if e["method"] == "demo"]
+    assert _code_only_pass(env) == [eid]
+    out = project / _labpipe(env, "status", eid)["output_dir"]
+    first = json.loads((out / "provenance.json").read_text(encoding="utf-8"))["code"]
+    assert json.loads((out / "results.json").read_text(encoding="utf-8"))["summary"]["n_points"] == 20
+    assert not [n for n in _told(project) if n["kind"] == "to_check"]
+
+    analyze = project / "lab/methods/demo/analyze.py"       # an edit, after a first run
+    analyze.write_text(analyze.read_text(encoding="utf-8").replace(
+        '"n_points": int(x.size)', '"n_points": 12345').replace(
+        "if not np.all(np.isfinite(data)):", "if True:"), encoding="utf-8")
+    assert _labpipe(env, "scan")["counts"]["stale"] == 1
+    _labpipe(env, "requeue", "--stale")
+    assert _code_only_pass(env) == [eid]
+    out = project / _labpipe(env, "status", eid)["output_dir"]
+    results = json.loads((out / "results.json").read_text(encoding="utf-8"))
+    second = json.loads((out / "provenance.json").read_text(encoding="utf-8"))["code"]
+    assert results["summary"]["n_points"] == 12345          # the edited code ran
+    assert second["analysis_version"] != first["analysis_version"]
+    assert second["analysis_version"] == _labpipe(env, "methods", "versions")["demo"]["analysis_version"]
+    flagged = [n for n in _told(project) if n["kind"] == "to_check"]
+    assert len(flagged) == 1 and flagged[0]["needs_you"]    # once, although checked twice
+    assert "1 DEMO measurement(s) to check: D-1_a (non_finite_values)" in flagged[0]["message"]
+    assert "review queue" in flagged[0]["message"] or "review_queue.md" in flagged[0]["message"]
+    queue = (project / "logs" / "review_queue.md").read_text(encoding="utf-8")
+    assert "checks) (1)" in queue and "non_finite_values" in queue
+
+
+def test_a_code_only_process_that_dies_is_recorded_as_failed_with_its_stderr(tmp_path):
+    project, raw, env, example, _ = _scaffold(tmp_path)
+    registry = project / "lab/methods.yaml"
+    registry.write_text(registry.read_text(encoding="utf-8").replace(
+        "subagent: demo-analyst", "subagent: null"), encoding="utf-8")
+    _labpipe(env, "scan")
+    (project / "lab/methods/demo/analyze.py").write_text("raise SystemExit('boom in method')\n",
+                                                         encoding="utf-8")
+    [eid] = [e["entry_id"] for e in _labpipe(env, "pending") if e["method"] == "demo"]
+    assert _code_only_pass(env) == []
+    status = _labpipe(env, "status", eid)
+    assert status["status"] == "failed" and "boom in method" in status["status_reason"]
+
+
+def test_the_watcher_restarts_when_lab_methods_change(tmp_path, monkeypatch):
+    from labpipe import automation
+    monkeypatch.setattr(labmethods.safety, "PROJECT_ROOT", tmp_path)
+    (tmp_path / "lab/methods/demo/__pycache__").mkdir(parents=True)
+    method = tmp_path / "lab/methods/demo/analyze.py"
+    method.write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "lab/methods.yaml").write_text("methods: {}\n", encoding="utf-8")
+    start = labmethods.source_hash()
+    (tmp_path / "lab/methods/demo/__pycache__/a.pyc").write_bytes(b"cache")
+    assert labmethods.source_hash() == start                 # caches do not count
+    events = []
+    monkeypatch.setattr(automation, "in_container", lambda: True)
+    monkeypatch.setattr(automation, "_start_page", lambda config: None)
+    monkeypatch.setattr(automation, "run", lambda config, reason="": {"status": "nothing_to_do"})
+    monkeypatch.setattr(automation, "_snapshot", lambda config: {})
+    monkeypatch.setattr(automation, "_last_nightly", lambda config: None)
+    monkeypatch.setattr(automation, "_log", lambda config, event: events.append(event))
+    monkeypatch.setattr(automation.time, "sleep",
+                        lambda seconds: method.write_text("x = 2\n", encoding="utf-8"))
+    config = {"settle_minutes": 3, "logs_dir": "logs", "automation": {}}
+    with pytest.raises(SystemExit) as stopped:
+        automation.watch(config)
+    assert stopped.value.code == 3 and labmethods.source_hash() != start
+    assert {"event": "watch_restart", "reason": "lab methods changed"} in events
+    method.write_text("x = 1\n", encoding="utf-8")
+    assert labmethods.source_hash() == start
+    (tmp_path / "lab/methods.yaml").write_text("methods: {a: {}}\n", encoding="utf-8")
+    assert labmethods.source_hash() != start                 # the registry counts too

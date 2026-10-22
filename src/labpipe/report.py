@@ -531,8 +531,18 @@ def _sample_key(entry: dict) -> tuple:
     return (*_sample_order(entry.get("sample_id") or ""), entry["measurement_id"])
 
 
+def _review_checks(items: list[dict]) -> list[tuple[str, dict]]:
+    """(measurement ID, check) for every review-severity check of the images of a sample."""
+    return [(i["entry"]["measurement_id"], c) for i in items
+            for c in i["results"].get("checks") or [] if c.get("severity") == "review"]
+
+
 def _gallery(method: str, spec: dict, sample: str, items: list[dict]) -> tuple[str, str, dict]:
-    """One card (full, compact) with the chosen images of a sample, and its overview-table row."""
+    """One card (full, compact) with the chosen images of a sample, and its overview-table row.
+    The images with a review check get a mark on the caption, and the card lists the checks
+    under "Check before using" (all images of the sample, shown or not), as other cards do."""
+    flagged = _review_checks(items)
+    marked = {mid for mid, _ in flagged}
     chosen_settings = settings_mod.resolve(method, sample, None)[0]
     chosen = importlib.import_module(spec["gallery"]).select(items, chosen_settings["gallery"])
     figures = []
@@ -547,8 +557,13 @@ def _gallery(method: str, spec: dict, sample: str, items: list[dict]) -> tuple[s
             f"WD {acquisition['working_distance_mm']:g} mm"
             if acquisition.get("working_distance_mm") is not None else None,
             item["entry"]["measurement_id"]) if part)
+        if item["entry"]["measurement_id"] in marked:
+            caption += " · to check"
         if thumb.exists():
             figures.append(_figure(thumb, caption))
+    check_html = ("<h3>Check before using</h3><ul class=check>" + "".join(
+        f"<li>{html.escape(mid)} · {html.escape(c['code'])}: {html.escape(c['message'])}</li>"
+        for mid, c in flagged) + "</ul>") if flagged else ""
     targets = ", ".join(f"×{m:,}" for m in chosen_settings["gallery"].get("magnifications") or [])
     magnifications = sorted((i["results"].get("acquisition") or {}).get("magnification") or 0
                             for i in items)
@@ -557,15 +572,17 @@ def _gallery(method: str, spec: dict, sample: str, items: list[dict]) -> tuple[s
             f"<div class=meta>{len(chosen)} of {len(items)} image(s) shown: closest to {targets}"
             f" (both series compete); change in config/{method}.yaml → gallery, per sample in "
             f"config/samples.yaml. All outputs: <code>analysis/{html.escape(sample)}/{method}/</code>"
-            f"</div>{_carousel(figures) if figures else ''}</div></section>")
+            f"</div>{_carousel(figures) if figures else ''}{check_html}</div></section>")
     compact = (f'<section class="card wide" id="{html.escape(sample)}-{method}"><div>'
                f"<h2>{html.escape(sample)} · {method.upper()}</h2>"
-               f"{_carousel(figures[:1]) if figures else ''}</div></section>")
+               f"{_carousel(figures[:1]) if figures else ''}{check_html}</div></section>")
     row = {"Sample": (f"{html.escape(sample)}-{method}", html.escape(sample)),
            "Images": str(len(items)),
            "Magnifications": (f"×{magnifications[0]:,} – ×{magnifications[-1]:,}"
                               if magnifications and magnifications[-1] else "?"),
-           "Shown": str(len(chosen))}
+           "Shown": str(len(chosen)),
+           "Review": (f'<span class="flag r">{len(flagged)} to check</span>' if flagged
+                      else '<span class="flag o">ok</span>')}
     return card, compact, row
 
 

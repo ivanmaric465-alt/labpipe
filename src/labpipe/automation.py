@@ -55,6 +55,7 @@ from typing import Any
 from labpipe import autostart
 from labpipe import manifest as mf
 from labpipe import scanner
+from labpipe.labmethods import source_hash
 from labpipe.locking import try_exclusive
 from labpipe.notes import todo as notes_todo
 from labpipe.provenance import code_version, utc_now
@@ -83,7 +84,7 @@ def _log(config: dict, event: dict[str, Any]) -> None:
         stream.write(json.dumps({"utc": utc_now(), **event}, ensure_ascii=False) + "\n")
 
 
-NEEDS_YOU = {"unrecognised", "needs_review", "failed", "run_error", "scan_failed"}
+NEEDS_YOU = {"unrecognised", "needs_review", "to_check", "failed", "run_error", "scan_failed"}
 
 
 def notifications_path(config: dict) -> Path:
@@ -121,7 +122,7 @@ def _record(config: dict, message: str, kind: str) -> None:
 def notify(config: dict, message: str, kind: str = "info") -> list[str]:
     """Send `message` through the configured channels; returns the channels that worked.
 
-    `kind` (unrecognised, needs_review, failed, stale, run_error, scan_failed, started,
+    `kind` (unrecognised, needs_review, to_check, failed, stale, run_error, scan_failed, started,
     finished, test) is kept in logs/notifications.jsonl for the browser page."""
     chosen = settings(config)["notify"]
     sent = []
@@ -206,13 +207,21 @@ def _notify_news(config: dict, before: dict[str, tuple],
                       key=lambda e: e["relative_path"])
 
     needs_review, failed, stale = new("needs_review"), new("failed"), new("stale")
-    if unrecognised or needs_review or failed or stale:
+    code_only = {n for n, spec in load_methods().items() if not spec.get("subagent")}
+    flagged = [e for e in new("done") if e.get("review") and e["method"] in code_only]
+    if unrecognised or needs_review or failed or stale or flagged:
         review_queue(config)
     if unrecognised:
         notify(config, f"labpipe: {len(unrecognised)} new file(s) not recognised: "
                        f"{_listed(unrecognised)}. " + _ask_agent(config, "check the new files")
                        + _own_analyses_hint(unrecognised[0]),
                kind="unrecognised")
+    for method in sorted({e["method"] for e in flagged}):   # no analyst reads these: told here
+        mine = [e for e in flagged if e["method"] == method]
+        notify(config, f"labpipe: {len(mine)} {method.upper()} measurement(s) to check: "
+                       + _listed([f"{e['measurement_id']} ({', '.join(e.get('review_codes') or [])})"
+                                  for e in mine], 3)
+                       + ". " + _ask_agent(config, "check the review queue"), kind="to_check")
     if needs_review:
         notify(config, f"labpipe: {len(needs_review)} file(s) need a decision from you: "
                        + _listed([f"{e['relative_path']} ({e.get('status_reason')})"
@@ -243,10 +252,35 @@ def _work(config: dict) -> dict[str, list[str]]:
                                    if e.get("status") == "needs_review")}
 
 
+def _analyse_in_process(config: dict, entry_id: str) -> dict[str, Any]:
+    """`labpipe <method> analyze --entry ID` in a fresh Python process, so the code of the
+    method (also a lab method edited meanwhile) is read now and the version recorded is that of
+    the code that ran. Its JSON result; a process that dies or prints no result is recorded as
+    failed, with the end of its stderr as the reason."""
+    method = mf.load(config)["entries"][entry_id]["method"]
+    env = dict(os.environ, LABPIPE_SKIP_REPORT="1")      # the batch builds the report once
+    try:
+        done = subprocess.run([sys.executable, "-m", "labpipe.cli", method, "analyze",
+                               "--entry", entry_id], cwd=PROJECT_ROOT, env=env, text=True,
+                              capture_output=True, stdin=subprocess.DEVNULL, timeout=3600)
+        result, why = None, f"exit {done.returncode}: " + (done.stderr.strip()[-300:] or "no output")
+        try:
+            result = json.loads(done.stdout)
+        except json.JSONDecodeError:
+            pass
+    except (OSError, subprocess.SubprocessError) as exc:
+        result, why = None, f"{type(exc).__name__}: {exc}"
+    if isinstance(result, dict) and result.get("status") in ("done", "failed", "skipped"):
+        return result
+    reason = f"the analysis process stopped ({why})"
+    with mf.locked(config) as data:
+        mf.set_status(data["entries"][entry_id], "failed", reason)
+    return {"entry_id": entry_id, "status": "failed", "reason": reason}
+
+
 def _analyse_code_only(config: dict, reason: str) -> list[str]:
     """Methods without an analyst agent (methods.yaml `subagent: null`): analysed by code
-    here, so no AI run is started for them."""
-    from labpipe import pipeline
+    here, so no AI run is started for them. One fresh process per measurement."""
     from labpipe.report import build as build_report
     methods = load_methods()
     code_only = {name for name, spec in methods.items() if not spec.get("subagent")}
@@ -256,7 +290,7 @@ def _analyse_code_only(config: dict, reason: str) -> list[str]:
                  if e.get("status") == "pending" and e["method"] in code_only)
     if not ids:
         return []
-    results = [pipeline.analyze_entry(config, eid) for eid in ids]
+    results = [_analyse_in_process(config, eid) for eid in ids]
     done = [r["entry_id"] for r in results if r["status"] == "done"]
     failed = [r["entry_id"] for r in results if r["status"] == "failed"]
     build_report(config)
@@ -546,7 +580,7 @@ def watch(config: dict) -> None:
     last = _snapshot(config)
     # files still settling: look again once they have had time to settle
     changed_at = time.time() if result.get("settling") else None
-    started_with = code_version()
+    started_with, methods_with = code_version(), source_hash()
     last_nightly = _last_nightly(config)   # the watcher also does the nightly pass
     while True:
         time.sleep(interval)
@@ -555,6 +589,10 @@ def watch(config: dict) -> None:
             # and the watcher starts with it.
             _log(config, {"event": "watch_restart", "reason": "code changed",
                           "from": started_with, "to": code_version()})
+            sys.exit(3)
+        if source_hash() != methods_with:
+            # Edited lab methods: restart, so the recogniser caches and imports are current.
+            _log(config, {"event": "watch_restart", "reason": "lab methods changed"})
             sys.exit(3)
         if nightly_due(dt.datetime.now(), chosen["nightly_at"], last_nightly):
             last_nightly = dt.date.today()

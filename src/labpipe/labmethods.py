@@ -58,6 +58,20 @@ def project_root() -> Path:
     return Path(safety.PROJECT_ROOT)
 
 
+def source_hash() -> str:
+    """One hash of the lab's method code: every file of `lab/methods/` (sorted, caches left
+    out) and `lab/methods.yaml`. The watcher restarts when it changes."""
+    import hashlib
+    root = project_root()
+    files = sorted(p for p in (root / METHODS_DIR).rglob("*")
+                   if p.is_file() and "__pycache__" not in p.parts)
+    registry = root / REGISTRY_FILE
+    digest = hashlib.sha256()
+    for path in [*files, *([registry] if registry.is_file() else [])]:
+        digest.update(path.relative_to(root).as_posix().encode() + b"\0" + path.read_bytes() + b"\0")
+    return digest.hexdigest()[:16]
+
+
 def methods_dir() -> Path:
     return project_root() / METHODS_DIR
 

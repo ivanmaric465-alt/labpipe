@@ -410,7 +410,8 @@ def cmd_method_analyze(args, config) -> int:
         _print({"error": f"{args.entry} is not a {args.method} entry"})
         return 1
     result = pipeline.analyze_entry(config, args.entry, rerun=args.rerun)
-    result["report"] = _refresh_report(config)
+    if not os.environ.get("LABPIPE_SKIP_REPORT"):     # the watcher's batch builds it once
+        result["report"] = _refresh_report(config)
     _print(result)
     return 0 if result["status"] in ("done", "skipped") else 1
 

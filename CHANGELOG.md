@@ -23,6 +23,9 @@ What changed in each release, in four fixed parts. How it is kept: [docs/RELEASI
 
 - Data and project never overlap: `project new` refuses a data folder inside the project (as it refused the project inside the data), `labpipe doctor` reports an overlap as an error, and `container start` / `setup` refuse with the reason (the container mounts the project writable, so data inside it would have been writable). No results change.
 
+- Review flags of code-only methods reach you: the SEM gallery lists them under "Check before using" (image, check code, message) and marks the image, the overview row counts "N to check", the watcher notifies once per measurement ("N SEM measurement(s) to check", also in `logs/review_queue.md`); the same for the lab's own methods without an analyst. No results change.
+- Edited lab method code is never run stale: the watcher analyses code-only methods one fresh process per measurement (a process that dies is recorded as failed with its error output) and restarts when `lab/methods/` or `lab/methods.yaml` changes. No results change.
+
 ### Needs your action
 
 ## v0.2.0 — 2026-10-20
