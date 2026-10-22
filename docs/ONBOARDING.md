@@ -25,12 +25,13 @@ Then, in one or two sentences, the three folders (README → Three folders): the
 1. `labpipe inventory`. Show, in plain words: per method the files it recognised (counts, two examples), file types no method reads.
 2. Sample IDs: show how the names map to sample IDs (doctor's `sample_ids`); fix the rule with the user if it is wrong (`docs/SETUP.md` → Sample IDs).
 3. Files to leave alone (reports, photos, slides): with the user's OK, add them to `config/ignore.yaml` (AGENTS.md → Recognising the user's files).
+4. Figures and tables the user made themselves (an Origin fit exported as PNG and CSV): they can go into the report as their own analyses, marked as made outside labpipe: `labpipe methods import` (AGENTS.md → Your own analyses, `docs/methods/imported.md`). Offer it once; do not push it.
 
 Rerun `labpipe inventory` until the user says it is right, then `labpipe onboarding done files`.
 
 ## `methods`
 
-For each method found in their data: ask its setup questions, `docs/methods/<method>.md` → Setup (e.g. XRD: which reference phases, internal standard and its certificate value). Answers go into settings, never code. For the lab's own methods: its `lab/methods/<method>/README.md`. Only ask what matters for this data; skip what the user does not know yet. `labpipe onboarding done methods`.
+For each method found in their data: ask its setup questions, `docs/methods/<method>.md` → Setup (e.g. XRD: which reference phases, internal standard and its certificate value). Answers go into settings, never code. For the lab's own methods: its `lab/methods/<method>/README.md` (for the user's own analyses taken in with `labpipe methods import`, the description page: what was measured, software and model, what the columns mean). Only ask what matters for this data; skip what the user does not know yet. `labpipe onboarding done methods`.
 
 ## `first-results`
 

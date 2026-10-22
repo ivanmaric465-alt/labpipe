@@ -17,7 +17,7 @@ samples:
     properties: {loading_wt: 20}    # numbers about the sample → `sample.loading_wt`
 ```
 
-Order (later wins): `config/<method>.yaml` ← `config/lab.yaml` → `<method>` ← presets ← sample ← `config/measurements/<method>/<id>.yaml`. Keys must exist in `config/<method>.yaml`; the method pages list them (`docs/methods/<method>.md` → Settings).
+Order (later wins): `config/<method>.yaml` ← `config/lab.yaml` → `<method>` ← presets ← sample ← `config/measurements/<method>/<id>.yaml`. Keys must exist in `config/<method>.yaml` (a setting whose default is an empty `{}`, such as `quantities` of your own analyses, takes any keys under it); the method pages list them (`docs/methods/<method>.md` → Settings).
 
 ## You say → setting
 

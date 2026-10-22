@@ -18,7 +18,10 @@ docs belong to which code: `docs/docmap.yaml` (`scripts/check_docs.py` checks it
    `project`), git commit, the method's analysis and plot version, environment, output hashes
    (`replay`). The comparison figures of samples (`analysis/_compare/`) record the figure's
    spec (the plotted values, the `results.json` or raw file they came from with their hashes),
-   the settings and their own `compare_version`, and replay the same way.
+   the settings and their own `compare_version`, and replay the same way. **The one exception**:
+   an analysis made outside labpipe (`kind: imported`, `made_by: "outside labpipe"`) cannot be
+   redrawn; its record lists every source file's path and sha256, and `replay` *checks* that
+   they are unchanged and that the copies labpipe made still match, and says so.
 4. **Only a changed calculation marks an analysis out of date.** Each method has an
    *analysis version* and a *plot version* (`versions.py`): hashes of the source that computes
    the results, and of the drawing code. A new git commit, a doc, the report, an agent, another
@@ -123,7 +126,7 @@ Users install releases, never `main`: `install.sh` / `install.ps1` in the instal
 
 ```
 src/labpipe/            the package (module map below)
-  methods/<m>/          one package per analysis method (xrd, eds, sem; template)
+  methods/<m>/          one package per analysis method (xrd, eds, sem; template); methods/imported/: your own analyses, one module for every `kind: imported` entry
   plotting/             shared plot style (ACS)
 agents/                 agent roles, harness-neutral (→ `labpipe agents sync`)
 config/                 defaults (`<method>.yaml`, plots, report, pipeline) and `*.example.yaml`
@@ -178,17 +181,18 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 |---|---|---|
 | Entry | `cli.py` | argparse commands; forwards host commands into the container in container mode |
 | State | `manifest.py` | load, save and lock `manifest.json`; status changes |
-| | `scanner.py` | raw roots → manifest; settle time, hashes, duplicates, stale (analysis version or settings), plot out of date (plot version or settings), unrecognised files |
+| | `scanner.py` | raw roots → manifest; settle time, hashes, duplicates (also the files of one measurement of an imported kind, and its sample from the folder name), stale (analysis version or settings), plot out of date (plot version or settings), unrecognised files |
 | | `registry.py` | `methods.yaml` and the lab's `lab/methods.yaml` (shipped first): patterns, `recognise:` hooks, ignore rules |
-| | `labmethods.py` | the lab's own methods: reads and checks `lab/methods.yaml`, makes `labpipe_lab.<name>` importable |
+| | `labmethods.py` | the lab's own methods: reads and checks `lab/methods.yaml`, makes `labpipe_lab.<name>` importable; fills in an entry `kind: imported` (module, summary, settings file, analyst) |
 | | `naming.py` | sample ID and measurement ID from file names |
 | | `inventory.py` | what is recognised in the data folder (read-only) |
 | Analysis | `pipeline.py` | run a method on an entry; staging, `_superseded/`, `_failed/`; replot; review queue |
 | | `settings.py` | layered settings (defaults ← `lab.yaml` ← samples ← measurement), key checks, fingerprints (analysis and plot separate) |
 | | `provenance.py` | provenance records, git commit, environment |
 | | `versions.py` | analysis version and plot version per method (hash of the source), `labpipe methods versions` |
-| | `replay.py` | regenerate from `provenance.json` and compare hashes (a comparison figure goes to `compare.replay`) |
+| | `replay.py` | regenerate from `provenance.json` and compare hashes (a comparison figure goes to `compare.replay`; an analysis made outside labpipe is checked, not redrawn: its sources and copies against the recorded hashes) |
 | | `methods/<m>/analyze.py` | `run(...)`: the method contract (below) |
+| | `methods/imported/` | analyze and summary modules: **your own analyses made outside labpipe** (`docs/methods/imported.md`). One implementation for every entry `kind: imported` of `lab/methods.yaml` (made by `labpipe methods import`): the files of one stem in one folder are one measurement (`primary_of`: table, image, text, PDF; the scanner records the primary as the entry and the others as its duplicates, and re-queues it when one is new or changed); `results.json` copies tables verbatim as text and records every file's sha256, `made_by: "outside labpipe"`, named `quantities` parsed from a table column; outputs `results.json`, `plot.png` (+ `figure-N.png`), `provenance.json`, no `plot.pdf`; **replay checks** the sources and copies instead of redrawing (`replay._check_outside`) |
 | | `methods/<m>/summary.py` | `summarize(results)` for report and agents; `quantities(results)` for the dataset; optional, layout only: `table(results)` (card), `overview_tables(items)` (overview), `CAPTION` (figure caption); outside the analysis versions |
 | | `plotting/acs.py` | style from settings, figure saving, margins |
 | Results for people | `report.py` | HTML report: layouts, cards, galleries, the postdoc section, extra reports, the generated "How to read this report" box (`_how_to_read`, from the report settings; outside every analysis and plot version), the sample order (`sample_sorter`, the `sample_order` setting, also used by `dataset.py`), table specs (`_spec_table`: the EDS and XRD overview tables and card tables, bars and n.d./grey/– states), the navigation bar, folding, captions and the print style |
@@ -214,7 +218,7 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | | `installer.py` | `labpipe setup --first`: the installer's questions (tools present, agent tool, models, login, first project, start) |
 | | `release.py` | the version, `CHANGELOG.md` (parse, entries between two versions), release tags and the state of a git checkout; `labpipe --version` |
 | | `roview.py` | commands for a read-only view (native mode) |
-| | `methods_kit.py` | `methods new | check`: scaffold and check a method (in a project: into `lab/`) |
+| | `methods_kit.py` | `methods new | check`: scaffold and check a method (in a project: into `lab/`); `methods import`: the entry, description page, settings and analyst role for your own analyses (project only, never overwrites) |
 | Support | `safety.py` | code and project roots, install and config folders, dev mode, write checks, atomic writes, container path mapping |
 | | `locking.py` | cross-platform file lock |
 
@@ -241,6 +245,7 @@ A method is a package, registered in a methods file. Two homes, one contract:
   file, not a traceback.
 - **Versions and replay**: the analysis version follows `labpipe.*` and `labpipe_lab.*` imports (the
   lab's source is read from the project); `provenance.json` records `labpipe_lab.<m>.analyze.run`.
+- **`kind: imported`** (your own analyses made outside labpipe): an entry with only `patterns`, `sample_from` and a description; `labmethods.defaults` fills in the shipped `labpipe.methods.imported` module and summary, `lab/methods/<m>/config.yaml` as settings, `lab/methods/<m>/README.md` as analysis data (the description is part of the analysis version) and the analyst. Its record says `made_by: "outside labpipe"`; the invariant "every figure is regenerable from provenance.json" becomes "every source file is still there with the same hash and every copy is unchanged" (`labpipe replay`). Settings with an empty default (`quantities: {}`) take free-form keys in their overrides.
 - Details: `docs/ADDING_A_METHOD.md`, template: `methods/template/`.
 
 - **`analyze.run(input_path, out_dir, settings, context)`** writes:

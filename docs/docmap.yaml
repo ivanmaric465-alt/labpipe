@@ -48,6 +48,9 @@ areas:
   method-sem:
     code: ["src/labpipe/methods/sem/*", config/sem.yaml]
     docs: [docs/methods/sem.md]
+  method-imported:  # your own analyses made outside labpipe (kind: imported)
+    code: ["src/labpipe/methods/imported/*", src/labpipe/labmethods.py]
+    docs: [docs/methods/imported.md, docs/ARCHITECTURE.md]
   method-template:  # the contract every method follows
     code: ["src/labpipe/methods/template/*", src/labpipe/methods_kit.py]
     docs: [docs/ADDING_A_METHOD.md, docs/ARCHITECTURE.md]
@@ -97,7 +100,8 @@ linked:
   - [docs/settings/README.md, "docs/settings/*.md"] # the index lists every page
   - [docs/settings/plots.md, "docs/methods/*.md"]   # method plot keys appear in both
   - [docs/ARCHITECTURE.md, docs/docmap.yaml]        # modules and areas
-  - [docs/WRITING.md, "agents/*.md", src/labpipe/methods/template/analyst.md]   # how agents word claims; the roles point to it
+  - [docs/methods/imported.md, src/labpipe/methods/template/imported-readme.md, src/labpipe/methods/template/imported-analyst.md]   # the description form and the analyst of your own analyses
+  - [docs/WRITING.md, "agents/*.md", src/labpipe/methods/template/analyst.md, src/labpipe/methods/template/imported-analyst.md]   # how agents word claims; the roles point to it
 # Documents that are a record, not instructions: approved design notes keep the decisions and their
 # reasons as they were taken. The code and the docs above are what is kept current.
 not_kept_in_sync: ["docs/design/*.md"]

@@ -2,6 +2,8 @@
 
 A method is one package, one settings file, one registry entry and one analyst agent. Nothing else in the pipeline changes. With an agent, say *"I want to analyse <technique> files"*; it follows these steps. A new method is a code change: a separate task, never during analysis work, never unattended.
 
+**Not code, but your own analysis made elsewhere** (an Origin fit exported as PNG and CSV, a table from the instrument software)? That needs no method: `labpipe methods import` takes the files into the report as they are, with their own analyst agent, and writes no Python. See [docs/methods/imported.md](methods/imported.md). The rest of this page is for a method that computes.
+
 Two places, the same steps:
 
 | | Your own method (**project mode**, the usual case) | A method for labpipe itself (**dev mode**: you work in the labpipe repository) |

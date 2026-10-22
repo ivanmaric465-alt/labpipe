@@ -66,6 +66,7 @@ All commands print JSON.
 | `labpipe project new FOLDER [--data PATH]... [--name NAME]` / `project sync` | Create a project folder (the user runs it) / regenerate its generated files (`AGENTS.md`, `CLAUDE.md`, `.labpipe/`, harness files) after `lab/LAB.md`, `lab/agents/` or a labpipe update changed |
 | `labpipe agents sync` | Generate the harness's agent files from `agents/` and `lab/agents/` (in a project: the whole `project sync`) |
 | `labpipe automation run \| status` | One automatic pass (by hand; in container mode the container's watcher does this) / settings and last events. `automation setup` (timings, container at login, removes old native units) is run by the user; `automation watch` is the container's own entry point |
+| `labpipe methods import NAME --folder F --files "*.png,*.csv" --description D` | The user's own analyses made outside labpipe (figure, table, text) into the report: creates, in the project, the entry (`kind: imported`), `lab/methods/NAME/README.md` (the description form), `config.yaml` and `lab/agents/NAME-analyst.md`; never overwrites. See "Your own analyses" below |
 | `labpipe methods new \| check` | New method (only in a method-design task with the user): in a project into `lab/` (the lab's own), in the repository into the code |
 | `labpipe methods versions` | Per method: analysis version, plot version, the modules in each (read-only) |
 | `labpipe container setup \| start [--replace] \| stop \| status \| logs \| login \| popups` | Container mode (`docs/settings/container.md`); the user runs `setup`, `login` and `popups` (they ask questions or install a service) |
@@ -134,7 +135,7 @@ analysis/<sample_id>/<method>/_superseded|_failed/ older or failed outputs (neve
 analysis/_compare/<method>/<name>/              comparison figure of the samples: plot.png, plot.pdf, figure.html, provenance.json (the spec: the plotted data)
 analysis/_postdoc/<run>/                           the postdoc's runs: request.md, inputs.json, dataset.json, compare-N.json, analysis.md, verify.json
 context/                                           the user's project context and documents (git-ignored)
-lab/                                               the lab's own additions: LAB.md (all agents), agents/<role>.md, methods.yaml + methods/<name>/ (its own methods)
+lab/                                               the lab's own additions: LAB.md (all agents), agents/<role>.md, methods.yaml + methods/<name>/ (its own methods; `kind: imported` entries: the user's own analyses, README.md = their description)
 manifest.json                                      one entry per raw file: hash, status, output, versions; unrecognised files
 logs/                                              automation.log, runs/, review_queue.md
 config/                                            settings (docs/settings/): local.yaml = this machine; lab.yaml = the lab's preferences; ignore.yaml = files to leave alone
@@ -153,16 +154,26 @@ Do this after the data folder is set, and whenever doctor or the review queue re
 1. Run `labpipe inventory`. Show the user, in plain words: which files each method recognised (counts, two examples), which file types no method reads (with examples), and which names give no sample ID.
 2. Ask: *"Is this right?"* Then go through what is off, one thing at a time:
    - **recognised but wrong**: ask what it is; narrow that method's `patterns` in `methods.yaml` or add an `ignore` pattern, with the user's OK;
-   - **not recognised**: ask what these files are. Not data (reports, photos, slides): with the user's OK, add them to `config/ignore.yaml` (`ignore:` globs relative to the data folder, e.g. `"TEM/**"`, with a `#` comment saying why). Exports of a format a method already reads: propose a pattern. A technique labpipe cannot analyse yet: offer to design a new method with the user (below);
+   - **not recognised**: ask what these files are. Not data (reports, photos, slides): with the user's OK, add them to `config/ignore.yaml` (`ignore:` globs relative to the data folder, e.g. `"TEM/**"`, with a `#` comment saying why). Exports of a format a method already reads: propose a pattern. Figures and tables the user made themselves (an Origin fit, instrument software): `labpipe methods import`, "Your own analyses" below. A technique labpipe cannot analyse yet: offer to design a new method with the user (below);
    - **no sample ID**: show the names, ask how their files are named, adapt `sample_id.pattern` or add overrides.
 3. Rerun `labpipe inventory` and show the difference. Repeat until the user says it is right.
 4. If the manifest is still empty for this folder, ask whether to analyse everything already there, or only files added from now on (`labpipe scan --baseline`). The user decides; analysis is free, AI notes cost money.
+
+### Your own analyses (made outside labpipe)
+
+"Include my Raman fits from `Raman/fits`", or unrecognised files that are a figure and a table the user made (Origin, instrument software): not a new method, no code (`docs/methods/imported.md`).
+
+1. Ask only what you need: which folder, which file types, a name (`raman_fits`), whether the sample is in the file name or the folder name (`--sample-from folder`).
+2. **Show the command, run it on a yes**: `labpipe methods import raman_fits --folder "Raman/fits" --files "*.png,*.csv,*.md" --description "…"`, then `labpipe project sync` and `labpipe scan`.
+3. **Help fill `lab/methods/<name>/README.md`** from what the user tells you: what was measured, software and model, what the columns mean and their units, what to look at in the figure. Write their words; ask for what is missing; never invent. The first paragraph is shown on the report's cards.
+4. Quantities to compare across samples (`quantities` in `lab/methods/<name>/config.yaml`): propose them only if the user wants a column compared; the column name is its header text.
+5. The files are the user's: never edit them, never redo, recompute or "correct" the analysis in a note. Excel is not read yet: ask for a CSV export.
 
 ### When the user comes from a notification
 
 | The user says | Do |
 |---|---|
-| "check the new files" | `labpipe review`, read `logs/review_queue.md` → "Not recognised", then the steps above for those files. |
+| "check the new files" | `labpipe review`, read `logs/review_queue.md` → "Not recognised", then the steps above for those files (a figure and a table the user made themselves: "Your own analyses" below). |
 | "check the review queue" | `labpipe review`; for each "needs a human decision" entry, show the reason and ask. |
 | "check the failed analyses" | `labpipe review`; for each failed entry show `labpipe status ID`, say what went wrong in plain words, propose a fix (a setting, a sample ID, or a bug report for the code). Rerun only with the user's OK. |
 | "check the last automatic run" | Read the last `run_finished` / `run_failed` event in `logs/automation.log` and the end of its `transcript`; explain what stopped it and what would fix it. The next automatic run retries. |

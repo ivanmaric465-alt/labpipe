@@ -14,6 +14,8 @@ Reproducible analysis of lab data, driven by AI agents.
 
 These methods are one lab's formulation, for its instruments: use them as they are, steer them with settings, or treat them as worked examples for methods of your own: `labpipe methods new` scaffolds one into your project's `lab/methods/`, where updates never touch it ([docs/ADDING_A_METHOD.md](docs/ADDING_A_METHOD.md)).
 
+Your own analyses (figures and tables made elsewhere, e.g. an Origin fit) are taken into the report as they are, marked as yours, with `labpipe methods import` ([docs/methods/imported.md](docs/methods/imported.md)); labpipe copies, hashes and checks them, it does not redo them.
+
 Details: [docs/SAFETY.md](docs/SAFETY.md) (safety), [docs/ADDING_A_METHOD.md](docs/ADDING_A_METHOD.md) (new methods), [docs/methods/](docs/methods/) (method designs).
 
 ## Requirements
@@ -94,6 +96,7 @@ labpipe keeps three things apart:
 | **project** | `~/labpipe-projects/<name>` | one study: its settings, context, your additions and all results | you (settings, context, `lab/`) and labpipe (results) |
 
 - **One code folder per computer, one project per study.** Each project has its own settings, results, agents and container. Several projects can read the same data folder, and one project can read several.
+- **Your own analyses are data too**: a figure, a table or a note you made yourself (an Origin fit exported as PNG and CSV) belongs in the data folder, in a folder of its own (`labpipe methods import`, [docs/methods/imported.md](docs/methods/imported.md)). What labpipe makes from them (copies for the report, notes, provenance) is in the project, as for every measurement.
 - **The project only points at the data**: `config/local.yaml` → `raw_roots`. Nothing is copied or moved. Results go into the project, never next to the raw files.
 - **You work in the project folder**: open Claude Code or Codex there, and run `labpipe` there (or in any folder below it).
 - **In the container**, the three folders show up as `/opt/labpipe` (the code, built into the image), `/data/<id>` (each data folder, read-only) and `/project` (the project, read-write).
