@@ -30,6 +30,15 @@ def _stamp() -> str:
     return utc_now().replace(":", "").replace("-", "")
 
 
+def _free(target: Path) -> Path:
+    """`target`, or target-2, -3, … when it exists (two reruns within one second share a stamp)."""
+    n, free = 1, target
+    while free.exists():
+        n += 1
+        free = target.with_name(f"{target.name}-{n}")
+    return free
+
+
 def _move(source: Path, target: Path, config: dict) -> None:
     assert_pipeline_writable(source, config)
     assert_pipeline_writable(target, config)
@@ -87,10 +96,11 @@ def analyze_entry(config: dict, eid: str, *, rerun: bool = False) -> dict[str, A
 
     if status == "done":
         if final.exists() and any(final.iterdir()):
-            _move(final, method_dir / "_superseded" / entry["measurement_id"] / stamp, config)
+            _move(final, _free(method_dir / "_superseded" / entry["measurement_id"] / stamp),
+                  config)
         _move(staging, final, config)
     elif staging.exists():
-        _move(staging, method_dir / "_failed" / entry["measurement_id"] / stamp, config)
+        _move(staging, _free(method_dir / "_failed" / entry["measurement_id"] / stamp), config)
 
     with mf.locked(config) as data:
         stored = data["entries"][eid]
@@ -220,7 +230,7 @@ def replot_entry(config: dict, eid: str) -> dict[str, Any]:
     if results_same:
         old_files.discard("results.json")
         (staging / "results.json").unlink()   # byte-identical copy of the kept file
-    aside = method_dir / "_superseded" / mid / f"{stamp}-plot"
+    aside = _free(method_dir / "_superseded" / mid / f"{stamp}-plot")
     for name in sorted(old_files):
         if (final / name).exists():
             _move(final / name, aside / name, config)

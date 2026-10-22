@@ -447,7 +447,8 @@ def _card(entry: dict, results: dict, summary: dict, notes_text: str | None,
                      '</code>; read them with care.</p>') + plain
         elif checked_with:
             plain += _rules_line(checked_with.get("labpipe"))
-    settings_used = _settings_used(out)
+    # your own analyses have no labpipe settings to show (made outside labpipe)
+    settings_used = [] if results.get("made_by") == "outside labpipe" else _settings_used(out)
     steer_html = ("<h3>Settings beyond the defaults</h3><ul class=know>" + "".join(
         f"<li>{html.escape(line)}</li>" for line in settings_used) + "</ul>") if settings_used else ""
     anchor = html.escape(entry["measurement_id"])

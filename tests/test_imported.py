@@ -7,7 +7,6 @@ import hashlib
 import json
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -283,7 +282,6 @@ def test_description_checks(tmp_path):
     _labpipe(env, "raman_fits", "analyze", "--entry", done["entry_id"], "--rerun")
     assert "description_missing" not in {c["code"] for c in _results(project, done)["checks"]}
     page.unlink()
-    time.sleep(1.1)           # superseded outputs are kept under a stamp that has seconds
     _labpipe(env, "raman_fits", "analyze", "--entry", done["entry_id"], "--rerun")
     assert "does not exist" in {c["code"]: c["message"] for c in
                                 _results(project, done)["checks"]}["description_missing"]

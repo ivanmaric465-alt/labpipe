@@ -523,3 +523,13 @@ def test_out_of_date_notifications_name_the_reason():
              {"status_reason": "analysis settings changed since the last run"}]
     assert _stale_reasons(stale) == {"calculation changed": 1, "code updated": 1,
                                      "settings changed": 1}
+
+
+def test_two_moves_aside_in_one_second_do_not_collide(tmp_path):
+    from labpipe.pipeline import _free
+    target = tmp_path / "_superseded" / "m" / "20261022T101010Z"
+    assert _free(target) == target
+    target.mkdir(parents=True)
+    assert _free(target).name == "20261022T101010Z-2"
+    (target.parent / "20261022T101010Z-2").mkdir()
+    assert _free(target).name == "20261022T101010Z-3"
