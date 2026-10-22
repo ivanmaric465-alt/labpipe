@@ -71,12 +71,16 @@ def _is_content_duplicate(entry: dict[str, Any]) -> bool:
         "identical content")
 
 
-def _content_duplicates(entries: dict[str, dict[str, Any]], changes: list, counts: Counter) -> None:
-    """Same method + same sha256: keep the shortest path, mark the others duplicate."""
-    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+def _content_duplicates(entries: dict[str, dict[str, Any]], changes: list, counts: Counter,
+                        per_sample: frozenset[str] = frozenset()) -> None:
+    """Same method + same sha256: keep the shortest path, mark the others duplicate. For the
+    methods in `per_sample` (imported kinds: your own analyses) only within one sample: the
+    same file under two samples is two measurements (user decision 2026-10-22)."""
+    groups: dict[tuple, list[dict[str, Any]]] = {}
     for entry in entries.values():
         if entry.get("sha256") and (entry.get("status") in ACTIVE or _is_content_duplicate(entry)):
-            groups.setdefault((entry["method"], entry["sha256"]), []).append(entry)
+            sample = entry.get("sample_id") if entry["method"] in per_sample else None
+            groups.setdefault((entry["method"], entry["sha256"], sample), []).append(entry)
 
     def move(entry: dict[str, Any], status: str, reason: str) -> None:
         old = entry.get("status")
@@ -347,7 +351,8 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                                 "from": old, "to": "pending", "reason": primary["status_reason"]})
                 counts[old] -= 1
                 counts["pending"] += 1
-        _content_duplicates(entries, changes, counts)
+        _content_duplicates(entries, changes, counts, frozenset(
+            name for name, spec in methods.items() if spec.get("kind") == "imported"))
         for key in [k for k in unrecognised if k not in seen_unrecognised]:
             del unrecognised[key]       # gone, now recognised, or ignored
         for eid, entry in entries.items():

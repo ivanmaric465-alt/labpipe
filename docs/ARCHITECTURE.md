@@ -181,7 +181,7 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 |---|---|---|
 | Entry | `cli.py` | argparse commands; forwards host commands into the container in container mode |
 | State | `manifest.py` | load, save and lock `manifest.json`; status changes |
-| | `scanner.py` | raw roots → manifest; settle time, hashes, duplicates (also the files of one measurement of an imported kind, and its sample from the folder name), stale (analysis version or settings), plot out of date (plot version or settings), unrecognised files |
+| | `scanner.py` | raw roots → manifest; settle time, hashes, duplicates (identical content of one method; for an imported kind only within one sample; also the files of one measurement of an imported kind, and its sample from the folder name), stale (analysis version or settings), plot out of date (plot version or settings), unrecognised files |
 | | `registry.py` | `methods.yaml` and the lab's `lab/methods.yaml` (shipped first): patterns, `recognise:` hooks, ignore rules |
 | | `labmethods.py` | the lab's own methods: reads and checks `lab/methods.yaml`, makes `labpipe_lab.<name>` importable; fills in an entry `kind: imported` (module, summary, settings file, analyst) |
 | | `naming.py` | sample ID and measurement ID from file names |

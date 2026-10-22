@@ -402,6 +402,21 @@ def _rules_line(labpipe_version: str | None) -> str:
     return f"<p class=meta>checked with the rules of {which}</p>"
 
 
+def _removed_files(entry: dict, summary: dict, gone: set[tuple]) -> dict:
+    """Your own analysis: a file of the measurement that was removed from the data folder after
+    the analysis stays in the card (the copy made then) and the card says so, first under
+    "Check before using" (user decision 2026-10-22)."""
+    removed = [f for f in summary.get("source_files") or []
+               if (entry.get("raw_root"), f) in gone and f != entry["relative_path"]]
+    if not removed:
+        return summary
+    text = (f"removed from the data folder after this analysis: {', '.join(removed)}. This card "
+            f"still shows the copy made then; to drop it, redo the analysis: "
+            f"labpipe {entry['method']} analyze --entry {entry['entry_id']} --rerun")
+    return {**summary, "check_before_using": [{"code": "file_removed", "text": text},
+                                              *(summary.get("check_before_using") or [])]}
+
+
 def _card(entry: dict, results: dict, summary: dict, notes_text: str | None,
           notes_ok: bool | None, checked_with: dict | None = None,
           caption: str = "plot") -> tuple[str, str]:
@@ -1110,6 +1125,8 @@ def build(config: dict) -> dict[str, Any]:
                       if e.get("status") in ("done", "stale") and e.get("output_dir")),
                      key=_sample_key)
     statuses = Counter(e["status"] for e in data["entries"].values())
+    gone = {(e.get("raw_root"), e["relative_path"]) for e in data["entries"].values()
+            if e.get("status") == "missing"}
     gallery_methods = {name for name, spec in methods.items() if spec.get("report") == "gallery"}
     records: list[dict] = []
     gallery_items: dict[tuple[str, str], list[dict]] = {}
@@ -1138,6 +1155,7 @@ def build(config: dict) -> dict[str, Any]:
                 spec = module.table(results)
             except (KeyError, TypeError, ValueError, IndexError):
                 spec = None          # an older results.json: the lines of `overview` instead
+        summary = _removed_files(entry, summary, gone)
         card, compact = _card(entry, results, {**summary, "table": spec}, notes_text,
                               checked["ok"] if checked else None, checked.get("checked_with"),
                               caption)

@@ -40,7 +40,8 @@ No Python is written: one shipped module (`labpipe.methods.imported`) handles ev
 ## What labpipe does, and does not
 
 Does (code, no AI):
-- **One measurement per file name in a folder.** The first of the files by kind is the measurement's main file: a table, else an image, else a text, else a PDF (`.csv .tsv`, then `.png .jpg .tif`, then `.md .txt`, then `.pdf`). The others are recorded as "same measurement" and travel with it: when one of them is new or changes, the measurement is analysed again.
+- **One measurement per file name in a folder.** The first of the files by kind is the measurement's main file: a table, else an image, else a text, else a PDF (`.csv .tsv`, then `.png .jpg .tif`, then `.md .txt`, then `.pdf`). The others are recorded as "same measurement" and travel with it: when one of them is new or changes, the measurement is analysed again. **When you delete one of them**, the card keeps the copy made at the analysis and says so first under "Check before using" (`file_removed`, with the command that redoes the analysis without it: `labpipe raman_fits analyze --entry <id> --rerun`).
+- **The same file under two samples is two measurements** (e.g. one table copied for S-1 and S-2): each is analysed on its own. Only an identical file twice for one sample is recorded as a duplicate.
 - Copies into `analysis/<sample>/<name>/<measurement>/`: `results.json` (each file with its path, sha256 and kind; the table as text, header and the first `max_rows` rows, every value exactly as written in your file; text as written), `plot.png` (your first image as PNG; a small "no figure: table only" figure when there is none), `figure-2.png`, … (further images), PDFs as they are, and `provenance.json` with every source file's sha256 and `made_by: "outside labpipe"`.
 - **Named quantities** (optional): a table column becomes a quantity, so it shows in `labpipe dataset`, for the postdoc and in the comparison figures (dot plots). The value is copied from your table; only the text is read as a number. In `lab/methods/raman_fits/config.yaml`:
 
@@ -95,5 +96,5 @@ Only the ones you name in `quantities`, as `<name>.<quantity>` (your choice), va
 
 - **The badge "your analysis, made outside labpipe"**: labpipe did not make or check the method; it copied your files. Trust the method as far as you trust your own work.
 - Under it, **the first paragraph** of your description page, then **your figure(s)** (one at a time when there are several), **the table** exactly as in your file (scrolls; the note under it says how many rows of how many), **the texts** (open to read), **the files** it rests on and where the copies are.
-- **Check before using**: the review checks above (a missing column, a table that is not read). **Worth knowing**: the warnings and notes (no units, no description, a figure without a table).
+- **Check before using**: the review checks above (a missing column, a table that is not read), and first of all `file_removed` when a file of the measurement was deleted from the data folder after the analysis (the card still shows its copy). **Worth knowing**: the warnings and notes (no units, no description, a figure without a table).
 - **In plain words** is the analyst's note, with numbers from your table only.

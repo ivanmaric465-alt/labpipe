@@ -415,3 +415,35 @@ def test_the_unrecognised_files_hints_name_the_import(tmp_path):
     hint = automation._own_analyses_hint("Raman/fits/S-1_raman.png")
     assert "include my own analyses in Raman/fits" in hint and "Claude" not in hint
     assert automation._own_analyses_hint("a.png") == ""
+
+
+def test_the_same_file_under_two_samples_is_two_measurements(tmp_path):
+    project, raw, env, _ = _own(tmp_path)
+    _files(raw, sample="S-2")                     # byte-identical files, another sample
+    _labpipe(env, "scan")
+    entries = json.loads((project / "manifest.json").read_text(encoding="utf-8"))["entries"]
+    tables = {e["relative_path"]: e["status"] for e in entries.values()
+              if e["relative_path"].endswith(".csv")}
+    assert tables == {"Raman/fits/S-1_raman.csv": "pending", "Raman/fits/S-2_raman.csv": "pending"}
+    # within one sample identical content is still one measurement
+    (raw / "Raman/fits/copy").mkdir()
+    (raw / "Raman/fits/copy/S-1_raman.csv").write_bytes((raw / "Raman/fits/S-1_raman.csv").read_bytes())
+    _labpipe(env, "scan")
+    entries = json.loads((project / "manifest.json").read_text(encoding="utf-8"))["entries"]
+    copy = next(e for e in entries.values() if e["relative_path"] == "Raman/fits/copy/S-1_raman.csv")
+    assert copy["status"] == "duplicate" and "identical content" in copy["status_reason"]
+
+
+def test_a_removed_companion_stays_in_the_card_and_the_card_says_so(tmp_path):
+    project, raw, env, _ = _own(tmp_path)
+    _describe(project)
+    done = _analyse(env, "Raman/fits/S-1_raman.csv")
+    (raw / "Raman/fits/S-1_raman.md").unlink()
+    _labpipe(env, "scan")
+    _labpipe(env, "report")
+    page = (project / "analysis/report.html").read_text(encoding="utf-8")
+    card = page[page.index('<section class=card id="S-1_raman">'):]
+    card = card[:card.index("</section>")]
+    assert "Two Lorentzians, Origin 2023." in card                        # the copy stays
+    assert "removed from the data folder after this analysis: Raman/fits/S-1_raman.md" in card
+    assert f"labpipe raman_fits analyze --entry {done['entry_id']} --rerun" in card
