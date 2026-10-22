@@ -49,7 +49,7 @@ import shutil
 import subprocess
 import sys
 import time
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from labpipe import autostart
@@ -166,6 +166,15 @@ def _ask_agent(config: dict, request: str) -> str:
     return f"Run `labpipe review` in {_where()} and read logs/review_queue.md."
 
 
+def _own_analyses_hint(first: str) -> str:
+    """For files that are your own analyses (a figure, a table): the sentence to say, naming
+    the folder of the first new file."""
+    folder = PurePosixPath(first).parent.as_posix()
+    return ((f" Your own analyses (figure, table)? Tell your agent: include my own analyses in "
+            f"{folder} (or `labpipe methods import`).")
+            if folder != "." else "")
+
+
 def _listed(items: list[str], limit: int = 4) -> str:
     return ", ".join(items[:limit]) + (f" and {len(items) - limit} more" if len(items) > limit else "")
 
@@ -201,7 +210,8 @@ def _notify_news(config: dict, before: dict[str, tuple],
         review_queue(config)
     if unrecognised:
         notify(config, f"labpipe: {len(unrecognised)} new file(s) not recognised: "
-                       f"{_listed(unrecognised)}. " + _ask_agent(config, "check the new files"),
+                       f"{_listed(unrecognised)}. " + _ask_agent(config, "check the new files")
+                       + _own_analyses_hint(unrecognised[0]),
                kind="unrecognised")
     if needs_review:
         notify(config, f"labpipe: {len(needs_review)} file(s) need a decision from you: "
