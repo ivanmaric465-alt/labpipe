@@ -1,6 +1,6 @@
 # Report: readable tables and sample comparison (design, draft)
 
-Status: approved 2026-10-20; built step by step (Order of work); steps 1 (tables, sample order, the look) and 2 (the comparison framework, dot plots, the section, settings) are built. Built alongside it: the agents'
+Status: approved 2026-10-20; built step by step (Order of work); steps 1 (tables, sample order, the look) and 2 (the comparison framework, dot plots, the section, settings) are built; step 3 revised 2026-10-22 (below: "Step 3, revised"). Built alongside it: the agents'
 writing rules (`docs/WRITING.md`) and the EDS change for negative values.
 
 ## What is wrong today (a report of 13 samples: EDS, XRD, SEM)
@@ -113,6 +113,43 @@ The order is one function in `report.py`, so a lab can also change it in its own
    the test data (screenshots: Chrome connected, or the user).
 
 Each step is a branch with tests, and stops for review.
+
+## Step 3, revised (2026-10-22, after the user's review of step 2)
+
+The user's review: the dot plots' colours and markers per sample are hard to read (with 13 samples
+they repeat, and every EDS point is hollow because EDS has no σ); the figures should be
+interactive like BenchVault's report (switch measurements on and off); a slightly thicker
+scroll bar under the navigation.
+
+- **Dot plots, simpler**: one dark colour, filled markers; the σ bar where the analysis gives
+  one, and the caption says which points have none. A quantity may carry a `nominal` value
+  (EDS): a grey open mark in the same row. The per-sample colours go; colour is kept for the
+  figures where lines must be told apart (XRD patterns), always with a label next to the line.
+- **Interactive in the report, static for papers**: every comparison figure is drawn twice from
+  the same recorded data: `plot.png`/`plot.pdf` (matplotlib, ACS style) and `figure.html` (an
+  inline SVG with its controls, plain JavaScript, no library). Both are outputs in its
+  `provenance.json`, so `labpipe replay` checks both. Controls: one checkbox per measurement
+  (grouped by sample), select all / none; at the top of "Compare samples" one row of sample
+  chips switches a sample off in every figure. What is switched off is not saved.
+- **Figure kinds** (`labpipe/comparekinds/`, shared by every method, also the lab's own):
+  `dots` (rows = samples, value ± σ, optional nominal and reference lines), `lines` (one trace
+  per measurement, stacked with an offset or overlaid; reference positions as tick rows; a
+  "normalised to maximum" view), `bars` (one 100 % bar per measurement, one colour per
+  category, the nominal bar in grey under it), `images` (rows = samples, columns = a category
+  such as the magnification). A method supplies the data, the kind draws it.
+- **Method figures**: an optional `compare: <module>` in methods.yaml; the module's
+  `figures(measurements, context)` returns figure specs of these kinds (data copied from
+  `results.json`, or read from the raw file read-only and checked against the recorded sha256;
+  never computed by an agent). EDS: the composition bars (per-element dot plots only when
+  asked, `eds.at.*`). XRD: the patterns stacked on one 2θ axis (thinned to ≤ 2000 points by a
+  min-max rule that keeps every peak; the raw file's sha256 recorded), and the lattice
+  parameter as a dot plot with the matched references as vertical lines. SEM: the grid by
+  gallery magnification.
+- **Settings**: `report.compare` names method figures and quantities alike
+  (`{xrd: [patterns, xrd.a.*], eds: [composition]}`); the default `all` means the method
+  figures plus the quantities a method does not cover by a figure of its own.
+- **Navigation**: the scroll bar of the bar slightly thicker (`scrollbar-width: auto` with a
+  quiet colour; 10 px in Chromium).
 
 ## Decisions (2026-10-20, user)
 
