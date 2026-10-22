@@ -1,5 +1,7 @@
 # Data: folder, recognised files, sample IDs
 
+The data folder must not be the project folder, inside it or contain it (the container mounts the project writable; `labpipe doctor` and `container start` say so).
+
 labpipe reads your instrument files from your **data folder** (read-only: the container mounts it read-only; a full native install reads it through a read-only view, `docs/SAFETY.md`), decides which method each file belongs to, and takes the sample ID from the file name.
 
 ## Settings

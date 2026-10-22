@@ -53,6 +53,10 @@ labpipe container popups on|off      # Linux pop-ups
 labpipe automation status            # last runs
 ```
 
+- **Measurements to check** (code-only methods: SEM, and your own methods without an analyst): one notification each time a measurement finishes flagged for review ("N SEM measurement(s) to check: image (check code), …"), with what to say to your agent ("check the review queue"); also in `logs/review_queue.md`. Told once per analysis.
+- **Code-only analyses** run one measurement per fresh process (`labpipe <method> analyze --entry ID`), so edited lab method code is never run stale and the recorded version is that of the code that ran; a process that dies is recorded as failed with the end of its error output.
+- **The watcher restarts itself** (the container restarts it) when labpipe's code changes or when anything in `lab/methods/` or `lab/methods.yaml` changes (logged as "lab methods changed").
+
 The notifications page: `http://127.0.0.1:8765/?token=…` (`labpipe container status` prints it). It lists what needs you (unrecognised files, decisions, failed and out-of-date analyses) and the activity, and links the report.
 
 ## You say → setting

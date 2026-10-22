@@ -296,6 +296,17 @@ def _raw_roots(config: dict) -> tuple[list[dict[str, Any]], list[tuple[str, Path
     return items, usable
 
 
+def _data_apart(config: dict) -> list[dict[str, Any]]:
+    """Error item when a data folder and the project (dev mode: the code) overlap."""
+    folders = [r.get("source") or r["path"] for r in config.get("raw_roots") or []]
+    problems = safety.data_overlaps(PROJECT_ROOT, folders, CODE_ROOT if safety.dev_mode() else None)
+    if not problems:
+        return []
+    return [_item("data_apart", "todo", "; ".join(problems), "move the project or the data so "
+                  "that neither is inside the other (labpipe project new <folder> --data <data>, "
+                  "then copy the settings), and fix raw_roots in config/local.yaml")]
+
+
 def _inventory(config: dict) -> dict[str, Any]:
     """What is recognised in the data folders. On a host that only forwards into the container,
     the container lists it: recognising a file imports the method's code, which needs the
@@ -439,6 +450,7 @@ def run() -> dict[str, Any]:
         items.append(_item("local_config", "ok", f"{local.relative_to(PROJECT_ROOT)} present"))
         root_items, usable = _raw_roots(config)
         items += root_items
+        items += _data_apart(config)
         items += _files(config, usable)
     items += _method_setup()
     if config is not None:

@@ -372,3 +372,30 @@ def test_method_subcommands_marked_run_on_host_stay_on_the_host(tmp_path):
     args = (tmp_path, tmp_path, "podman", "labpipe", 1000, 1000, False, {"xrd": ["refs"]})
     assert ct.forward_argv(["xrd", "refs", "add", "x.cif", "--id", "X"], *args) is None
     assert ct.forward_argv(["xrd", "analyze", "--entry", "e"], *args) is not None
+
+
+# ---- data and project never overlap -----------------------------------------------------
+
+def test_the_container_is_not_started_with_data_and_project_overlapping(tmp_path, monkeypatch):
+    project = _project_root(tmp_path, monkeypatch)
+    inside = project / "raw"
+    inside.mkdir()
+    for folder in (inside, project, tmp_path):       # data inside, equal, and above the project
+        config = _config(tmp_path, roots=[{"id": "lab", "path": str(folder)}])
+        with pytest.raises(ct.ContainerError, match="data folder|project folder"):
+            _run(config, "podman")
+        with pytest.raises(ct.ContainerError):
+            ct.check_apart(config, project)
+    link = tmp_path / "link"
+    link.symlink_to(project)                           # a symlink does not hide it
+    with pytest.raises(ct.ContainerError):
+        _run(_config(tmp_path, roots=[{"id": "lab", "path": "x", "source": str(link)}]), "podman")
+    assert _run(_config(tmp_path), "podman")           # apart: fine
+
+
+def test_dev_mode_checks_the_code_folder_too(tmp_path, monkeypatch):
+    _project_root(tmp_path, monkeypatch)
+    config = _config(tmp_path, roots=[{"id": "lab", "path": str(REPO / "tests")}])
+    assert _run(config, "podman")
+    with pytest.raises(ct.ContainerError, match="code folder"):
+        _run(config, "podman", dev=True)

@@ -224,7 +224,7 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | Agents | `agents.py` | `agents/*.md` (+ the lab's overlays and extra roles) → harness files, models per role |
 | | `project.py` | `project new`; `project sync`: the generated files of a project, `generated.json`, status for doctor |
 | | `guard.py` | hook: refuses writes outside the allowed paths, to generated files, raw-data access, disallowed commands; reads only in strict forms (`READ_FORMS`) |
-| Automation | `automation.py` | one pass, the watcher (the container's entry point; refuses elsewhere), nightly run, notifications (`notifications.jsonl`, Linux `notify-send`), `setup` (timings, autostart, removing old native units), headless agent commands |
+| Automation | `automation.py` | one pass (code-only methods: one fresh `labpipe <method> analyze` process per measurement; review flags notified once, `to_check`), the watcher (the container's entry point; refuses elsewhere; restarts, exit 3, when labpipe's code or `labmethods.source_hash()` of `lab/methods/` + `lab/methods.yaml` changes), nightly run, notifications (`notifications.jsonl`, Linux `notify-send`), `setup` (timings, autostart, removing old native units), headless agent commands |
 | | `autostart.py` | the container starts at login: `podman-restart.service` (Podman, Linux), Docker, podman machine guidance (untested); the old native units (host side, no numpy) |
 | | `inbox.py` | notifications page (local, token, read-only) |
 | | `container.py` | build (staged context), start (name, port, mounts per project), stop, login, shell, pop-up proxy; forwarding of host commands (and `forward_json`: the doctor's file list comes from the container, since recognising a file imports method code) |
@@ -456,6 +456,7 @@ One container per project.
 - **Run**:
   - the project is mounted read-write at `/project` (the working folder, `LABPIPE_PROJECT`), the
     data folders read-only at `/data/<id>`;
+  - data and project (in dev mode also the code) never overlap, checked on real paths by `safety.data_overlaps` in `project new`, `doctor` and `container.check_apart` (start, setup, every run command line);
   - dev mode (the repository is its own project) and `labpipe container start --dev` also mount
     the code folder at `/opt/labpipe`, so code edits need no rebuild;
   - the container is named `labpipe-<project name>` with the volume `<name>-home` (logins), and
