@@ -1,6 +1,6 @@
 # Your own analyses in the report (design, draft)
 
-Status: draft 2026-10-22, for review. Nothing built yet.
+Status: approved 2026-10-22 with the decisions below; being built (branch `own-analyses`).
 
 The request: users have analyses already done elsewhere (an Origin fit exported as PNG and CSV,
 a table from instrument software, a short write-up) and want them in the report next to
@@ -93,11 +93,14 @@ It reads the README.md description, looks at the figure and reads the table thro
 It never redoes or "corrects" the user's analysis. `notes: false` in the entry turns it off,
 leaving only the files in the report.
 
-## Open questions for the user
+## Decisions (2026-10-22, user)
 
-1. **Where the files live**: in the data folder (proposed), or a separate `imports/` folder
-   in the project for people who cannot write to the data folder (added as another data root)?
-2. **Excel**: `.xlsx` needs `openpyxl`, a new dependency. Proposal: CSV/TSV now (Origin and
-   Excel both export it) and xlsx later as an optional extra, not in the image.
-3. **Is the replay exception acceptable?** The file is checked, not redrawn.
-4. **One agent per kind** (proposed), or one shared "imported-analyst" for all kinds?
+1. **The files live in the data folder**, like every measurement: the data folder holds what
+   people made (instrument files and their own analyses, read-only for labpipe), the project
+   folder holds what labpipe makes from them (`analysis/<sample>/<name>/`: results.json, the
+   copies shown in the report, notes.md, provenance.json). So the split stays the same as for
+   XRD or EDS. (The user noted it may feel inconsistent at first; the README's "Three folders"
+   says it in these words.)
+2. **Excel**: no answer yet; CSV/TSV now, `.xlsx` later as an optional extra (not in the image).
+3. **Replay checks instead of redrawing** an imported figure: accepted.
+4. **One agent per kind of analysis** (`<name>-analyst`), for consistency with the methods.
