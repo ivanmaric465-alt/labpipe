@@ -75,7 +75,7 @@ a{color:inherit}.flag{display:inline-block;border-radius:99px;padding:0 .55rem;f
 font-weight:600;background:var(--chip)}.flag.r{color:var(--bad)}.flag.o{color:var(--ok)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-top:22px;
 padding:18px 20px;display:grid;grid-template-columns:minmax(0,480px) minmax(0,1fr);gap:22px}
-@media (max-width:760px){.card{grid-template-columns:1fr}}
+@media (max-width:760px){.card{grid-template-columns:minmax(0,1fr)}}
 .card img{width:100%;border-radius:6px;background:#fff}
 .card h2{margin:0 0 .2rem;font-size:1.15rem}.meta{color:var(--mut);font-size:.82rem;margin-bottom:.7rem}
 .card h3{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);
@@ -84,7 +84,7 @@ margin:1rem 0 .3rem}.card ul{margin:.2rem 0;padding-left:1.1rem}.card li{margin:
 dl{display:grid;grid-template-columns:max-content 1fr;gap:.15rem .9rem;margin:0;font-size:.9rem}
 dt{color:var(--mut)}dd{margin:0;font-variant-numeric:tabular-nums}
 .sample{margin:2.4rem 0 0;font-size:1.3rem;padding-bottom:.3rem;border-bottom:1px solid var(--line)}
-.card.wide{grid-template-columns:1fr}.card.wide .car{max-width:680px;margin:0 auto}
+.card.wide{grid-template-columns:minmax(0,1fr)}.card.wide .car{max-width:680px;margin:0 auto}
 .track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory}
 .track figure{flex:0 0 100%;margin:0;scroll-snap-align:start;text-align:center}
 .track img{max-height:540px;object-fit:contain}
@@ -151,7 +151,7 @@ padding:0 .65rem;font-size:.8rem;font-weight:600;margin:0 0 .5rem}.desc{margin:.
 .scr .tw{max-height:24rem;overflow:auto}.scr th{position:sticky;top:0;background:var(--card);z-index:1}
 .card pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.82rem;max-height:18rem;
 overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:.5rem .7rem}
-@media print{nav.top,.chips{display:none}body{background:#fff;color:#000;padding-inline:0}
+@media print{nav.top,.chips{display:none}details.cmp>summary,h2,h3{break-after:avoid}body{background:#fff;color:#000;padding-inline:0}
 .card,.postdoc{break-inside:avoid;break-after:page;border-color:#bbb}
 .tw.st{max-height:none;overflow:visible}.tw.st th{position:static;box-shadow:none}
 details.blk>summary h2.sample::before,details.cmp>summary h3::before{content:""}
