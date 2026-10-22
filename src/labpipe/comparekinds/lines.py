@@ -164,15 +164,18 @@ def html(spec: dict[str, Any], fig_id: str) -> str:
     n = len(traces)
     shown, names, colours = _display(spec), _names(spec), _colours(spec)
     scale = spec.get("y_scale", "linear")
-    left, right = 56.0, ck.WIDTH - 24 - 7 * max((len(x) for x in names), default=4) - 12
+    # room on the left for the tick rows' labels (about 6.5 px per character at 10.5 px)
+    left = max(56.0, 12 + 6.5 * max((len(r["label"]) for r in rows), default=0))
+    right = ck.WIDTH - 24 - 7 * max((len(x) for x in names), default=4) - 12
     xs = [v for t in traces for v in t["x"]]
     low, high = min(xs), max(xs)
 
     def sx(value: float) -> float:
         return left + (value - low) / ((high - low) or 1.0) * (right - left)
     top = 10.0
-    stack_h = (n - 1) * STEP + STEP * HEIGHT      # trace 0 at the bottom, the others above
-    panel = max(stack_h, OVERLAY)
+    # the stacked view fills the panel: few traces get a larger step (no empty band on top)
+    step = max(STEP, OVERLAY / ((n - 1) + HEIGHT))
+    panel = (n - 1) * step + step * HEIGHT        # trace 0 at the bottom, the others above
     axis_y = base_s = base_o = top + panel         # trace 0 (stacked) and the overlaid baseline
     tick_top = axis_y + 40
     total = tick_top + 16 * len(rows) + 10
@@ -180,12 +183,12 @@ def html(spec: dict[str, Any], fig_id: str) -> str:
     variants = []
     for key, stacked, view in (("s0", True, "raw"), ("s1", True, "norm"),
                                ("o0", False, "raw"), ("o1", False, "norm")):
-        height_px = STEP * HEIGHT if stacked else panel
+        height_px = step * HEIGHT if stacked else panel
         group = []
         if not stacked:
             group.append(_y_axis(spec, view, shown, left, base_o, panel, scale))
         for i, trace in enumerate(traces):
-            base = (base_s - i * STEP) if stacked else base_o
+            base = (base_s - i * step) if stacked else base_o
             points = [(sx(x), base - u * height_px) for x, u in zip(trace["x"], shown["traces"][i][view])]
             inner = (f'<polyline fill=none stroke="{colours[i]}" stroke-width="1" '
                      f'stroke-linejoin=round points="{_path(points)}"/>')
@@ -198,7 +201,7 @@ def html(spec: dict[str, Any], fig_id: str) -> str:
         variants.append(f'<g class=v data-v="{key}"{"" if shown_now else " style=display:none"}>'
                         + "".join(group) + "</g>")
     out = [ck.svg_open(ck.WIDTH, total, spec.get("title") or spec["name"],
-                       f' data-step="{ck.number(STEP)}"')]
+                       f' data-step="{ck.number(step)}"')]
     for tick in tick_xs:
         out.append(f'<line class=gr x1="{ck.number(sx(tick))}" x2="{ck.number(sx(tick))}" '
                    f'y1="{ck.number(top)}" y2="{ck.number(axis_y)}"/>'
@@ -244,7 +247,8 @@ def _y_axis(spec: dict[str, Any], view: str, shown: dict[str, Any], left: float,
         parts.append(f'<line class=gr x1="{ck.number(left)}" x2="{ck.number(left - 4)}" '
                      f'y1="{ck.number(y)}" y2="{ck.number(y)}"/><text class=m x="{ck.number(left - 8)}" '
                      f'y="{ck.number(y + 4)}" text-anchor=end>{text}</text>')
-    label = spec.get("y_label", "") + (" (normalised)" if view == "norm" else "")
+    label = (_y_label(spec.get("y_label", ""), "normalised") if view == "norm"
+             else spec.get("y_label", ""))
     parts.append(f'<text x="14" y="{ck.number(base - height / 2)}" text-anchor=middle '
                  f'transform="rotate(-90 14 {ck.number(base - height / 2)})">{ck.esc(label)}</text>')
     return "".join(parts)

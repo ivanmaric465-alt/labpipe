@@ -43,6 +43,7 @@ STYLE = """<style>
 .cf svg .rf{stroke:var(--mut,#66665f);stroke-width:1;stroke-dasharray:4 3}
 .cf .cl,.cf .cv{display:flex;flex-wrap:wrap;gap:.2rem .9rem;align-items:center;margin-top:.5rem}
 .cf .cl label,.cf .cv label{display:inline-flex;gap:.3rem;align-items:center;cursor:pointer}
+.cf .cl details{flex-basis:100%}.cf .cl summary{cursor:pointer;color:var(--mut,#66665f);font-size:.9em}
 .cf .cs{display:inline-flex;flex-wrap:wrap;gap:.1rem .7rem;align-items:center}
 .cf .cn{color:var(--mut,#66665f);font-weight:600}.cf .sw{width:1rem;height:3px;display:inline-block}
 .cf button{font:inherit;font-size:.85em;border:1px solid var(--line,#deded6);background:var(--card,#fff);
@@ -164,6 +165,9 @@ def text_on(colour: str) -> str:
     return "#111111" if 0.2126 * red + 0.7152 * green + 0.0722 * blue > 0.55 else "#ffffff"
 
 
+FOLD_AFTER = 12     # a legend with more measurements than this is folded (All / None stay)
+
+
 def legend(items: list[tuple[str, str, str | None]]) -> str:
     """The controls: All / None and one checkbox per measurement (sample, measurement, colour),
     grouped by sample; a sample with one measurement is a single checkbox."""
@@ -175,7 +179,7 @@ def legend(items: list[tuple[str, str, str | None]]) -> str:
         swatch = f'<span class=sw style="background:{colour}"></span>' if colour else ""
         return (f'<label title="{esc(measurement)}"><input type=checkbox checked '
                 f'data-cm="{esc(measurement)}" data-cs="{esc(sample)}">{swatch}{esc(text)}</label>')
-    parts = ['<div class=cl><span><button type=button data-all=1>All</button> '
+    parts = ['<span><button type=button data-all=1>All</button> '
              '<button type=button data-all=0>None</button></span>']
     for sample, members in groups.items():
         if len(members) == 1:
@@ -183,7 +187,11 @@ def legend(items: list[tuple[str, str, str | None]]) -> str:
         else:
             parts.append(f'<span class=cs><span class=cn>{esc(sample)}</span>'
                          + "".join(box(sample, m, c, m) for m, c in members) + "</span>")
-    return "".join(parts) + "</div>"
+    if len(items) <= FOLD_AFTER:
+        return "<div class=cl>" + "".join(parts) + "</div>"
+    # many measurements: All / None stay visible, the checkboxes fold away
+    return (f'<div class=cl>{parts[0]}<details><summary>Choose among {len(items)} '
+            f'measurements</summary><div class=cl>{"".join(parts[1:])}</div></details></div>')
 
 
 def svg_open(width: float, height: float, label: str, extra: str = "") -> str:
