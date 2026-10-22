@@ -23,9 +23,12 @@ card shows the `overview` lines and the overview table one column per line. `CAP
 summary module is what a method's plot shows (caption and alt text of its figure). Samples
 are ordered by the `sample_order` setting (`sample_sorter`), everywhere in the report.
 
-The section "Compare samples" (`sections: compare`, `compare:` chooses the quantities) shows the
-figures of `labpipe.compare` (analysis/_compare/), drawn when the report is built; matplotlib is
-imported only then, and a failure to draw is said in the section, not raised.
+The section "Compare samples" (`sections: compare`, `compare:` chooses the quantities and the
+methods' own figures) shows the figures of `labpipe.compare` (analysis/_compare/), drawn when the
+report is built; matplotlib is imported only then, and a failure to draw is said in the section,
+not raised. Each figure is its `figure.html` (inline SVG with checkboxes; the script below
+switches measurements and samples on and off, nothing is stored), its caption and links to the
+PNG, PDF and provenance; the PNG is the fallback.
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ import hashlib
 import html
 import importlib
 import json
+import posixpath
 import re
 from fnmatch import fnmatchcase
 from collections import Counter
@@ -99,7 +103,11 @@ padding:18px 20px}.postdoc h2{margin:0 0 .2rem;font-size:1.25rem}.postdoc .notes
 nav.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;overflow-x:auto;
 white-space:nowrap;margin:0 -16px;padding:0 16px;min-height:2.9rem;background:var(--bg);
 background:color-mix(in srgb,var(--bg) 90%,var(--card));border-bottom:1px solid var(--line);
-box-shadow:0 3px 10px -6px rgba(0,0,0,.28);font-size:.95rem;scrollbar-width:thin}
+box-shadow:0 3px 10px -6px rgba(0,0,0,.28);font-size:.95rem;scrollbar-width:auto;
+scrollbar-color:var(--line) transparent}
+nav.top::-webkit-scrollbar{height:10px}nav.top::-webkit-scrollbar-track{background:transparent}
+nav.top::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px}
+nav.top::-webkit-scrollbar-thumb:hover{background:var(--mut)}
 nav.top .g{display:flex;align-items:center;gap:.1rem}nav.top .sep{flex:none;width:1px;height:1.3rem;
 background:var(--line);margin:0 .8rem}nav.top .gl{color:var(--mut);font-size:.72rem;
 text-transform:uppercase;letter-spacing:.05em;margin-right:.35rem}
@@ -120,9 +128,16 @@ h2.sec{margin:2.4rem 0 .3rem;font-size:1.3rem;padding-bottom:.3rem;border-bottom
 details.cmp>summary h3{display:block;margin:1.2rem 0 .5rem;font-size:1.05rem}
 details.cmp>summary h3::before{content:"▾ ";color:var(--mut)}
 details.cmp:not([open])>summary h3::before{content:"▸ "}
-.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
-.cgrid figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:8px;
-padding:10px 12px}.cgrid img{width:100%;background:#fff;border-radius:4px}section.mt h4{margin:1rem 0 .3rem;font-size:.9rem;color:var(--mut)}
+.cgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+.cgrid>figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:8px;
+padding:10px 12px}.cgrid>figure>img{width:100%;background:#fff;border-radius:4px}
+.cgrid .links{font-size:.8rem;color:var(--mut)}.cgrid .links a{color:var(--mut)}
+.chips{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;margin:.6rem 0 .2rem}
+.chips .gl{color:var(--mut);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em}
+.chips button{font:inherit;font-size:.85rem;border:1px solid var(--line);background:var(--card);
+color:var(--fg);border-radius:99px;padding:.1rem .7rem;cursor:pointer}
+.chips button[aria-pressed=false]{color:var(--mut);text-decoration:line-through;opacity:.6}
+.chips button:hover{background:var(--chip)}section.mt h4{margin:1rem 0 .3rem;font-size:.9rem;color:var(--mut)}
 .tw.st{max-height:80vh;overflow:auto}.tw.st th{position:sticky;top:0;background:var(--card);z-index:1;
 box-shadow:0 1px 0 var(--line)}
 th .u{display:block;font-weight:400;text-transform:none;letter-spacing:0}th.r,td.r{text-align:right}
@@ -131,11 +146,11 @@ td.nd{color:var(--warn);font-style:italic}td.low{color:var(--mut)}td.missing{col
 tr.nominal td{color:var(--mut);font-style:italic;background-color:rgba(128,128,128,.07)}
 tr.sub td:first-child{padding-left:1.4rem}p.tnote{color:var(--mut);font-size:.8rem;margin:.3rem 0 0}
 .card table{font-size:.85rem}.card .tw{margin-top:.2rem}
-@media print{nav.top{display:none}body{background:#fff;color:#000;padding-inline:0}
+@media print{nav.top,.chips{display:none}body{background:#fff;color:#000;padding-inline:0}
 .card,.postdoc{break-inside:avoid;break-after:page;border-color:#bbb}
 .tw.st{max-height:none;overflow:visible}.tw.st th{position:static;box-shadow:none}
 details.blk>summary h2.sample::before,details.cmp>summary h3::before{content:""}
-.cgrid figure{break-inside:avoid}}
+.cgrid>figure{break-inside:avoid}}
 """
 
 
@@ -248,6 +263,31 @@ nav.scrollTo({left:a.offsetLeft-nav.clientWidth/2,behavior:'smooth'})};
 const io=new IntersectionObserver(es=>{es.forEach(e=>e.isIntersecting?live.add(e.target):live.delete(e.target));mark()},
 {rootMargin:'-56px 0px -62% 0px'});
 new Set(of.values()).forEach(t=>t&&io.observe(t))})();
+(()=>{const S=document.getElementById('compare');if(!S)return;
+const figs=[...S.querySelectorAll('.cf')],boxes=f=>[...f.querySelectorAll('input[data-cm]')];
+const apply=f=>{const on=new Set(boxes(f).filter(c=>c.checked).map(c=>c.dataset.cm));
+f.querySelectorAll('[data-m]').forEach(e=>e.style.display=on.has(e.dataset.m)?'':'none');
+f.querySelectorAll('svg').forEach(v=>{const st=+v.dataset.step;if(!st)return;
+v.querySelectorAll('.v').forEach(g=>{let k=0;g.querySelectorAll('g[data-i]').forEach(t=>{
+const here=on.has(t.dataset.m);t.setAttribute('transform','translate(0 '+(here?(+t.dataset.i-k)*st:0)+')');if(here)k++})})})};
+const view=f=>{const s=f.dataset.view||'s',n=f.querySelector('[data-norm]');
+const key=s+(n&&n.checked?1:0);f.querySelectorAll('svg .v').forEach(g=>g.style.display=g.dataset.v===key?'':'none')};
+const chips=[...S.querySelectorAll('[data-chip]')],all=()=>figs.forEach(apply);
+const setSample=(s,on)=>figs.forEach(f=>{boxes(f).filter(c=>c.dataset.cs===s).forEach(c=>c.checked=on)});
+const mark=()=>chips.forEach(b=>b.setAttribute('aria-pressed',figs.some(f=>boxes(f).some(
+c=>c.dataset.cs===b.dataset.chip&&c.checked))));
+S.addEventListener('change',e=>{const f=e.target.closest('.cf');if(!f)return;
+if(e.target.dataset.norm!==undefined)view(f);else{apply(f);mark()}});
+S.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const f=b.closest('.cf');
+if(b.dataset.chip!==undefined){setSample(b.dataset.chip,b.getAttribute('aria-pressed')!=='true');all();mark()}
+else if(b.dataset.chips!==undefined){chips.forEach(c=>setSample(c.dataset.chip,b.dataset.chips==='all'));all();mark()}
+else if(f&&b.dataset.all!==undefined){boxes(f).forEach(c=>c.checked=b.dataset.all==='1');apply(f);mark()}
+else if(f&&b.dataset.view){f.dataset.view=b.dataset.view;f.querySelectorAll('[data-view]').forEach(x=>
+x.setAttribute('aria-pressed',x===b));view(f)}});
+let saved=[];addEventListener('beforeprint',()=>{saved=figs.map(f=>boxes(f).map(c=>c.checked));
+figs.forEach(f=>boxes(f).forEach(c=>c.checked=true));all()});
+addEventListener('afterprint',()=>{figs.forEach((f,i)=>boxes(f).forEach((c,j)=>c.checked=saved[i][j]));all()});
+all()})();
 addEventListener('beforeprint',()=>document.querySelectorAll('details').forEach(d=>{d.dataset.was=d.open?1:'';d.open=true}));
 addEventListener('afterprint',()=>document.querySelectorAll('details').forEach(d=>{d.open=!!d.dataset.was}));
 """
@@ -582,6 +622,9 @@ SECTIONS = ("postdoc", "compare", "overview", "measurements")
 ORDER_WORDS = "name, samples or property:<name>"
 
 
+HOOK_ITEM = "(compare hook)"        # the name of a skipped item that is a failed method hook
+
+
 def _offers_quantities(spec: dict) -> bool:
     """Does the method name quantities to compare (`quantities` in its summary module)?"""
     try:
@@ -591,10 +634,11 @@ def _offers_quantities(spec: dict) -> bool:
 
 
 def _check_compare(value: Any, fail, methods: dict) -> None:
-    """`compare`: all, or {method: [quantity names or globs] | true | false}."""
+    """`compare`: all, or {method: [quantity or figure names or globs] | true | false}."""
     if value == "all":
         return
-    offering = sorted(m for m, spec in methods.items() if _offers_quantities(spec))
+    offering = sorted(m for m, spec in methods.items()
+                      if spec.get("compare") or _offers_quantities(spec))
     if not isinstance(value, dict):
         fail(f"compare must be 'all' or a mapping such as {{xrd: [xrd.a.fcc], eds: false}}, "
              f"not {value!r}")
@@ -602,28 +646,32 @@ def _check_compare(value: Any, fail, methods: dict) -> None:
         if method not in methods:
             fail(f"compare: unknown method {method!r}; known: {', '.join(sorted(methods))}")
         if method not in offering:
-            fail(f"compare: method {method!r} names no quantities to compare; "
+            fail(f"compare: method {method!r} names no quantities or figures to compare; "
                  f"methods that do: {', '.join(offering) or 'none'}")
         if isinstance(wanted, bool) or wanted == "all":
             continue
         if not (isinstance(wanted, list) and all(isinstance(x, str) for x in wanted)):
-            fail(f"compare.{method} must be a list of quantity names (or globs such as "
-                 f"{method}.*), true or false, not {wanted!r}")
-        for name in wanted:
-            if not name.startswith(method + "."):
+            fail(f"compare.{method} must be a list of quantity or figure names (or globs such "
+                 f"as {method}.*), true or false, not {wanted!r}")
+        for name in wanted:     # a method with figures of its own names them freely
+            if not methods[method].get("compare") and not name.startswith(method + "."):
                 fail(f"compare.{method}: {name!r} is not a {method} quantity; its names start "
                      f"with '{method}.' (list them with `labpipe dataset`)")
 
 
-def compare_wanted(setting: Any, method: str, quantity: str) -> bool:
-    """Does the report's `compare` setting ask for this quantity? A method not named in a
-    mapping keeps all its quantities."""
+def compare_wanted(setting: Any, method: str, name: str, covered: bool = False) -> bool:
+    """Does the report's `compare` setting ask for this figure (a method's figure or a quantity)?
+    `all` (also for a method that is only named, or true) is every figure of a method and every
+    quantity a figure of its own does not cover (`covered`); a list asks for what it names, a
+    covered quantity too. A method not named in a mapping keeps all of its figures."""
     if setting == "all":
-        return True
+        return not covered
     wanted = setting.get(method, True)
     if isinstance(wanted, bool):
-        return wanted
-    return wanted == "all" or any(fnmatchcase(quantity, pattern) for pattern in wanted)
+        return wanted and not covered
+    if wanted == "all":
+        return not covered
+    return any(fnmatchcase(name, pattern) for pattern in wanted)
 
 
 def _check_values(settings: dict, where: str, methods: dict) -> None:
@@ -738,11 +786,12 @@ def _how_to_read(settings: dict, records: list[dict], banner: str,
                "the files are."))
     if compare:
         bullets.append(
-            "<b>Compare samples</b>: one figure per quantity, the samples in one column in the "
-            "order of the report, the value along the axis, one point per measurement (several "
-            "measurements of a sample sit side by side; nothing is averaged). Bars are the "
-            "&sigma; the analysis gives; a hollow marker has none. A sample keeps its colour and "
-            "marker in every figure. Not drawn: a quantity that only one sample has.")
+            "<b>Compare samples</b>: the samples in the order of the report, one point, trace or "
+            "bar per measurement (several measurements of a sample sit side by side; nothing is "
+            "averaged). In a dot plot the bars are the &sigma; the analysis gives (none where it "
+            "has none) and a grey diamond is a nominal value. Tick measurements off under a "
+            "figure, or a sample off in the row of sample buttons; nothing is saved. Not drawn: "
+            "a quantity that only one sample has.")
     if "overview" in sections:
         stale = any(r["stale"] for r in records)
         bullets.append(
@@ -856,29 +905,42 @@ def _method_tables(method: str, recs: list[dict], linked: bool) -> tuple[str, se
             f"</h3>{body}</section>"), used
 
 
-def _compare_section(settings: dict, built: dict | None) -> tuple[str, set[str]]:
+def _compare_section(settings: dict, built: dict | None, folder: str = "analysis") -> tuple[str, set[str]]:
     """"Compare samples": the comparison figures (`labpipe.compare`) of the methods this report
-    shows, one block per method that folds, the figures in a grid; then what was not drawn and
-    why. `built` is what `compare.build` returned (an `error` when it could not draw)."""
+    shows, one block per method that folds; above them the sample chips; below, what was not
+    drawn and why. `built` is what `compare.build` returned (an `error` when it could not draw);
+    `folder` is the report's own folder (the links are relative to it)."""
     built = built or {}
 
     def mine(item: dict) -> bool:
-        return (compare_wanted(settings["compare"], item["method"], item["quantity"])
-                and (settings["methods"] == "all" or item["method"] in settings["methods"]))
+        wanted = settings["compare"]
+        if item["name"] == HOOK_ITEM:
+            asked = wanted == "all" or wanted.get(item["method"], True) is not False
+        else:
+            asked = compare_wanted(wanted, item["method"], item["name"], item.get("covered", False))
+        return asked and (settings["methods"] == "all" or item["method"] in settings["methods"])
 
     figures = [f for f in built.get("figures", []) if mine(f)]
-    body = ("<p class=tnote>One figure per quantity: the samples in the order above, one point "
-            "per measurement (nothing averaged), the bars are the &sigma; the analysis gives. "
-            "Drawn by code from <code>results.json</code>, kept in "
-            "<code>analysis/_compare/</code> with their provenance.</p>")
+    body = ("<p class=tnote>The samples in the order above, one point or trace per measurement "
+            "(nothing averaged). Tick measurements off in a figure, or a sample off here; "
+            "nothing is saved. Drawn by code from <code>results.json</code> (or the raw file, "
+            "read only), kept in <code>analysis/_compare/</code> with their provenance.</p>")
     if built.get("error"):
         body += (f'<p class=warnbox>The comparison figures could not be drawn: '
                  f'{html.escape(built["error"])}</p>')
+    present = {s for f in figures for s in f["samples"]}
+    order = [s for s in built.get("sample_order", []) if s in present]
+    if order:
+        body += ('<div class=chips><span class=gl>Samples</span>' + "".join(
+            f'<button type=button aria-pressed=true data-chip="{html.escape(s)}">'
+            f'{html.escape(s)}</button>' for s in order)
+            + '<button type=button data-chips=all>All</button>'
+              '<button type=button data-chips=none>None</button></div>')
     methods: dict[str, list[dict]] = {}
     for figure in figures:
         methods.setdefault(figure["method"], []).append(figure)
     for method, items in methods.items():
-        cells = "".join(_figure(PROJECT_ROOT / f["png"], f["caption"]) for f in items)
+        cells = "".join(_compare_figure(f, folder) for f in items)
         body += (f'<details class="blk cmp" open id="compare-{html.escape(method)}"><summary>'
                  f'<h3>{html.escape(method.upper())} <span class=know>({len(items)} '
                  f'figure{"s" if len(items) != 1 else ""})</span></h3></summary>'
@@ -886,12 +948,30 @@ def _compare_section(settings: dict, built: dict | None) -> tuple[str, set[str]]
     if not figures and not built.get("error"):
         body += ("<p class=know>Nothing to compare yet: a quantity needs measurements of at "
                  "least 2 samples.</p>")
-    left = [f'{html.escape(i["quantity"])} ({html.escape(i["reason"])})'
+    left = [f'{html.escape(i["name"])} ({html.escape(i["reason"])})'
             for i in built.get("skipped", []) + built.get("unmatched", []) if mine(i)]
     if left:
         body += f"<p class=tnote>Not drawn: {'; '.join(left)}.</p>"
     return (f'<section id=compare class=mt><h2 class=sec>Compare samples</h2>{body}</section>',
             set(methods))
+
+
+def _compare_figure(item: dict, folder: str) -> str:
+    """One comparison figure: its interactive `figure.html` (the PNG when that is missing), the
+    caption and the links to its files."""
+    try:
+        shown = (PROJECT_ROOT / item["dir"] / "figure.html").read_text(encoding="utf-8")
+    except OSError:
+        shown = ""
+    if not shown:
+        shown = _embedded(PROJECT_ROOT / item["png"], item["caption"])
+    where = posixpath.relpath(item["dir"], folder)
+    links = [f'<a href="{html.escape(where)}/plot.png">PNG</a>']
+    if "plot.pdf" in item.get("files", []):
+        links.append(f'<a href="{html.escape(where)}/plot.pdf">PDF</a>')
+    links.append(f'<a href="{html.escape(where)}/provenance.json">provenance</a>')
+    return (f'<figure>{shown}<figcaption>{html.escape(item["caption"])}</figcaption>'
+            f'<div class=links>{" · ".join(links)}</div></figure>')
 
 
 def _fold(summary: str, cards: str) -> str:
@@ -954,7 +1034,7 @@ def _render(config: dict, settings: dict, name: str | None, entries: list[dict],
     if with_cards:
         for rec in shown:
             states |= rec["states"]
-    compare_html, compared_methods = (_compare_section(settings, compared)
+    compare_html, compared_methods = (_compare_section(settings, compared, config["analysis_dir"])
                                       if "compare" in settings["sections"] else ("", set()))
     parts = {"postdoc": lambda: _postdoc_section(config, anchors),
              "compare": lambda: compare_html,

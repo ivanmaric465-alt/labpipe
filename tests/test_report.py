@@ -579,7 +579,7 @@ def test_print_style_and_sticky_headers(rich, config):
     _, page = build(rich, config)
     css = page.split("<style>")[1].split("</style>")[0]
     print_css = css.split("@media print{")[-1]
-    assert "nav.top{display:none}" in print_css and "break-after:page" in print_css
+    assert "nav.top,.chips{display:none}" in print_css and "break-after:page" in print_css
     assert "position:sticky" in css and ".tw.st th{position:sticky" in css
     assert "beforeprint" in page and 'class="tw st"' in page
 
