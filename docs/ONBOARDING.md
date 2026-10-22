@@ -46,7 +46,7 @@ Then `labpipe onboarding done first-results`.
 
 ## `tour-report`
 
-The tour is about one minute per part, and each part can be skipped. First: the report. `labpipe report`, point the user to `analysis/report.html` (open it in a browser; it is rebuilt after every pass). Show what is on it (a comparison of the samples, overview tables, one card per measurement) and the layouts: group by sample or method, full or compact cards (`docs/settings/report.md`). `labpipe onboarding done tour-report`.
+The tour is about one minute per part, and each part can be skipped. First: the report. `labpipe report`, point the user to `analysis/report.html` (open it in a browser; it is rebuilt after every pass). Show what is on it ("Compare samples": click measurements and samples off to compare the rest; overview tables; one card per measurement; analyses made in other programs can be included too, `docs/methods/imported.md`) and the layouts: group by sample or method, full or compact cards (`docs/settings/report.md`). `labpipe onboarding done tour-report`.
 
 ## `tour-steering`
 

@@ -4,7 +4,7 @@ sample_order: name           # name (S-2 before S-10) | samples (as in config/sa
                              # (a number under samples.<id>.properties, e.g. property:loading_wt)
 sections: [postdoc, compare, overview, measurements]   # order; leave one out to hide it
 how_to_read: true            # the collapsed "How to read this report" box at the top
-compare: all                 # the comparison figures: all, or {xrd: [xrd.a.fcc, xrd.size.fcc], eds: false}
+compare: all                 # the comparison figures: all, or {xrd: [lattice-fcc, xrd.size.fcc], eds: false}
                              # (names or globs like eds.at.*; false hides a method)
 cards: full                  # full | compact (plot and key numbers only)
 methods: all                 # or [xrd, eds]

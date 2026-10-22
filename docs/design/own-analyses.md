@@ -1,6 +1,6 @@
-# Your own analyses in the report (design, draft)
+# Your own analyses in the report (design, built)
 
-Status: approved 2026-10-22 with the decisions below; being built (branch `own-analyses`).
+Status: built (approved 2026-10-22 with the decisions below).
 
 The request: users have analyses already done elsewhere (an Origin fit exported as PNG and CSV,
 a table from instrument software, a short write-up) and want them in the report next to
