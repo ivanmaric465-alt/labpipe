@@ -146,6 +146,11 @@ td.nd{color:var(--warn);font-style:italic}td.low{color:var(--mut)}td.missing{col
 tr.nominal td{color:var(--mut);font-style:italic;background-color:rgba(128,128,128,.07)}
 tr.sub td:first-child{padding-left:1.4rem}p.tnote{color:var(--mut);font-size:.8rem;margin:.3rem 0 0}
 .card table{font-size:.85rem}.card .tw{margin-top:.2rem}
+.badge{display:inline-block;border:1px solid var(--warn);color:var(--warn);border-radius:99px;
+padding:0 .65rem;font-size:.8rem;font-weight:600;margin:0 0 .5rem}.desc{margin:.2rem 0 .6rem}
+.scr .tw{max-height:24rem;overflow:auto}.scr th{position:sticky;top:0;background:var(--card);z-index:1}
+.card pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.82rem;max-height:18rem;
+overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:.5rem .7rem}
 @media print{nav.top,.chips{display:none}body{background:#fff;color:#000;padding-inline:0}
 .card,.postdoc{break-inside:avoid;break-after:page;border-color:#bbb}
 .tw.st{max-height:none;overflow:visible}.tw.st th{position:static;box-shadow:none}
@@ -417,7 +422,16 @@ def _card(entry: dict, results: dict, summary: dict, notes_text: str | None,
             label = extra.replace("_", " ").capitalize()
             lines += f"<dt>{label}</dt><dd>{html.escape(summary[extra])}</dd>"
     rows = (_spec_table(summary["table"]) if summary.get("table") else "") \
+        + "".join(f"<h4>{html.escape(t['title'])}</h4>" + _spec_table(t)
+                  for t in summary.get("more_tables") or []) \
         + (f"<dl>{lines}</dl>" if lines else "")
+    if summary.get("badge"):          # your own analysis: its table scrolls, its text and files follow
+        rows = f"<div class=scr>{rows}</div>" + "".join(
+            f"<details><summary>{html.escape(t['name'])}</summary><pre>{html.escape(t['text'])}"
+            "</pre></details>" for t in summary.get("texts") or [])
+    badge = (f'<p class=badge>{html.escape(summary["badge"])}</p>'
+             + (f'<p class=desc>{html.escape(summary["description"])}</p>'
+                if summary.get("description") else "")) if summary.get("badge") else ""
     checks = summary.get("check_before_using") or []
     check_html = ("<h3>Check before using</h3><ul class=check>" + "".join(
         f"<li>{html.escape(c['text'])}</li>" for c in checks) + "</ul>") if checks else ""
@@ -442,13 +456,19 @@ def _card(entry: dict, results: dict, summary: dict, notes_text: str | None,
                   f'{_markdown(notes_path.read_text(encoding="utf-8"))}</div></details>'
                   if notes_path.exists() else "")
     compact = (f'<section class=card id="{anchor}"><div>{_carousel(figures[:1]) if figures else ""}'
-               f'</div><div><h2>{html.escape(_title(entry))}</h2>{rows}{check_html}'
+               f'</div><div><h2>{html.escape(_title(entry))}</h2>{badge}{rows}{check_html}'
                f'</div></section>')
+    where = ("Your files: " + ", ".join(html.escape(f) for f in summary["source_files"])
+             if summary.get("badge") else f'Raw file: {html.escape(entry["relative_path"])}')
+    made = ("results.json, provenance.json and copies of your files" if summary.get("badge")
+            else "results.json, plot.pdf, provenance.json")
+    pdfs = "".join(f'<a href="{html.escape("/".join([*entry["output_dir"].split("/")[-3:], name]))}">'
+                   f"{html.escape(label)}</a> " for label, name in summary.get("links") or [])
     return (f'<section class=card id="{anchor}"><div>{image}</div><div>'
-            f'<h2>{html.escape(_title(entry))}</h2>'
-            f'<div class=meta>Raw file: {html.escape(entry["relative_path"])}<br>'
-            f'Outputs (results.json, plot.pdf, provenance.json): '
-            f'<code>{html.escape(entry["output_dir"])}/</code></div>'
+            f'<h2>{html.escape(_title(entry))}</h2>{badge}'
+            f'<div class=meta>{where}<br>'
+            f'Outputs ({made}): '
+            f'<code>{html.escape(entry["output_dir"])}/</code>{(" " + pdfs) if pdfs else ""}</div>'
             f'<h3>In plain words</h3>{plain}<h3>Key results</h3>{rows}'
             f'{check_html}{know_html}{steer_html}{full_notes}</div></section>', compact)
 
