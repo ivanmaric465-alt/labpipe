@@ -258,6 +258,27 @@ def _inside(path: Path, root: Path) -> bool:
     return path == root or root in path.parents
 
 
+def data_overlaps(project: Path | str, data: list[Path | str], code: Path | str | None = None
+                  ) -> list[str]:
+    """Reasons (empty: none) why a data folder and the project (or, given, the code folder) are
+    not apart: equal, one inside the other, either way, on resolved real paths. The container
+    mounts the project writable, so data inside it would be writable too."""
+    reasons = []
+    for label, other in (("project", project), ("code", code)):
+        if other is None:
+            continue
+        folder = _resolved(other)
+        for item in data:
+            path = _resolved(os.path.expanduser(item))
+            if path == folder:
+                reasons.append(f"the data folder {path} is the {label} folder")
+            elif _inside(path, folder):
+                reasons.append(f"the data folder {path} is inside the {label} folder {folder}")
+            elif _inside(folder, path):
+                reasons.append(f"the {label} folder {folder} is inside the data folder {path}")
+    return reasons
+
+
 def assert_not_protected(path: Path | str, config: dict | None = None) -> Path:
     target = _resolved(path)
     for root in protected_roots(config):

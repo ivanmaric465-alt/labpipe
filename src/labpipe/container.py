@@ -263,6 +263,16 @@ def raw_mounts(config: dict) -> list[tuple[str, Path]]:
     return mounts
 
 
+def check_apart(config: dict, project: Path, dev: bool = False) -> None:
+    """Refuse (ContainerError) when a data folder and the project (in dev mode the code folder
+    too) overlap: the project is mounted writable, so data inside it would be too."""
+    folders = [folder for _, folder in raw_mounts(config)]
+    problems = safety.data_overlaps(project, folders, _code() if dev else None)
+    if problems:
+        raise ContainerError("; ".join(problems) + ". Move the project or the data so that "
+                             "neither is inside the other (docs/settings/data.md)")
+
+
 def allowed_hosts(config: dict) -> list[str]:
     hosts = (config.get("container") or {}).get("allowed_hosts") or {}
     harness = (config.get("agents") or {}).get("harness") or "claude-code"
@@ -301,6 +311,7 @@ def run_args(config: dict, engine: str, *, image_id: str = "", engine_text: str 
     dev = False if once else safety.is_dev(_root()) if dev is None else dev
     uid, gid = host_ids()
     mounts = raw_mounts(config)
+    check_apart(config, root, dev)
     args = [engine, "run", "--rm"] if once else [
         engine, "run", "-d", "--name", cfg["name"], "--restart", "unless-stopped"]
     args += [
@@ -582,6 +593,7 @@ def cmd_start(args) -> int:
         ensure_page_token()
         ensure_port()
     config, cfg, engine = _prepare()
+    check_apart(config, _root(), True if args.dev else safety.is_dev(_root()))
     name, tag, current = cfg["name"], image_tag(cfg), container_hash()
     existing = inspect(engine, name)
     if existing and (existing.get("State") or {}).get("Running"):
@@ -739,6 +751,7 @@ def cmd_setup(args) -> int:
     safety.set_local_block("container", {**(local_container_block() or {}), "engine": engine})
     ensure_port()
     config = load_config()
+    check_apart(config, _root(), safety.is_dev(_root()))
     tag = build(engine, config["container"])
     _say({"engine": engine, "image": tag, "next": [
         "labpipe agents sync",

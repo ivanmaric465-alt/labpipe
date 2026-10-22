@@ -68,6 +68,7 @@ Tested on Linux with Codex CLI 0.163. Codex on Windows uses its own native sandb
 `config/local.yaml` is per project and machine and never committed. `labpipe project new` creates it (in the labpipe repository itself: `labpipe init`). The code (defaults, docs, roles, `hooks/guard.py`) lives outside the project; the pipeline writes only to the project's `analysis/`, `logs/` and `manifest.json`.
 
 - **`raw_roots`**: the read-only view. This is the only place labpipe reads raw data from.
+- **Data and project are apart**: a data folder is never the project (or, in dev mode, the code folder) and never inside it or the other way round (resolved real paths, symlinks included), because the container mounts the project writable and the data would be writable through `/project`. `project new` refuses it, `labpipe doctor` reports it as an error and `container start` / `container setup` refuse with the reason.
 - **`protected_paths`**: where the files really live, if that folder is writable (the original behind a read-only view). labpipe refuses to write anywhere inside them. Not needed when the raw root itself cannot be written.
 
 ## Setting up the read-only view (layer 1)

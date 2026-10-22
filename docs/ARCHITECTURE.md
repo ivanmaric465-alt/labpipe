@@ -444,6 +444,7 @@ One container per project.
 - **Run**:
   - the project is mounted read-write at `/project` (the working folder, `LABPIPE_PROJECT`), the
     data folders read-only at `/data/<id>`;
+  - data and project (in dev mode also the code) never overlap, checked on real paths by `safety.data_overlaps` in `project new`, `doctor` and `container.check_apart` (start, setup, every run command line);
   - dev mode (the repository is its own project) and `labpipe container start --dev` also mount
     the code folder at `/opt/labpipe`, so code edits need no rebuild;
   - the container is named `labpipe-<project name>` with the volume `<name>-home` (logins), and

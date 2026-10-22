@@ -26,7 +26,7 @@ from typing import Any
 
 import yaml
 
-from labpipe import __version__, agents, labmethods, migrations
+from labpipe import __version__, agents, labmethods, migrations, safety
 from labpipe.registry import shipped_methods
 from labpipe.provenance import utc_now
 from labpipe.safety import (CODE_ROOT, FIXED_GENERATED, GENERATED_DIR, GENERATED_RECORD, PROJECT_FILE, PROJECT_ROOT, atomic_write_bytes,
@@ -361,9 +361,10 @@ def new(folder: str | Path, data: list[str] | None = None, name: str | None = No
         path = Path(item).expanduser().resolve()
         if not path.is_dir():
             raise ProjectError(f"data folder not found: {path}")
-        if path == project or path in project.parents:
-            raise ProjectError(f"the project folder {project} must not be inside the data "
-                               f"folder {path}: labpipe never writes there")
+        overlap = safety.data_overlaps(project, [path])
+        if overlap:
+            raise ProjectError(f"{overlap[0]}: data and project must be apart (labpipe never "
+                               "writes in the data; the container mounts the project writable)")
         folders.append(path)
     chosen = name or project.name
     templates = CODE_ROOT / "templates" / "project"

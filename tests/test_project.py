@@ -228,7 +228,7 @@ def test_project_new_refuses_nesting_and_missing_data(tmp_path):
         project.new(tmp_path / "other", [str(tmp_path / "nowhere")])
     data = tmp_path / "bigdata"
     data.mkdir()
-    with pytest.raises(project.ProjectError, match="must not be inside the data"):
+    with pytest.raises(project.ProjectError, match="is inside the data folder"):
         project.new(data / "proj", [str(data)])
 
 
@@ -549,3 +549,39 @@ def test_generated_agents_md_says_nothing_yet_for_the_untouched_template(tmp_pat
     text = project._with_additions("AGENTS.md", folder).decode("utf-8")
     assert text.rstrip().endswith("## This lab's additions (lab/LAB.md)\n\n(nothing yet)".rstrip())
     assert "Vulcan" not in text
+
+
+def test_data_and_project_overlap_in_either_direction_equal_or_through_a_symlink(tmp_path):
+    outer, inner = tmp_path / "outer", tmp_path / "outer" / "inner"
+    inner.mkdir(parents=True)
+    link = tmp_path / "link"
+    link.symlink_to(inner)
+    assert safety.data_overlaps(inner, [outer]) and safety.data_overlaps(outer, [inner])
+    assert safety.data_overlaps(inner, [link]) and safety.data_overlaps(link, [inner])
+    [equal] = safety.data_overlaps(inner, [inner])
+    assert "is the project folder" in equal
+    assert safety.data_overlaps(tmp_path / "a", [inner], code=outer)[0].startswith("the data folder")
+    assert not safety.data_overlaps(tmp_path / "a", [inner], code=tmp_path / "b")
+
+
+def test_project_new_refuses_data_inside_the_project_and_through_a_symlink(tmp_path):
+    made = Path(_new(tmp_path)["project"])
+    (made / "raw").mkdir()
+    with pytest.raises(project.ProjectError, match="inside the project folder"):
+        project.new(made, [str(made / "raw")])
+    with pytest.raises(project.ProjectError, match="is the project folder"):
+        project.new(made, [str(made)])
+    link = tmp_path / "ln"
+    link.symlink_to(made / "raw")
+    with pytest.raises(project.ProjectError, match="inside the project folder"):
+        project.new(made, [str(link)])
+
+
+def test_doctor_reports_data_inside_the_project_as_an_error(tmp_path, monkeypatch):
+    made = _in_project(monkeypatch, Path(_new(tmp_path)["project"]))
+    (made / "raw").mkdir()
+    config = {"raw_roots": [{"id": "r", "path": str(made / "raw")}]}
+    [item] = doctor._data_apart(config)
+    assert item["status"] == "todo" and "inside the project folder" in item["message"]
+    assert "neither is inside the other" in item["next"]
+    assert doctor._data_apart({"raw_roots": [{"id": "r", "path": str(tmp_path / "data")}]}) == []
