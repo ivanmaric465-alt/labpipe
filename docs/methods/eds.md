@@ -53,6 +53,10 @@ Status: APPROVED 2026-10-17 with changes (below). Implemented.
 ## Tables in the report
 - The overview has two tables, one row per measurement and one column per element (metals by atomic number, then non-metals): metals in at% (metal basis) and all elements in wt% as recorded, with a faint bar in each cell. **n.d.** = reported negative (taken as 0; hover for the recorded value), a **grey** number = near the detection limit, **–** = element not in that measurement, a grey **nominal** row under a measurement = the sample's nominal composition. The card shows the same per element, with measured − nominal. Layout only: `table` and `overview_tables` in `summary.py`; the numbers are `composition`, `metal_basis` and `nominal_comparison` in `results.json`.
 
+## Comparison figures
+- **Composition** (`analysis/_compare/eds/composition/`, report section "Compare samples"): one 100 % bar per measurement, the metals (at%, metal basis) in atomic-number order, one fixed colour per element in every figure; a sample with a nominal composition has a thinner grey bar under it. It replaces the per-element dot plots `eds.at.*`; name them in `report.compare` to get them (with a grey nominal mark). Code: `compare.py`; the values are `metal_basis` and `nominal_comparison` in `results.json`.
+- **Reading the plot**: each row is one measurement (S-1, S-2, ...; two measurements of one sample are two rows). The width of a colour is that metal's share of the metals; a value is printed in a segment of 8 % or more. Compare rows by the order of the colours, not by one colour alone. A metal recorded negative (`n.d.`) has no segment (it is 0). Look again when a sample's bar differs from its nominal bar by more than the checks allow for, or when one metal fills almost the whole bar (often the support, e.g. Ti, not the catalyst). There are no error bars: the export has no uncertainties.
+
 ## Settings (`config/eds.yaml`)
 
 | User says | Setting |

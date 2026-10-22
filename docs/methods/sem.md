@@ -46,6 +46,10 @@ Status: APPROVED 2026-10-17 (gallery picks across both series). Implemented.
 - **In the report** a sample shows a gallery instead of one card per image: the images closest to the magnifications in `gallery.magnifications` (default ×10k, ×50k, ×100k), small versions, one at a time with arrows, each captioned with magnification, kV, WD and the measurement. All images of the sample stay in `analysis/`. `gallery.include` and `gallery.exclude` change the choice.
 - **Plot settings**: `plot.width_in`, `plot.scale_bar` (see `docs/settings/plots.md`). The figure is for looking at; it is not a measurement of particle size.
 
+## Comparison figures
+- **Gallery** (`analysis/_compare/sem/gallery/`, report section "Compare samples"): a grid, one row per sample, one column per `gallery.magnifications`; each cell is the image the per-sample gallery chooses for that magnification (`gallery.exclude` applies), as its `thumb.jpg`, labelled with the magnification as recorded and the measurement. Code: `compare.py`, the choice is `gallery.select`.
+- **Reading the plot**: compare S-1, S-2, ... down a column to see the same magnification side by side. The label under an image gives its real magnification: when a sample has no image near a column's magnification, the closest one is shown there and may repeat in two columns, so read the label, not the column heading. A cell with – has no image. Only the picture is shown; use each image's own scale bar for sizes.
+
 ## Settings (`config/sem.yaml`)
 
 | User says | Setting |

@@ -14,6 +14,7 @@ import yaml
 
 pytest.importorskip("matplotlib")
 
+from labpipe import registry  # noqa: E402
 from labpipe import automation, cli, compare, dataset, manifest, postdoc, replay, report, safety  # noqa: E402
 from labpipe import settings as settings_mod  # noqa: E402
 from labpipe import versions  # noqa: E402
@@ -60,6 +61,15 @@ def project(tmp_path, monkeypatch):
     monkeypatch.setattr(settings_mod, "CONFIG", config)
     monkeypatch.setattr(settings_mod, "DEFAULTS", config)
     monkeypatch.setattr(report, "verify_entry", lambda config, eid: {"ok": True})
+    # these tests are about the framework: the methods' own figures (eds, sem) are tested in
+    # tests/test_compare_eds_sem.py and a fake hook is set by the `hook` fixture
+    real = registry.load_methods
+
+    def without_hooks():
+        return {name: {k: v for k, v in spec.items() if k != "compare"}
+                for name, spec in real().items()}
+    for mod in (registry, compare, report, dataset, versions):
+        monkeypatch.setattr(mod, "load_methods", without_hooks)
     entries: dict = {}
     # xrd: S-2 measured twice, S-3 without σ; only S-1 has a size
     _put(tmp_path, entries, "xrd", "S-10", "S-10_a", _xrd(3.92))

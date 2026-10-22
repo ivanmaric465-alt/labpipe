@@ -36,6 +36,7 @@ methods:
     notes: false
     report: gallery                            # per-sample gallery instead of one card per image
     gallery: labpipe.methods.sem.gallery
+    compare: labpipe.methods.sem.compare      # the grid of images by gallery magnification
     cli: "labpipe sem analyze --entry {entry_id}"
     module: labpipe.methods.sem.analyze
     config: config/sem.yaml
@@ -50,5 +51,6 @@ methods:
     cli: "labpipe eds analyze --entry {entry_id}"
     module: labpipe.methods.eds.analyze
     summary: labpipe.methods.eds.summary
+    compare: labpipe.methods.eds.compare      # the composition bars
     config: config/eds.yaml
     outputs: [results.json, plot.png, plot.pdf, provenance.json, notes.md]

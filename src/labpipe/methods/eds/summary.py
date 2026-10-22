@@ -67,14 +67,17 @@ def summarize(results: dict[str, Any]) -> dict[str, Any]:
 def quantities(results: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Named numbers for comparing samples (`labpipe dataset`); copied from results.json.
 
-    - `eds.at.<element>`: metal-basis composition (no σ in the results).
+    - `eds.at.<element>`: metal-basis composition (no σ in the results; `nominal` when the
+      sample has a nominal composition, drawn as a grey mark when the dot plot is asked for).
     - `eds.at_minus_nominal.<element>`: measured − nominal, when the sample has a nominal.
     """
     units = results.get("units") or {}
     out: dict[str, dict[str, Any]] = {}
+    nominal = _nominal(results)
     for element, value in results["metal_basis"]["at_percent"].items():
         out[f"eds.at.{element}"] = {
             "value": value, "sigma": None,
+            **({"nominal": nominal[element]} if nominal.get(element) is not None else {}),
             "unit": units.get("metal_basis.at_percent", "at%"),
             "key": f"metal_basis.at_percent.{element}",
             "label": f"{element} (at%, metal basis)"}
