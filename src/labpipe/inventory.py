@@ -17,7 +17,7 @@ import yaml
 
 from labpipe import manifest as mf
 from labpipe import migrations
-from labpipe.naming import DEFAULT_SEPARATORS, derive_sample_id
+from labpipe.scanner import sample_id_for
 from labpipe.registry import classify, load_methods, skip_reason, user_ignore
 from labpipe.safety import PROJECT_ROOT
 
@@ -78,10 +78,7 @@ def inventory(config: dict, examples: int = 3) -> dict[str, Any]:
                 if kind == "analyse":
                     if len(method_examples[method]) < examples:
                         method_examples[method].append(relative)
-                    _, _, problem = derive_sample_id(relative, pattern=config["sample_id"]["pattern"],
-                                                     separators=config["sample_id"].get(
-                                                         "separators", DEFAULT_SEPARATORS),
-                                                     overrides=overrides)
+                    _, _, problem = sample_id_for(relative, methods[method], config, overrides)
                     if problem:
                         unclear.append(relative)
         roots.append({**out, "available": True,
@@ -115,7 +112,8 @@ def describe(result: dict[str, Any]) -> str:
         else:
             lines.append("  Recognised: nothing")
         if root["not_recognised"]:
-            lines.append("  Not recognised (no method reads these):")
+            lines.append("  Not recognised (no method reads these; your own analyses, figures and "
+                         "tables: `labpipe methods import`):")
             for ext, info in list(root["not_recognised"].items())[:12]:
                 lines.append(f"    {ext}: {info['files']}   e.g. {', '.join(info['examples'][:2])}")
         if root.get("left_out"):

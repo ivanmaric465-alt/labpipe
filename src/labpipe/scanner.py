@@ -16,6 +16,11 @@
 * needs_review: back to pending once a human override resolves it;
 * files modified within settle_minutes are skipped (a sync client or the instrument PC may still be writing);
 * entries whose file disappeared: status missing (outputs are kept);
+* an imported kind (your own analyses, `kind: imported`): the files of one stem in one folder
+  are one measurement. The primary file (table, then image, then text, then PDF) is the entry;
+  the others are recorded as duplicate ("part of the measurement"), and when one of them is new
+  or changed its primary is analysed again. The sample ID comes from the file name, or with
+  `sample_from: folder` from the name of its folder;
 * a file byte-identical to another file of the same method (e.g. "X - Copy.htm")
   is recorded as duplicate of the one with the shortest path, not analysed;
 * baseline=True (setup, "only new files from now on"): files seen for the first
@@ -132,6 +137,22 @@ def _changed_since_failure(entry: dict[str, Any], versions: dict[str, Any],
     return then != versions["analysis_version"]
 
 
+def sample_id_for(relative: str, spec: dict[str, Any], config: dict, overrides: dict[str, str]):
+    """(sample, source, problem): the file name rule, or for `sample_from: folder` (imported
+    kinds) the same rule on the name of the file's folder; an override of the file wins."""
+    pattern, separators = config["sample_id"]["pattern"], config["sample_id"].get(
+        "separators", DEFAULT_SEPARATORS)
+    folder = PurePosixPath(relative).parent.name
+    if spec.get("sample_from") != "folder" or relative in overrides:
+        return derive_sample_id(relative, pattern=pattern, separators=separators,
+                                overrides=overrides)
+    if not folder:
+        return None, "folder name rule", "the file is not in a folder: no sample ID"
+    sample, _, problem = derive_sample_id(f"{folder}.folder", pattern=pattern,
+                                          separators=separators, overrides={})
+    return sample, "folder name rule", problem and problem.replace(".folder", "")
+
+
 def _walk(root: Path):
     for directory, subdirectories, files in os.walk(root, followlinks=False):
         subdirectories.sort()
@@ -145,8 +166,6 @@ def _walk(root: Path):
 def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
     methods = load_methods()
     overrides = _overrides(config)
-    pattern = config["sample_id"]["pattern"]
-    separators = config["sample_id"].get("separators", DEFAULT_SEPARATORS)
     settle_seconds = 60 * config["settle_minutes"]
     max_attempts = config["max_attempts_per_hash"]
     current_code = code_version()
@@ -157,6 +176,7 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
 
     ignored = user_ignore()
     new_unrecognised: list[str] = []
+    touched: set[str] = set()       # primaries of imported measurements with a new or changed part
     with mf.locked(config) as data:
         entries = data["entries"]
         unrecognised = data.setdefault("unrecognised", {})
@@ -173,13 +193,24 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                 path = PurePosixPath(relative)
                 stems.setdefault((str(path.parent), path.stem.lower()), set()).add(
                     path.suffix.lower())
+            claims = None       # imported kinds: what each file belongs to, and its measurement
+            if any(spec.get("kind") == "imported" for spec in methods.values()):
+                claims = {relative: classify(relative, methods, root=root_path)
+                          for _, relative in files}
+                parts: dict[tuple[str, str, str], dict[str, str]] = {}   # -> {extension: path}
+                for relative, (method, kind) in claims.items():
+                    if method and kind == "analyse" and methods[method].get("kind") == "imported":
+                        path = PurePosixPath(relative)
+                        parts.setdefault((method, str(path.parent), path.stem.lower()),
+                                         {})[path.suffix.lower()] = relative
 
             for full, relative in files:
                 skip = skip_reason(relative, config, ignored)
                 if skip == "system file":
                     counts["system_file"] += 1
                     continue
-                method, kind = classify(relative, methods, root=root_path)
+                method, kind = claims[relative] if claims else classify(
+                    relative, methods, root=root_path)
                 if method is None and skip:
                     counts["ignored_by_you"] += 1
                     continue
@@ -226,14 +257,22 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                     "subagent": spec.get("subagent")})
 
                 path = PurePosixPath(relative)
-                sample, source, problem = derive_sample_id(relative, pattern=pattern,
-                                                           separators=separators,
-                                                           overrides=overrides)
+                sample, source, problem = sample_id_for(relative, spec, config, overrides)
+                mid = measurement_id(relative)
+                if spec.get("sample_from") == "folder" and sample and not mid.startswith(sample):
+                    mid = f"{sample}_{mid}"
                 entry.update({"sample_id": sample, "sample_id_source": source,
-                              "measurement_id": measurement_id(relative)})
-                primary_sibling = (path.suffix.lower() in spec.get("duplicate_of_primary", [])
-                                   and spec.get("primary_extension") in stems.get(
-                                       (str(path.parent), path.stem.lower()), set()))
+                              "measurement_id": mid})
+                primary = None      # the file this one is only another form or part of
+                if path.suffix.lower() in spec.get("duplicate_of_primary", []) and spec.get(
+                        "primary_extension") in stems.get((str(path.parent), path.stem.lower()),
+                                                          set()):
+                    primary = path.with_suffix(spec["primary_extension"]).as_posix()
+                elif spec.get("kind") == "imported" and kind == "analyse":
+                    from labpipe.methods.imported.analyze import primary_of
+                    group = parts[(method, str(path.parent), path.stem.lower())]
+                    if path.suffix.lower() != primary_of(group):
+                        primary = group[primary_of(group)]
 
                 if previous_hash is not None and previous_hash != digest:
                     entry["history"].append({
@@ -246,11 +285,13 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                 old_status = entry.get("status")
                 if kind == "ignore":
                     mf.set_status(entry, "ignored", skip or "matches an ignore pattern in methods.yaml")
-                elif primary_sibling:
-                    primary = path.with_suffix(spec["primary_extension"]).as_posix()
+                elif primary:
                     entry["duplicate_of"] = entry_id(method, root["id"], primary)
-                    mf.set_status(entry, "duplicate",
-                                  f"same measurement as {primary} (primary format)")
+                    mf.set_status(entry, "duplicate", f"same measurement as {primary}" + (
+                        " (primary format)" if spec.get("primary_extension") else
+                        " (its main file)"))
+                    if spec.get("kind") == "imported" and (is_new or previous_hash != digest):
+                        touched.add(entry["duplicate_of"])
                 elif baseline and is_new:
                     mf.set_status(entry, "baseline", "already in the data folder when labpipe "
                                   "was set up; not analysed (labpipe requeue --baseline)")
@@ -297,6 +338,15 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                                     "reason": entry.get("status_reason")})
                 counts[entry["status"]] += 1
 
+        for eid in touched:
+            primary = entries.get(eid)
+            if primary and primary.get("status") in ("done", "stale"):
+                old = primary["status"]
+                mf.set_status(primary, "pending", "a file of this measurement is new or changed")
+                changes.append({"entry_id": eid, "relative_path": primary["relative_path"],
+                                "from": old, "to": "pending", "reason": primary["status_reason"]})
+                counts[old] -= 1
+                counts["pending"] += 1
         _content_duplicates(entries, changes, counts)
         for key in [k for k in unrecognised if k not in seen_unrecognised]:
             del unrecognised[key]       # gone, now recognised, or ignored
