@@ -9,6 +9,7 @@
   labpipe inventory                         what labpipe recognises in the data folder(s)
   labpipe methods new NAME --example F --description D   scaffold a new analysis method
   labpipe methods check NAME --example F    run a method on an example and verify its contract
+  labpipe methods import NAME --folder F --files "*.png,*.csv" --description D   take your own analyses (made outside labpipe) into the report
   labpipe methods versions                  analysis and plot version of every method
   labpipe scan [--baseline]                 update manifest.json from the raw roots
   labpipe pending [--json]                  entries waiting for analysis (+ subagent)
@@ -141,6 +142,15 @@ def cmd_methods(args, config) -> int:
         if args.action == "new":
             _print(methods_kit.new(args.name, Path(args.example), args.description,
                                    analyst=not args.no_analyst))
+            return 0
+        if args.action == "import":
+            try:
+                roots = load_pipeline_config().get("raw_roots")
+            except SetupError:
+                roots = None        # no project or no data folder yet: the command says which
+            _print(methods_kit.import_analysis(
+                args.name, args.folder, args.files, args.description,
+                sample_from=args.sample_from, analyst=not args.no_analyst, raw_roots=roots))
             return 0
         result = methods_kit.check(args.name, Path(args.example), config)
     except methods_kit.MethodKitError as exc:
@@ -657,6 +667,21 @@ def build_parser() -> argparse.ArgumentParser:
     method_new.add_argument("--no-analyst", action="store_true",
                             help="analysed by code alone: no analyst agent, no notes")
     method_new.set_defaults(func=cmd_methods, needs_config=False)
+    method_import = methods_parser.add_parser(
+        "import", help="take your own analyses (figure, table, text made outside labpipe) "
+        "into the report")
+    method_import.add_argument("name")
+    method_import.add_argument("--folder", required=True,
+                               help="their folder in your data folder, e.g. Raman/fits")
+    method_import.add_argument("--files", required=True,
+                               help='file names, comma-separated, e.g. "*.png,*.csv,*.md"')
+    method_import.add_argument("--description", required=True)
+    method_import.add_argument("--sample-from", choices=["file", "folder"], default="file",
+                               help="where the sample ID is: the start of the file name "
+                               "(default) or the name of the folder")
+    method_import.add_argument("--no-analyst", action="store_true",
+                               help="no analyst agent, no notes: only the files in the report")
+    method_import.set_defaults(func=cmd_methods, needs_config=False)
     method_check = methods_parser.add_parser("check", help="run a method on an example file "
                                              "and verify its contract")
     method_check.add_argument("name")

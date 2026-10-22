@@ -10,6 +10,11 @@
     docs/methods/NAME.md (design note, if missing) and a methods.yaml entry
   (patterns from the example's extension).
 
+`import NAME --folder F --files "*.png,*.csv" --description D` takes your own analyses (made
+outside labpipe) into the report, in a project only: it writes lab/methods/NAME/README.md (the
+description form) and config.yaml, lab/agents/NAME-analyst.md and an entry `kind: imported` in
+lab/methods.yaml, never overwriting; no Python (labpipe.methods.imported does the work).
+
 `check NAME --example FILE` runs the method on the example (outputs under
 logs/method-check/, the example is only read) and verifies the contract that
 the pipeline, replay and the agents rely on: registry entry, recognition,
@@ -157,6 +162,90 @@ def new(name: str, example: Path, description: str, analyst: bool = True) -> dic
                      "labpipe project sync; labpipe scan" if lab else "labpipe agents sync; labpipe scan"]}
 
 
+def _folder(folder: str) -> str:
+    cleaned = folder.replace("\\", "/").strip().strip("/")
+    if not cleaned or cleaned == "." or ".." in cleaned.split("/") or ":" in cleaned.split("/")[0]:
+        raise MethodKitError(f"--folder is a folder of your data folder, e.g. \"Raman/fits\" "
+                             f"(not {folder!r}): the files in it and below are the ones taken in")
+    return cleaned
+
+
+def _globs(files: str) -> list[str]:
+    globs = [g.strip() for g in files.split(",") if g.strip()]
+    if not globs or any("/" in g or "\\" in g or ".." in g for g in globs):
+        raise MethodKitError(f"--files is a comma-separated list of file names with * in them, "
+                             f"e.g. \"*.png,*.csv,*.md\" (no folders), not {files!r}")
+    return globs
+
+
+def import_analysis(name: str, folder: str, files: str, description: str, *,
+                    sample_from: str = "file", analyst: bool = True,
+                    raw_roots: list[dict] | None = None) -> dict[str, Any]:
+    """Take your own analyses into the project (docs/methods/imported.md): the entry, the
+    description page, the settings file and the analyst's role. Never overwrites."""
+    if not NAME.match(name) or name in ("template", "methods") or name in labmethods.RESERVED:
+        raise MethodKitError(f"the name must be lower-case letters/digits/_ "
+                             f"(e.g. raman_fits), not {name!r}")
+    if safety.NO_PROJECT:
+        raise MethodKitError(safety.NO_PROJECT_MESSAGE)
+    if is_dev(PROJECT_ROOT):
+        raise MethodKitError("importing your own analyses is a project thing: run it in a "
+                             "project (`labpipe project new`), not in the labpipe repository")
+    if sample_from not in labmethods.SAMPLE_FROM:
+        raise MethodKitError("--sample-from is 'file' (the sample ID is in the file name) or "
+                             "'folder' (it is the name of the folder)")
+    if name in load_methods():
+        raise MethodKitError(f"{name} is already in methods.yaml or lab/methods.yaml")
+    folder, globs = _folder(folder), _globs(files)
+    template = lambda file: (TEMPLATE / file).read_text(encoding="utf-8")  # noqa: E731
+    fill = lambda text: (_fill(text, name, description, "").replace(  # noqa: E731
+        "{{folder}}", folder).replace("{{files}}", ", ".join(f"`{g}`" for g in globs)).replace(
+        "{{sample_from}}", "the folder's name" if sample_from == "folder" else
+        "the start of the file name"))
+    folder_dir = PROJECT_ROOT / "lab" / "methods" / name
+    agent = f"{name}-analyst"
+    targets = {folder_dir / "README.md": fill(template("imported-readme.md")),
+               folder_dir / "config.yaml": fill(template("imported-config.yaml"))}
+    if analyst:
+        targets[PROJECT_ROOT / "lab" / "agents" / f"{agent}.md"] = fill(
+            template("imported-analyst.md"))
+    existing = [p.relative_to(PROJECT_ROOT).as_posix() for p in targets if p.exists()]
+    if existing:
+        raise MethodKitError(f"would overwrite {existing}; nothing created")
+    for path, text in targets.items():
+        atomic_write_text(path, text, pipeline=False)
+    registry = PROJECT_ROOT / "lab" / "methods.yaml"
+    entry = (f"\n  {name}:\n    kind: imported\n"
+             f"    description: {json.dumps(description, ensure_ascii=False)}\n"
+             f"    patterns: {json.dumps([f'{folder}/**/{g}' for g in globs], ensure_ascii=False)}\n"
+             f"    sample_from: {sample_from}"
+             + ("            # folder: the sample ID is the name of the folder of the file"
+                if sample_from == "folder" else "") + "\n"
+             + ("" if analyst else "    subagent: null                     # no analyst agent\n"
+                "    notes: false                       # only the files in the report\n"))
+    if registry.exists():
+        text = registry.read_text(encoding="utf-8").rstrip() + "\n"
+        if "methods:" not in text:
+            text += "\nmethods:\n"
+    else:
+        text = ("# The lab's own methods (docs/ADDING_A_METHOD.md). Same entries as labpipe's "
+                "methods.yaml;\n# modules are labpipe_lab.<name>, the package lab/methods/<name>/; "
+                "`kind: imported` entries\n# are your own analyses made outside labpipe "
+                "(docs/methods/imported.md).\nschema: labpipe.methods/1\n\nmethods:\n")
+    atomic_write_text(registry, text + entry, pipeline=False)
+    page = f"lab/methods/{name}/README.md"
+    missing = [] if not raw_roots else ([] if any((Path(r["path"]) / folder).is_dir()
+                                                  for r in raw_roots) else [
+        f"no folder {folder!r} in your data folder(s) yet (patterns match when it exists)"])
+    return {"created": [p.relative_to(PROJECT_ROOT).as_posix() for p in targets]
+            + ["lab/methods.yaml (entry)"], "patterns": [f"{folder}/**/{g}" for g in globs],
+            **({"warnings": missing} if missing else {}),
+            "next": [f"fill in the description in {page} (the first paragraph is shown in the "
+                     "report; your agent can write it from what you tell it)",
+                     "labpipe project sync   (so the agents see the new role)",
+                     "labpipe scan", "labpipe analyze --pending"]}
+
+
 def reading_the_plot_missing(page: Path) -> str | None:
     """Why the method page has no filled-in "Reading the plot" section (None when it has one):
     the section is absent, or has no bullet with text (the template's HTML comment and an
@@ -178,10 +267,10 @@ def _check(results: list, name: str, ok: bool, detail: str = "") -> bool:
 
 
 def _run(module, example: Path, out: Path, pipeline: bool, settings=None,
-         sources=None) -> dict[str, Any]:
+         sources=None, method: str | None = None) -> dict[str, Any]:
     return module.run(example, out, settings=settings, settings_sources=sources, context={
         "sample_id": None, "measurement_id": measurement_id(example.name),
-        "relative_path": example.name}, pipeline=pipeline)
+        "relative_path": example.name, "method": method}, pipeline=pipeline)
 
 
 def check(name: str, example: Path, config: dict | None = None,
@@ -191,6 +280,9 @@ def check(name: str, example: Path, config: dict | None = None,
     spec = load_methods().get(name)
     if not _check(results, "registry entry", spec is not None, "methods.yaml → methods." + name):
         return {"method": name, "ok": False, "checks": results}
+    if spec.get("kind") == "imported":
+        raise MethodKitError(f"{name} is an imported analysis (made outside labpipe): there is "
+                             "no method code to check; `labpipe replay` checks its files")
     for key in ("patterns", "module", "config"):
         _check(results, f"registry: {key}", spec.get(key), str(spec.get(key)))
     lab = bool(spec.get("lab"))
@@ -229,7 +321,7 @@ def check(name: str, example: Path, config: dict | None = None,
     work = (PROJECT_ROOT / config["logs_dir"] / "method-check"
             / f"{name}-{utc_now().replace(':', '')}") if pipeline else Path(work_dir)
     try:
-        first = _run(module, example, work / "run1", pipeline)
+        first = _run(module, example, work / "run1", pipeline, method=name)
     except Exception as exc:
         _check(results, "run on the example", False, f"{type(exc).__name__}: {exc}")
         return {"method": name, "ok": False, "checks": results, "work_dir": str(work)}
@@ -272,7 +364,7 @@ def check(name: str, example: Path, config: dict | None = None,
 
     second = _run(module, example, work / "run2", pipeline,
                   settings=record["parameters"]["resolved"],
-                  sources=record["parameters"].get("sources"))
+                  sources=record["parameters"].get("sources"), method=name)
     differ = [n for n in ("results.json", "plot.png", "plot.pdf")
               if sha256_file(work / "run2" / n) != sha256_file(out / n)]
     _check(results, "deterministic and regenerable from provenance", not differ,
