@@ -1,6 +1,6 @@
 # Report: readable tables and sample comparison (design, draft)
 
-Status: approved 2026-10-20; built step by step (Order of work); steps 1 (tables, sample order, the look) and 2 (the comparison framework, dot plots, the section, settings) are built; step 3 revised 2026-10-22 (below: "Step 3, revised"); its framework (figure kinds, method hooks, interactive section, thicker scroll bar) is built, the method hooks (EDS, XRD, SEM) follow. Built alongside it: the agents'
+Status: built (steps 1-4: tables, sample order and the look; the comparison framework and section; the method figures as revised 2026-10-22 below; step 4: docs and a rendered check in a headless browser). Built alongside it: the agents'
 writing rules (`docs/WRITING.md`) and the EDS change for negative values.
 
 ## What is wrong today (a report of 13 samples: EDS, XRD, SEM)
@@ -20,8 +20,8 @@ From "Ten simple rules for better figures" (Rougier et al., PLOS Comput Biol 201
 
 - the same quantity of several samples on **shared axes** (small multiples), never a separate
   figure per sample to flip through;
-- **one colour and marker per sample**, the same in every comparison figure and table; colour is
-  never the only cue (labels next to the marks);
+- ~~one colour and marker per sample~~ (dropped, see "Step 3, revised": dot plots are one dark colour);
+  colour is never the only cue (labels next to the marks);
 - every value **with its uncertainty and its kind** (σ from the fit; "no σ" said, not hidden);
   every point shown, several measurements of one sample as several points (nothing averaged in
   the report);

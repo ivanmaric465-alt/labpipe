@@ -26,6 +26,11 @@ Status: DRAFT, not yet agreed with the user. No code beyond the scaffold until i
 <!-- Fill in before the method is used: 3 to 5 bullets for someone seeing the figure for the first time: the axes and their units, what each line, marker, colour, panel and label is, what a good figure looks like and what means "look again", where the numbers come from (results.json), and which `plot:` settings change it. Be true to the plot code. `labpipe methods check` warns while this section is missing or still this comment. -->
 -
 
+## Comparison figures (optional)
+- Figures across samples in the report's "Compare samples", beyond the generic dot plot per named quantity: a `compare` module (`docs/ADDING_A_METHOD.md`; kinds `dots`, `lines`, `bars`, `images`), or "none":
+- Reading the plot (for those figures, in the same style: 2 to 3 bullets: what a row, point, bar or trace is, what is not comparable, what means "look again"; remove with the section if there are none):
+  -
+
 ## Settings (what the user can change)
 | User says | Setting |
 |---|---|
