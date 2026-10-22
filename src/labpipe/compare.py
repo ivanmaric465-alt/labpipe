@@ -22,7 +22,7 @@ each method's compare module; no analysis or plot version of a method includes t
 of every output. `labpipe replay` redraws all outputs from that record alone. A figure is
 redrawn only when its recorded inputs (spec, style, compare_version) differ from the current
 ones; the old one is moved to analysis/_compare/_superseded/<stamp>/ (nothing is deleted), and so
-is the folder of a figure that no longer exists. A hook that fails, or a figure that cannot be
+is the folder of a figure no report asks for any more. A hook that fails, or a figure that cannot be
 drawn, is recorded as skipped with its reason and the run goes on. matplotlib is imported only
 when something is drawn.
 """
@@ -343,7 +343,7 @@ def build(config: dict, *, method: str | None = None) -> dict[str, Any]:
                            "sample_order": list(ds["samples"]),
                            "figures": [], "skipped": [], "unmatched": [], "moved_aside": []}
     available: dict[str, set[str]] = {}     # per method: every name a setting may name
-    alive: set[tuple[str, str]] = set()     # figure folders that still have a reason to exist
+    alive: set[tuple[str, str]] = set()     # figure folders the reports still ask for
     uncertain: set[str] = set()             # methods whose hook failed: their folders stay
 
     def skip(m: str, name: str, reason: str, covered: bool = False) -> None:
@@ -398,7 +398,6 @@ def build(config: dict, *, method: str | None = None) -> dict[str, Any]:
                 planned.append(({**spec, "plot": plot}, covered))
         for spec, covered in planned:
             if not _wanted_by(using, m, spec["name"], covered):
-                alive.add((m, folder_name(spec["name"])))
                 continue
             try:
                 out["figures"].append(_figure(config, base, stamp, spec, covered, version,
@@ -406,8 +405,6 @@ def build(config: dict, *, method: str | None = None) -> dict[str, Any]:
             except Exception as exc:        # one figure that cannot be drawn does not stop the rest
                 skip(m, spec["name"], f"could not be drawn: {type(exc).__name__}: {exc}", covered)
             alive.add((m, folder_name(spec["name"])))
-        alive |= {(m, folder_name(q)) for (mm, q), pts in found.items()
-                  if mm == m and len({p["sample"] for p in pts}) >= MIN_SAMPLES}
 
     # settings that name something no measurement and no figure offers
     for m in (m for m in methods if method in (None, m) and m not in uncertain):
@@ -420,7 +417,7 @@ def build(config: dict, *, method: str | None = None) -> dict[str, Any]:
                     out["unmatched"].append({"method": m, "name": name,
                                              "reason": "no measurement offers it"})
 
-    # figures that no longer exist (or no longer have 2 samples)
+    # figures no report asks for any more (settings, COVERS), or that no longer have 2 samples
     if base.exists():
         for method_dir in sorted(p for p in base.iterdir() if p.is_dir() and p.name[0] not in "._"):
             if method not in (None, method_dir.name) or method_dir.name in uncertain:
@@ -432,8 +429,8 @@ def build(config: dict, *, method: str | None = None) -> dict[str, Any]:
                 _move(figure_dir, target, config)
                 out["moved_aside"].append({
                     "method": method_dir.name, "name": figure_dir.name,
-                    "reason": "no longer offered (no measurements of 2 or more samples, or no "
-                              "such figure)",
+                    "reason": "no report asks for it any more, or it no longer has "
+                              "measurements of 2 or more samples",
                     "to": target.relative_to(PROJECT_ROOT).as_posix()})
     return out
 
