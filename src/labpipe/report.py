@@ -813,8 +813,10 @@ def _how_to_read(settings: dict, records: list[dict], banner: str,
             "bar per measurement (several measurements of a sample sit side by side; nothing is "
             "averaged). In a dot plot the bars are the &sigma; the analysis gives (none where it "
             "has none) and a grey diamond is a nominal value. Tick measurements off under a "
-            "figure, or a sample off in the row of sample buttons; nothing is saved. Not drawn: "
-            "a quantity that only one sample has.")
+            "figure, or a sample off in the row of sample buttons; nothing is saved. Patterns can "
+            "be stacked, overlaid or normalised to their maximum; a long list of measurements "
+            "folds. Not drawn: a quantity only one sample has, or a figure that failed (the "
+            "reason is under the figures).")
     if "overview" in sections:
         stale = any(r["stale"] for r in records)
         bullets.append(
