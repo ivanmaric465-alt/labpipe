@@ -50,8 +50,17 @@ def _eds(pt):
     return test_report.eds_results(at, at, non_metals=())
 
 
+def without_own_figures(methods):
+    """The real registry minus the methods' own comparison figures: these tests are about the
+    generic dot plots (the XRD figures are tested in test_xrd_compare.py)."""
+    return {name: {k: v for k, v in spec.items() if k != "compare"} for name, spec in methods.items()}
+
+
 @pytest.fixture
 def project(tmp_path, monkeypatch):
+    from labpipe import registry, versions as versions_mod
+    for module in (compare, report, dataset, versions_mod):
+        monkeypatch.setattr(module, "load_methods", lambda: without_own_figures(registry.load_methods()))
     for module in (safety, manifest, postdoc, report, automation, dataset, compare, settings_mod):
         monkeypatch.setattr(module, "PROJECT_ROOT", tmp_path)
     config = tmp_path / "config"
@@ -514,7 +523,7 @@ def hook(project, monkeypatch):
     real = registry.load_methods
 
     def patched():
-        methods = real()
+        methods = without_own_figures(real())
         methods["eds"] = methods["eds"] | {"compare": "fake_eds_compare"}
         return methods
     for mod in (compare, report, dataset, versions_mod):

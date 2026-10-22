@@ -24,6 +24,7 @@ methods:
     # data the numbers depend on, part of the analysis version ("lab/…": in the project)
     analysis_data: ["references/xrd/patterns/*.json", "lab/references/xrd/patterns/*.json"]
     summary: labpipe.methods.xrd.summary       # optional: summarize(results) for the report and agents
+    compare: labpipe.methods.xrd.compare       # comparison figures: patterns, lattice parameter
     config: config/xrd.yaml
     outputs: [results.json, plot.png, plot.pdf, provenance.json, notes.md]
 
