@@ -487,8 +487,16 @@ def run() -> dict[str, Any]:
     if not in_container():
         items += _old_automation()
     if config is not None and (PROJECT_ROOT / config["manifest"]).exists():
-        counts = Counter(e["status"] for e in mf.load(config)["entries"].values())
+        data = mf.load(config)
+        counts = Counter(e["status"] for e in data["entries"].values())
         items.append(_item("manifest", "ok", f"manifest entries by status: {dict(counts)}"))
+        shared = mf.shared_output_dirs(config, data)
+        if shared:
+            items.append(_item("shared_output_dirs", "warn", f"{len(shared)} output folder(s) "
+                               "hold the analysis of more than one file: " + "; ".join(
+                                   row["output_dir"] for row in shared[:3]), "labpipe scan "
+                               "(gives each file its own folder and queues it again; nothing "
+                               "is deleted)"))
         items += _automation(config)
     elif config is not None:
         items.append(_item("manifest", "todo", "nothing scanned yet",

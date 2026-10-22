@@ -159,7 +159,7 @@ def _unwrap_shell(command: str) -> str:
 # short flags without an argument, short options taking a number, bare -N (head/tail),
 # short options taking a word, long flags, long options (--name=VALUE), what it may omit.
 READ_FORMS = {
-    "cat": ("", "", False, "", (), (), "cat FILE..."),
+    "cat": ("n", "", False, "", (), (), "cat [-n] FILE..."),
     "nl": ("", "", False, "", (), (), "nl FILE..."),
     "wc": ("lwc", "", False, "", (), (), "wc [-l -w -c] FILE..."),
     "head": ("", "n", True, "", (), (), "head [-n N | -N] FILE..."),

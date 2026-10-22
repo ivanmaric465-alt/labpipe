@@ -26,6 +26,7 @@ What changed in each release, in four fixed parts. How it is kept: [docs/RELEASI
 
 - Review flags of code-only methods reach you: the SEM gallery lists them under "Check before using" (image, check code, message) and marks the image, the overview row counts "N to check", the watcher notifies once per measurement ("N SEM measurement(s) to check", also in `logs/review_queue.md`); the same for the lab's own methods without an analyst. No results change.
 - Edited lab method code is never run stale: the watcher analyses code-only methods one fresh process per measurement (a process that dies is recorded as failed with its error output) and restarts when `lab/methods/` or `lab/methods.yaml` changes. No results change.
+- A file moved or renamed in the data folder takes its output folder along and is analysed again there; `labpipe doctor` warns while an output folder still holds the analysis of two files (`shared_output_dirs`). Fixed: a moved file used to be taken for a duplicate of its own old place, so it was never analysed again and dropped out of the report.
 
 ### Needs your action
 

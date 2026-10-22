@@ -615,6 +615,42 @@ def test_scan_separates_entries_that_share_an_output_folder(tmp_path):
     assert _labpipe(env, "scan")["changes"] == []
 
 
+def test_a_moved_file_takes_its_output_folder_along(tmp_path):
+    project, raw, env = _project(tmp_path)
+    positions = fcc_positions(3.8898)
+    peaks = [(positions[i], h, 1.2 + 0.3 * i, 0.6) for i, h in enumerate((6000.0, 3000.0, 2200.0, 2000.0))]
+    x, y = synthetic_pattern(peaks, seed=3)
+    (raw / "XRD" / "S-1_scan.xrdml").write_text(xrdml_text(x, y, "S-1"), encoding="utf-8")
+    _labpipe(env, "scan")
+    (first,) = _labpipe(env, "pending")
+    done = _labpipe(env, "xrd", "analyze", "--entry", first["entry_id"])
+    (raw / "XRD" / "2026-03").mkdir()
+    (raw / "XRD" / "S-1_scan.xrdml").rename(raw / "XRD" / "2026-03" / "S-1_scan.xrdml")   # reorganised
+    _labpipe(env, "scan")
+    (moved,) = _labpipe(env, "pending")
+    again = _labpipe(env, "xrd", "analyze", "--entry", moved["entry_id"])
+    assert again["status"] == "done" and again["output_dir"] == done["output_dir"]   # no ~ folder
+    entries = _manifest(project)
+    assert entries[first["entry_id"]]["status"] == "missing"
+    assert "output_dir" not in entries[first["entry_id"]]
+    assert entries[first["entry_id"]]["output_moved_to"] == moved["entry_id"]
+    assert sorted(p.name for p in (project / "analysis/S-1/xrd").iterdir()) == [
+        "S-1_scan", "_superseded", "index.json"]                         # no ~ folder
+    assert not [i for i in _labpipe(env, "doctor")["checks"] if i["check"] == "shared_output_dirs"]
+
+
+def test_doctor_names_output_folders_shared_by_two_files(tmp_path):
+    project, raw, env, ids, results = _two_scans(tmp_path)
+    a, b = ids["XRD/S-1_scan.xrdml"], ids["XRD/old/S-1_scan.xrdml"]
+    entries = _manifest(project)
+    entries[b]["output_dir"] = entries[a]["output_dir"]
+    (project / "manifest.json").write_text(
+        json.dumps({"schema": "labpipe.manifest/1", "entries": entries}), encoding="utf-8")
+    (item,) = [i for i in _labpipe(env, "doctor")["checks"] if i["check"] == "shared_output_dirs"]
+    assert item["status"] == "warn" and entries[a]["output_dir"] in item["message"]
+    assert "labpipe scan" in item["next"]
+
+
 def test_report_cards_stay_unique_and_replay_works(tmp_path):
     project, raw, env, ids, results = _two_scans(tmp_path)
     page = (project / _labpipe(env, "report")["report"]).read_text(encoding="utf-8")

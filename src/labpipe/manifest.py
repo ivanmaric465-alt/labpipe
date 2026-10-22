@@ -92,11 +92,16 @@ def other_owner(folder: Path, entry: dict[str, Any]) -> str | None:
     """The raw file (relative path) whose analysis is in `folder` if that is not `entry`, else None.
 
     Decided by the folder's provenance.json: its `entry_id`, or for older records the input's
-    relative path (the raw root's name can have been changed since). No provenance: no owner."""
+    relative path (the raw root's name can have been changed since). The same input content
+    (sha256) is never another owner: the file was moved or renamed in the data folder (the
+    entry of its old place is `missing`), and its analysis belongs to the file wherever it is
+    now. No provenance: no owner."""
     try:
         record = json.loads((folder / "provenance.json").read_text(encoding="utf-8"))
         given = (record.get("input") or {}).get("relative_path")
-        if record.get("entry_id"):
+        if entry.get("sha256") and (record.get("input") or {}).get("sha256") == entry["sha256"]:
+            same = True
+        elif record.get("entry_id"):
             same = record["entry_id"] == entry["entry_id"]
         else:
             same = given is None or given == entry["relative_path"]
@@ -110,16 +115,36 @@ def _held(data: dict[str, Any], entry: dict[str, Any]) -> set[str]:
             if e is not entry and e.get("output_dir")}
 
 
+def _moved_from(data: dict[str, Any], entry: dict[str, Any], base: Path) -> dict | None:
+    """The `missing` entry of the same method and sample with the same content (sha256) that
+    holds a folder under `base`: this file at its old place (moved or renamed). None if there is
+    none, or several (then nothing is guessed)."""
+    if not entry.get("sha256"):
+        return None
+    found = [e for e in data["entries"].values()
+             if e is not entry and e.get("status") == "missing" and e.get("output_dir")
+             and e.get("method") == entry["method"] and e.get("sha256") == entry["sha256"]
+             and (PROJECT_ROOT / e["output_dir"]).parent == base]
+    return found[0] if len(found) == 1 else None
+
+
 def choose_output_dir(config: dict, data: dict[str, Any], entry: dict[str, Any]) -> str:
     """The entry's output folder (relative to the project, posix), kept once chosen.
 
     analysis/<sample>/<method>/<measurement_id>, or with ~<6..10 characters of the entry id's
     hash> added when another entry holds that folder (names compared without case: Windows,
-    macOS) or its provenance.json names another entry. The same inputs give the same name."""
+    macOS) or its provenance.json names another entry. The same inputs give the same name. A
+    file moved or renamed in the data folder (a `missing` entry with the same content) takes
+    its folder along instead (`_moved_from`)."""
     base = PROJECT_ROOT / config["analysis_dir"] / entry["sample_id"] / entry["method"]
     stored = entry.get("output_dir")
     if stored and (PROJECT_ROOT / stored).parent == base:
         return stored
+    moved = _moved_from(data, entry, base)
+    if moved is not None:            # the same file at a new place: it takes its folder along
+        folder = moved.pop("output_dir")
+        moved["output_moved_to"] = entry["entry_id"]
+        return folder
     held, digest = _held(data, entry), entry["entry_id"].split("-", 1)[-1]
     names = [entry["measurement_id"]] + [f"{entry['measurement_id']}~{digest[:n]}"
                                          for n in range(6, max(len(digest), 6) + 1)]
@@ -146,7 +171,8 @@ def shared_output_dirs(config: dict, data: dict[str, Any]) -> list[dict[str, Any
         folder = PROJECT_ROOT / members[0]["output_dir"]
         mine = [e for e in members if (folder / "provenance.json").is_file()
                 and other_owner(folder, e) is None]
-        keeper = max(mine or members, key=lambda e: (e.get("last_processed_utc") or "",
+        keeper = max(mine or members, key=lambda e: (e.get("status") != "missing",
+                                                     e.get("last_processed_utc") or "",
                                                      e["entry_id"]))
         rows.append({"output_dir": members[0]["output_dir"], "keeps": keeper["entry_id"],
                      "others": sorted(e["entry_id"] for e in members if e is not keeper)})

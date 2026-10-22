@@ -354,14 +354,9 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                                 "from": old, "to": "pending", "reason": primary["status_reason"]})
                 counts[old] -= 1
                 counts["pending"] += 1
-        _content_duplicates(entries, changes, counts, frozenset(
-            name for name, spec in methods.items() if spec.get("kind") == "imported"))
-        for change in mf.separate_shared_output_dirs(config, data):
-            changes.append(change)
-            counts[change["from"]] -= 1
-            counts["pending"] += 1
         for key in [k for k in unrecognised if k not in seen_unrecognised]:
             del unrecognised[key]       # gone, now recognised, or ignored
+        # files gone first: a moved file is then not taken for a duplicate of its old place
         for eid, entry in entries.items():
             if eid not in seen and entry.get("status") != "missing" and any(
                     entry["raw_root"] == root["id"] for root in config["raw_roots"]):
@@ -374,6 +369,12 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                 changes.append({"entry_id": eid, "relative_path": entry["relative_path"],
                                 "from": old, "to": "missing", "reason": entry["status_reason"]})
                 counts["missing"] += 1
+        _content_duplicates(entries, changes, counts, frozenset(
+            name for name, spec in methods.items() if spec.get("kind") == "imported"))
+        for change in mf.separate_shared_output_dirs(config, data):
+            changes.append(change)
+            counts[change["from"]] -= 1
+            counts["pending"] += 1
 
     return {"code_version": current_code,
             "counts": dict(sorted((k, n) for k, n in counts.items() if n)),

@@ -32,6 +32,11 @@ manifest entries point at the same place.
   own folder name and go back to `pending`, with the reason "shared an output folder with
   <path>; analysed again into its own folder". Nothing is deleted.
 - **Changelog:** "Needs your action": the affected measurements are listed and redone.
+- **A moved or renamed file** (the same content at a new place, its old entry `missing`)
+  takes its folder along instead of getting a `~` folder (added while building).
+- **Found while building:** a moved file was marked a duplicate of its own old place, so it
+  was never analysed again and dropped out of the report. Files that are gone are now marked
+  `missing` before duplicates are looked for.
 
 ### A2. The guard allows only reads it can check
 
@@ -133,6 +138,10 @@ of `lab/methods/…` it runs the old code but records the version of the new sou
   - every recorded output, `thumb.jpg` included;
   - a warning when the recorded package versions differ from the current ones;
   - the README names the exception for your own analyses (checked, not redrawn).
+
+- **B5. A moved file keeps its analysis.** Today a moved file is analysed again (into its
+  old folder), AI notes included. Better: the new entry takes over the old one's results and
+  notes, with replay finding the input at its new place by sha256.
 
 ## C. Later
 
