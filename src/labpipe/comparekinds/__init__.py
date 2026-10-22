@@ -52,7 +52,7 @@ color:var(--fg,#1c1c1a);border-radius:6px;padding:.05rem .55rem;cursor:pointer}
 .cf button[aria-pressed=true]{box-shadow:inset 0 -2px 0 var(--fg,#1c1c1a)}
 .cf .grid{display:grid;gap:8px;align-items:start}.cf .grid .gr{display:contents}.cf .grid figure{margin:0;text-align:center}
 .cf .grid img{max-width:100%;height:auto;border-radius:3px;background:#fff}
-.cf .grid .na{color:var(--mut,#66665f);padding:1rem 0;font-style:italic}
+.cf .grid .na{color:var(--mut,#66665f);padding:1rem 0;font-style:italic;text-align:center;align-self:center}
 .cf .grid .hd{font-weight:600;color:var(--mut,#66665f);text-align:center}
 .cf .grid .rl{font-weight:600;align-self:center}
 @media print{.cf .cl,.cf .cv{display:none}}
