@@ -80,7 +80,7 @@ def render(spec: dict[str, Any], stem: Path) -> dict[str, Any]:
     counts = ck.counts(inventory(spec))
     slots = sum(1 + (NOMINAL_SCALE if r.get("nominal_segments") else 0) for r in rows)
     width = width_in({"width_in": "double"}, plot)
-    legend_in = 0.25 * (1 + len(spec["categories"]) // 5)
+    legend_in = 0.22 * -(-len(spec["categories"]) // 6)     # one line per 6 categories
     height = max(1.4, slots * row_in * 1.1 + 0.5 + legend_in)
     figure, axis = plt.subplots(figsize=(width, height))
     figure.subplots_adjust(left=0.7 / width, right=1 - 0.12 / width, bottom=0.5 / height,

@@ -101,6 +101,11 @@ def _colours(spec: dict[str, Any]) -> list[str]:
     return [palette[i % len(palette)] for i in range(len(spec["traces"]))]
 
 
+def _y_label(label: str, note: str) -> str:
+    """"Intensity (counts)" + "offset" → "Intensity (counts, offset)"."""
+    return f"{label[:-1]}, {note})" if label.endswith(")") else f"{label} ({note})"
+
+
 def render(spec: dict[str, Any], stem: Path) -> dict[str, Any]:
     from labpipe.plotting.acs import apply_acs, keep_inside, save_figure, style_of, width_in
     import matplotlib.pyplot as plt
@@ -128,7 +133,8 @@ def render(spec: dict[str, Any], stem: Path) -> dict[str, Any]:
                   fontsize=plot["font_size"] - 1.5, va="bottom")
     axis.set_ylim(-0.2, len(traces) - 1 + HEIGHT + 0.2)
     axis.set_yticks([])
-    axis.set_ylabel(spec.get("y_label", "") + (" (normalised, offset)" if view == "norm" else " (offset)"))
+    axis.set_ylabel(_y_label(spec.get("y_label", ""), "normalised, offset" if view == "norm"
+                             else "offset"))
     if rows:
         ticks_axis = axes[1]
         for k, row in enumerate(rows):
