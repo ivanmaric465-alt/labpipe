@@ -45,8 +45,8 @@ exact refusal message and stop. A refusal means the setup needs a human.
 ## Never
 
 - Run anything other than `labpipe ...` commands (no shell operators, pipes or redirects).
-  Reading files is fine: your read tool, or without one (Codex) `cat`/`sed -n`/`rg` on files
-  inside the project.
+  Reading files is fine: your read tool, or without one (Codex) `cat FILE`, `head -n N FILE`,
+  `sed -n 'N,Mp' FILE`, `rg -n PATTERN PATH` on paths inside the project (no `$`, `~user`, other options).
 - Edit settings, code, references, results or the manifest; requeue stale entries; or
   retry a failed entry beyond what `labpipe scan` decides.
 - Start the `postdoc` agent or run `labpipe postdoc ...`: only the user asks for it.

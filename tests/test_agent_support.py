@@ -234,6 +234,33 @@ def test_guard_unattended_allows_reading_inside_the_project_only(config):
         assert guard.decide(_bash(command), config, "unattended"), command
 
 
+READS_ALLOWED = [
+    "cat analysis/S-1/xrd/m/results.json", "head -n 40 notes.md", "head -5 notes.md",
+    "sed -n '10,40p' docs/WRITING.md", "sed -n '5p' x.md", "sed -n '3,$p' x.md",
+    'rg -n "lattice" analysis', "grep -rn fcc analysis --include=*.json", "wc -l x",
+    "ls -la analysis", "tail -20 logs/automation.log", "rg -n -C 3 -g '*.md' foo docs",
+    "rg -e '-x' logs", "grep -rn a{b logs".replace("a{b", "'a{b'"), "rg -i fcc", "ls", "nl x.md"]
+READS_REFUSED = [
+    "sed -n 'w /tmp/x' f", "sed -n '1e id' f", "sed -n -e 'w x' f", "sed -n 1,3p", "sed 5p f",
+    "sed -n 's/a/b/w x' f", "sed -n -f prog f", "rg --pre cat x .", "rg --pre=sh x",
+    "cat $HOME/.ssh/id_rsa", "cat ${HOME}/x", "head -n 5 ~/.bashrc", "cat ~root/x",
+    "grep -r x /etc", "ls ..", "rg -z x", "rg -f patterns.txt", "rg --search-zip x", "rg -L x",
+    "grep -L x f", "rg x /etc/passwd", "cat -n x", "head -n x f", "tail -f logs/a", "cat",
+    "grep x", "rg -e a -e b x", "rg {x,/etc/passwd}", "cat ../*", "rg x ~", "ls -d .",
+    "rg --files-from f x", "sed -n 3,$p x.md", "sed -n \"3,$p\" x.md", "cat /nonexistent/x", "grep -rn x ..", "wc --files0-from=f"]
+
+
+def test_guard_strict_read_forms(config):
+    for command in READS_ALLOWED:
+        assert guard.decide(_bash(command), config, "unattended") is None, command
+        assert guard.decide(_bash(command), config, "postdoc") is None, command
+    for command in READS_REFUSED:
+        reason = guard.decide(_bash(command), config, "unattended")
+        assert reason and "unattended runs may read files only as" in reason, command
+    outside = {"tool_name": "Bash", "tool_input": {"command": "rg -n x"}, "cwd": "/tmp"}
+    assert guard.decide(outside, config, "unattended")      # no path: searches cwd, outside
+
+
 def test_agents_render_codex_toml():
     tomllib = pytest.importorskip("tomllib")      # Python 3.11+ (the host may be 3.10)
     from labpipe import agents

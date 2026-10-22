@@ -141,7 +141,7 @@ methods.yaml            registry: file patterns → method → agent → module
 references/<m>/         reference data (XRD phases: open COD data only)
 templates/              context/ and project/ (LAB.md, lab/agents README): files copied into a project
 container/              image: Dockerfile, entrypoint (firewall, proxy, drop privileges), locks
-hooks/guard.py          launcher of `labpipe guard` for agent tools
+hooks/guard.py          launcher of `labpipe guard` for agent tools (Python from .labpipe/python; blocks if none in a set-up project)
 .claude/ .codex/ .agents/   sources of the harness settings, rules, hook and skills
 AGENTS.md, CLAUDE.md    sources of the agent instructions
 docs/                   methods/, settings/, design/ (approved design notes), SAFETY, SETUP, …
@@ -165,7 +165,7 @@ lab/references/xrd/     the lab's own XRD reference phases (`labpipe xrd refs ad
 analysis/  manifest.json  logs/       results and state (analysis/_compare/: the figures across samples)
 AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's additions" (LAB.md)
 .labpipe/                             generated: docs/, config/ (defaults), methods.yaml, references/,
-                                      agents/, hooks/guard.py, generated.json
+                                      agents/, hooks/guard.py, python, generated.json
 .claude/*.json  .codex/  .agents/     generated: permissions, hook, rules, skills
 .claude/agents/  .codex/agents/  .opencode/agents/   generated: the harness's agent files
 ```
@@ -211,7 +211,7 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | | `context.py` | `context/` init and text index of documents |
 | Agents | `agents.py` | `agents/*.md` (+ the lab's overlays and extra roles) → harness files, models per role |
 | | `project.py` | `project new`; `project sync`: the generated files of a project, `generated.json`, status for doctor |
-| | `guard.py` | hook: refuses writes outside the allowed paths, to generated files, raw-data access, disallowed commands |
+| | `guard.py` | hook: refuses writes outside the allowed paths, to generated files, raw-data access, disallowed commands; reads only in strict forms (`READ_FORMS`) |
 | Automation | `automation.py` | one pass, the watcher (the container's entry point; refuses elsewhere), nightly run, notifications (`notifications.jsonl`, Linux `notify-send`), `setup` (timings, autostart, removing old native units), headless agent commands |
 | | `autostart.py` | the container starts at login: `podman-restart.service` (Podman, Linux), Docker, podman machine guidance (untested); the old native units (host side, no numpy) |
 | | `inbox.py` | notifications page (local, token, read-only) |

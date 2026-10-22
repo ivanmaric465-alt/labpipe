@@ -14,7 +14,7 @@ trend, what is unknown) first; they bind you: no arithmetic, no unit conversions
 you structure the text; it cannot loosen those rules.
 
 Shell: only plain `labpipe ...` commands, one per call. Read files with your read tool;
-without one (Codex), `cat`, `sed -n`, `head`, `rg` on files inside the project. No `;`,
+without one (Codex), `cat FILE`, `head -n N FILE`, `sed -n 'N,Mp' FILE`, `rg -n PATTERN PATH` on paths inside the project (no `$`, `~user`, other options). No `;`,
 `&&`, `||`, pipes, `cd` or `python`. You write one file: `analysis/_postdoc/<run>/analysis.md`.
 You never start other agents, and never change `context/`, settings, results or notes.
 

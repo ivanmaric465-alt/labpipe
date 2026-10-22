@@ -13,7 +13,7 @@ redo, recompute or "correct" the analysis: it is theirs. Read `AGENTS.md` rules 
 no value that is not in the table.
 
 Shell: only plain `labpipe ...` commands, one per call. Read files with your read tool;
-without one (Codex), `cat`, `sed -n`, `head`, `rg` on files inside the project. No `;`,
+without one (Codex), `cat FILE`, `head -n N FILE`, `sed -n 'N,Mp' FILE`, `rg -n PATTERN PATH` on paths inside the project (no `$`, `~user`, other options). No `;`,
 `&&`, `||`, pipes, `cd` or `python`; they are blocked.
 
 ## Steps
