@@ -47,8 +47,8 @@ Status: APPROVED 2026-10-17 (gallery picks across both series). Implemented.
 - **Plot settings**: `plot.width_in`, `plot.scale_bar` (see `docs/settings/plots.md`). The figure is for looking at; it is not a measurement of particle size.
 
 ## Comparison figures
-- **Gallery** (`analysis/_compare/sem/gallery/`, report section "Compare samples"): a grid, one row per sample, one column per `gallery.magnifications`; each cell is the image the per-sample gallery chooses for that magnification (`gallery.exclude` applies), as its `thumb.jpg`, labelled with the magnification as recorded and the measurement. Code: `compare.py`, the choice is `gallery.select`.
-- **Reading the plot**: compare S-1, S-2, ... down a column to see the same magnification side by side. The label under an image gives its real magnification: when a sample has no image near a column's magnification, the closest one is shown there and may repeat in two columns, so read the label, not the column heading. A cell with – has no image. Only the picture is shown; use each image's own scale bar for sizes.
+- **Gallery** (`analysis/_compare/sem/gallery/`, report section "Compare samples"): a grid, one row per sample, one column per `gallery.magnifications`; each image belongs to the column nearest its own magnification (log scale), so it never fills two columns; in a column the gallery's rule chooses (`gallery.exclude` applies); shown as its `thumb.jpg`, labelled with the magnification as recorded and the measurement. Code: `compare.py`, the choice is `gallery.select`.
+- **Reading the plot**: compare S-1, S-2, ... down a column to see the same magnification side by side. The label under an image gives its real magnification, which can differ from the column's (a ×70,000 image sits in the ×50,000 column when that is the nearest). A cell with – means the sample has no image nearer that magnification than another column's. Only the picture is shown; use each image's own scale bar for sizes.
 
 ## Settings (`config/sem.yaml`)
 

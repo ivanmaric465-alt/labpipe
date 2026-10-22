@@ -133,6 +133,14 @@ def test_sem_empty_cell_without_an_image(sem):
     assert sem_compare.figures(ms, {"config": {"gallery": {"magnifications": []}}}) == []
 
 
+def test_sem_one_image_never_fills_two_columns(sem):
+    # S-1 has only a ×70k image: it belongs to ×50k (nearest), ×10k stays empty
+    ms = [_sem_item(sem, "S-1", "S-1_a", 70000), _sem_item(sem, "S-2", "S-2_a", 10000)]
+    spec = sem_compare.figures(ms, CONTEXT)[0]
+    assert {k: c["measurement_id"] for k, c in spec["rows"][0]["cells"].items()} == {
+        "50000": "S-1_a"}
+
+
 # --- through the framework ---------------------------------------------------------------------
 
 def test_eds_figure_through_compare_covers_and_replays(project, monkeypatch):

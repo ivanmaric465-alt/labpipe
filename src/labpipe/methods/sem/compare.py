@@ -1,12 +1,15 @@
 """SEM comparison figure for "Compare samples": the grid of images by gallery magnification.
 
-Rows = samples (report order), columns = `gallery.magnifications`; each cell is the image the
-per-sample gallery would choose for that magnification (`gallery.select`, so exclude and the
-closest-on-a-log-scale rule are the same), shown by its `thumb.jpg`. Nothing is computed.
+Rows = samples (report order), columns = `gallery.magnifications`. Each image belongs to the
+column nearest its own magnification (log scale), so one image never fills two columns; among
+a column's images the gallery's rule chooses (`gallery.select`: exclude, closest on a log
+scale). A column no image is near stays empty ("–"). Shown by `thumb.jpg`. Nothing is
+computed but the comparison of magnifications.
 """
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from labpipe import settings as settings_mod
@@ -21,6 +24,14 @@ def _gallery_of(sample: str, context: dict[str, Any]) -> dict[str, Any]:
         return settings_mod.resolve("sem", sample, None)[0]["gallery"]
     except Exception:
         return (context.get("config") or {}).get("gallery") or {}
+
+
+def _nearest(item: dict[str, Any], targets: list[int]) -> int | None:
+    """The column (magnification) nearest the image's own, on a log scale; ties: the lower."""
+    magnification = (item["results"].get("acquisition") or {}).get("magnification")
+    if not magnification:
+        return None
+    return min(targets, key=lambda t: (abs(math.log(magnification / t)), t))
 
 
 def figures(measurements: list[dict[str, Any]], context: dict[str, Any]) -> list[dict[str, Any]]:
@@ -39,9 +50,10 @@ def figures(measurements: list[dict[str, Any]], context: dict[str, Any]) -> list
         settings = _gallery_of(sample, context)
         cells = {}
         for target in targets:
-            # one target at a time: the image closest to it (include would add more, not wanted)
-            picked = gallery.select(items, {"magnifications": [target],
-                                            "exclude": settings.get("exclude")})
+            # only the images nearest this column; then the gallery's rule (include is not used)
+            near = [i for i in items if _nearest(i, targets) == target]
+            picked = gallery.select(near, {"magnifications": [target],
+                                           "exclude": settings.get("exclude")})
             if not picked:
                 continue
             m = picked[0]["measurement"]
@@ -55,6 +67,7 @@ def figures(measurements: list[dict[str, Any]], context: dict[str, Any]) -> list
                 "label": f"×{magnification:,} · {m['measurement_id']}"}
         rows.append({"sample": sample, "cells": cells})
     return [{"kind": "images", "name": "gallery", "title": "SEM images by magnification",
-             "caption": ("The image closest to each magnification (log scale, both series "
-                         "compete), as in the per-sample gallery; – where a sample has none."),
+             "caption": ("Each image in the column nearest its magnification (log scale); "
+                         "per column the gallery's choice; – where no image of the sample is "
+                         "near that magnification. The label gives the true magnification."),
              "columns": columns, "rows": rows}]
