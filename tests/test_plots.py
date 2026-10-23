@@ -420,3 +420,28 @@ def test_keep_inside_widens_margins_only_when_text_is_cut():
     assert cut.get_tightbbox(cut.canvas.get_renderer()).x0 >= 0
     plt.close(fits)
     plt.close(cut)
+
+
+def test_replay_compares_thumb_jpg_and_reports_a_changed_thumb(tmp_path, monkeypatch):
+    import types
+    from labpipe import replay
+    from labpipe.methods.sem import analyze as sem
+    image = test_sem.make_example(tmp_path / "raw")
+    sem.run(image, tmp_path / "out", context={}, pipeline=False)
+    path = tmp_path / "out" / "provenance.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    assert "thumb.jpg" in replay._compared(record)
+    assert "provenance.json" not in replay._compared(record | {"outputs": {
+        **record["outputs"], "provenance.json": "x", "notes.md": "y"}})
+    monkeypatch.setattr(replay, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(replay.importlib, "import_module", lambda name: types.SimpleNamespace(
+        run=lambda *a, **k: sem.run(*a, **{**k, "pipeline": False})))   # no project to guard here
+    config = {"logs_dir": "logs", "raw_roots": []}
+    same = replay.replay(path, config, force=True)
+    assert same["comparison"]["thumb.jpg"]["identical"] and same["all_outputs_identical"], same
+    record["outputs"]["thumb.jpg"] = "0" * 64                  # a thumb that is not the recorded one
+    path.write_text(json.dumps(record), encoding="utf-8")
+    changed = replay.replay(path, config, force=True)
+    assert not changed["comparison"]["thumb.jpg"]["identical"]
+    assert changed["comparison"]["results.json"]["identical"]
+    assert not changed["all_outputs_identical"]

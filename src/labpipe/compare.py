@@ -483,7 +483,8 @@ def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[
     is only noted); a recorded source (results.json, raw or image file) that changed since is
     noted, not a failure."""
     record = json.loads(provenance_path.read_text(encoding="utf-8"))
-    problems, notes = [], []
+    from labpipe.replay import environment_notes
+    problems, notes = [], environment_notes(record)
     if record.get("schema") != SCHEMA:
         return {"error": "replay refused", "problems": [
             f"{record.get('schema')} is an older record; `labpipe compare` draws it again"]}
