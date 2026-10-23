@@ -249,6 +249,8 @@ def _keep_moved_analyses(entries: dict[str, Any], changes: list[dict[str, Any]],
             continue
         resolved = settings_mod.resolve(new["method"], new["sample_id"], new["measurement_id"])[0]
         mf.take_over_analysis(old, new)
+        if new.get("companions") is not None:   # the same files (base name, sha256), moved along
+            new["analysed_companions"] = dict(new["companions"])
         new.update(settings_mod.compare_entry(new, resolved)["adopt"])
         change.update({"to": "done", "reason": new["status_reason"]})
         counts["pending"] -= 1

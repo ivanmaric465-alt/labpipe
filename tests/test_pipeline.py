@@ -681,6 +681,18 @@ def test_a_moved_file_keeps_its_analysis_and_notes(tmp_path):
     assert "XRD/2026-03/S-1_scan.xrdml" in page and "XRD/S-1_scan.xrdml<" not in page
 
 
+def test_a_moved_sem_image_takes_its_companion_along(tmp_path):
+    project, env, main, eid, rescan = _companion_project(tmp_path, "sem")
+    (main.parent / "moved").mkdir()
+    for path in (main, main.with_suffix(".txt")):
+        path.rename(main.parent / "moved" / path.name)
+    changes = _labpipe(env, "scan")["changes"]
+    assert [c["to"] for c in changes if c["relative_path"] == "SEM/moved/S-1 a001.tif"] == ["done"]
+    (new_id,) = [c["entry_id"] for c in changes if c["to"] == "done"]
+    assert list(_manifest(project)[new_id]["analysed_companions"]) == ["SEM/moved/S-1 a001.txt"]
+    assert _labpipe(env, "scan")["changes"] == []
+
+
 def test_replay_finds_a_moved_input_by_its_sha256(tmp_path):
     project, raw, env, old_id, done = _moved_project(tmp_path)
     (raw / "XRD" / "S-1_scan.xrdml").rename(raw / "XRD" / "2026-03" / "S-1_scan.xrdml")
