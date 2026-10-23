@@ -55,7 +55,7 @@ owned by another entry fails the analysis and moves nothing (`pipeline._refuse_f
 `_superseded/` and `_failed/` are keyed by the folder name. `labpipe scan` separates entries of
 older projects that share a folder (`manifest.separate_shared_output_dirs`: the owner keeps it,
 the others go back to pending; `shared_output_dirs` only reports). The report's anchors and
-card titles use the folder name.
+card titles use the folder name. A publication is one step: see `pipeline.py` (lock per entry, checks in staging, inputs hashed again, journal in `logs/publishing/` rolled back by the next scan).
 
 **Automatic processing** (inside the container):
 1. The watcher notices new files and waits until they settle.
@@ -206,7 +206,7 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | | `labmethods.py` | the lab's own methods: reads and checks `lab/methods.yaml`, makes `labpipe_lab.<name>` importable; fills in an entry `kind: imported` (module, summary, settings file, analyst) |
 | | `naming.py` | sample ID and measurement ID from file names |
 | | `inventory.py` | what is recognised in the data folder (read-only) |
-| Analysis | `pipeline.py` | run a method on an entry; staging, `_superseded/`, `_failed/`; replot; review queue |
+| Analysis | `pipeline.py` | run a method on an entry; staging, `_superseded/`, `_failed/`; replot; review queue. Publication is one step: a lock per entry (`logs/locks/<entry_id>.lock`, a second run is skipped), the summary checked against the staged files, the inputs hashed again before publishing (changed: pending, no attempt counted), a journal (`logs/publishing/<entry_id>.json`) around the two renames that `recover_publications` rolls back at the start of every scan |
 | | `settings.py` | layered settings (defaults ← `lab.yaml` ← samples ← measurement), key checks, fingerprints (analysis and plot separate) |
 | | `provenance.py` | provenance records, git commit, environment |
 | | `versions.py` | analysis version and plot version per method (hash of the source), `labpipe methods versions` |
