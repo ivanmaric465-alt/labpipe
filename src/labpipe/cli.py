@@ -34,7 +34,7 @@
   labpipe compare [--method M]              (re)draw the comparison figures of samples (analysis/_compare/)
   labpipe xrd refs list|add|build           manage XRD reference phases (CIFs)
   labpipe notes todo                        analysed entries whose notes.md is missing or outdated
-  labpipe notes verify --entry ID           check notes.md against results.json (numbers, review codes)
+  labpipe notes verify --entry ID           check numbers in notes.md against results.json, and review codes (not a review)
   labpipe notes retire --entry ID [...]     move notes.md to _superseded/ so the analyst rewrites it
   labpipe container setup|build|start|stop|status|logs|login   the container (Podman or Docker)
   labpipe shell [claude|codex]              agent session inside the container
@@ -580,7 +580,7 @@ def register_context_postdoc(sub) -> None:
     start.add_argument("--harness")
     start.add_argument("--model")
     start.set_defaults(func=cmd_postdoc)
-    check = postdoc.add_parser("verify", help="check a run's analysis.md (numbers, review checks, parts)")
+    check = postdoc.add_parser("verify", help="check the numbers of a run's analysis.md against its sources, review checks, parts (not a review)")
     check.add_argument("run")
     check.set_defaults(func=cmd_postdoc)
     postdoc.add_parser("list", help="past runs: state and whether they are up to date"

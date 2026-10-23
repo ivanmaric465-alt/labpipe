@@ -6,10 +6,11 @@
 * every `review`-severity check code from results.json is mentioned;
 * the notes name the sha256 of the results.json they describe.
 
-Not checked as numbers: identifiers glued to letters (S-9, Kα1, RuO2, P03),
-hkl in parentheses, ISO dates, list markers, and inline code containing a
-letter (key paths, entry IDs). A number checked here is "found somewhere in
-the results", not "used in the right place"; a human still reads the notes.
+Not checked as numbers: identifiers glued to letters (S-9, Kα1, RuO2, P03, entry IDs,
+key paths like xrd.a.fcc), hkl in parentheses, ISO dates, list markers, sha256 values and a
+list index glued to a name inside backticks (`peaks[3]`). Numbers in `inline code` are checked
+like any other. A number checked here is "found somewhere in the results", not "used in the
+right place", and the prose is not checked at all: a person still reads the notes.
 
 The rules are versioned (CHECKS_VERSION, bumped when they get stricter; tests/test_checks_versions.py
 fails when the rule code changed without it). A passing `labpipe notes verify` records the version
@@ -33,11 +34,11 @@ from labpipe.provenance import sha256_file, utc_now
 from labpipe.registry import load_methods
 from labpipe.safety import PROJECT_ROOT
 
-CHECKS_VERSION = 1      # bump when the rules above get stricter (see the module text)
+CHECKS_VERSION = 2      # bump when the rules above get stricter (see the module text); 2: inline code is checked
 
 _NUMBER = re.compile(r"(?<![\w.\-−])[-−]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![0-9A-Za-z_])")
 _EXEMPT = [
-    re.compile(r"`[^`\n]*[A-Za-z][^`\n]*`"),            # key paths, entry IDs, codes
+    re.compile(r"(?<=[A-Za-z_\]])\[\d+\](?=[\w.\[\]]*`)"),   # `peaks[3]`: an index in a key path
     re.compile(r"\(\s*-?\d\s*-?\d\s*-?\d\s*\)"),        # hkl: (111), (2 0 0)
     re.compile(r"\b\d{4}-\d{2}-\d{2}(?:[T ][\d:.]+Z?)?"),  # dates and timestamps
     re.compile(r"(?m)^\s*(?:#+\s*)?\d+[.)]\s"),        # list markers, numbered headings

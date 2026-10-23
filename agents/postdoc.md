@@ -41,7 +41,7 @@ You never start other agents, and never change `context/`, settings, results or 
 6. `labpipe postdoc verify <run>`. If it fails, fix what it lists (remove or replace each
    number it could not find, add the missing check codes or parts) and verify again, at most
    twice more. Never "fix" a number by computing it. Reply with one short paragraph: the
-   run id, whether it verified, and the one or two main findings.
+   run id, whether the numbers check passed, and the one or two main findings.
 
 ## What to write
 

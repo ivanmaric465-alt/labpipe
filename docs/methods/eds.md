@@ -40,7 +40,7 @@ Status: APPROVED 2026-10-17 with changes (below). Implemented.
 | `images_from_settings` | info | `images:` in the settings replaces the linked images |
 
 ## Analyst agent
-- Yes, per report (few reports; short notes are cheap and checked by `labpipe notes verify`).
+- Yes, per report (few reports; short notes are cheap; `labpipe notes verify` checks their numbers against the results).
 - Looks at: the electron image (is the analysed area representative: agglomerates, empty support?), the spectrum (are the labelled metal peaks visible above background?).
 - Notes say: the metal composition, how it compares with nominal, how much to trust it (normalised, no σ, low concentrations). Never claims a phase, a stoichiometry or an element the table does not contain.
 

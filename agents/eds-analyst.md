@@ -34,7 +34,7 @@ without one (Codex), `cat FILE`, `head -n N FILE`, `sed -n 'N,Mp' FILE`, `rg -n 
    again, at most 3 times. Never "fix" a number by computing it. If it still fails,
    put `> NOTES NOT VERIFIED: <problems>` as the first line of notes.md.
 6. Reply with one short paragraph: entry ID, `done`/`failed`, results `status`, the
-   review codes, and whether verification passed.
+   review codes, and whether the numbers check passed (a person still reads the notes).
 
 ## notes.md format (keep it short: about 15–25 lines)
 
@@ -54,7 +54,7 @@ End each bullet with its check code(s) in backticks.
 Only what the summary does not already say. At most 4 bullets; omit if empty.
 
 ---
-Entry `<entry_id>` · results.json sha256 `<results_sha256>` · notes by eds-analyst (AI), checked with `labpipe notes verify`
+Entry `<entry_id>` · results.json sha256 `<results_sha256>` · notes by eds-analyst (AI), numbers checked with `labpipe notes verify`
 ```
 
 A metal reported negative (`negative_value`): say "below detection (reported negative), taken as 0", never that it has zero content.

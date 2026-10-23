@@ -21,8 +21,8 @@ from labpipe import manifest, notes, postdoc, safety
 # change makes the rules stricter, bump CHECKS_VERSION (notes.py or postdoc.py), then paste
 # the new fingerprint below. A change that only restructures needs just the new fingerprint.
 
-NOTES_FINGERPRINT = "636c35f237db100dfb05985a3aa510eb867a6649c6f7f4d199afb898d28a90f5"
-POSTDOC_FINGERPRINT = "e5204e7f0f5846adf5101dc0049e918c8db471630c35afe489e2f7b70cf1d40b"
+NOTES_FINGERPRINT = "a1a03c7eb200e34cc3950839f243e66c533484218f46826f57a4954f0ada9b5d"
+POSTDOC_FINGERPRINT = "c7e3a1d586051f65ec2f7c0f5de2d8eb340a81db69711cfa816aac9b74e60b92"
 
 SHARED = [notes.numbers_in_notes, notes._matches, notes._walk_numbers, notes._decimals]
 SHARED_PATTERNS = [notes._NUMBER, *notes._EXEMPT, notes._SHA]
@@ -126,7 +126,7 @@ def config():
 EID = "xrd:lab:S-1_a.xrdml"
 
 
-def _stricter(monkeypatch, version=2):
+def _stricter(monkeypatch, version=3):
     """A new release whose rules refuse these notes."""
     real = notes.verify
 
@@ -147,7 +147,7 @@ def test_a_passing_verify_records_the_rules_in_the_manifest(project, config):
     assert result["ok"] and result["rules"] == notes.CHECKS_VERSION and "checked_with" not in result
     notes.record_check(config, result)
     check = _entry(project)["notes_check"]
-    assert check["rules"] == notes.CHECKS_VERSION == 1
+    assert check["rules"] == notes.CHECKS_VERSION == 2
     assert check["notes_sha256"] == hashlib.sha256(NOTES.encode("utf-8")).hexdigest()
     assert check["results_sha256"] == RESULTS_SHA and check["labpipe"] and check["utc"]
 
@@ -164,7 +164,7 @@ def test_the_command_records_only_passes_under_the_current_rules(project, config
     (project / "analysis" / "S-1" / "xrd" / "S-1_a" / "notes.md").write_text(
         NOTES, encoding="utf-8", newline="")
     assert cli.cmd_notes_verify(args, config) == 0
-    assert _entry(project)["notes_check"]["rules"] == 1
+    assert _entry(project)["notes_check"]["rules"] == notes.CHECKS_VERSION
     capsys.readouterr()
 
 
@@ -173,7 +173,7 @@ def test_notes_that_passed_under_older_rules_stay_valid(project, config, monkeyp
     _stricter(monkeypatch)
     result = notes.verify_entry(config, EID)
     assert result["ok"] is True and result["problems"] == []
-    assert result["checked_with"] == {"rules": 1, "labpipe": _entry(project)["notes_check"]["labpipe"]}
+    assert result["checked_with"] == {"rules": 2, "labpipe": _entry(project)["notes_check"]["labpipe"]}
     assert result["problems_under_current_rules"] == ["a new rule is not met"]
 
 
@@ -216,3 +216,51 @@ def test_notes_todo_never_lists_a_note_only_because_the_rules_changed(project, c
         "Some other results 1111111111111111111111111111111111111111111111111111111111111111",
         encoding="utf-8", newline="")
     assert [row["entry_id"] for row in notes.todo(config)] == [EID]   # (other results: queued)
+
+
+# ---- rules 2: inline code is checked like the rest of the text ------------------------------
+
+def _write_notes(project, text):
+    path = project / "analysis" / "S-1" / "xrd" / "S-1_a" / "notes.md"
+    path.write_text(text, encoding="utf-8", newline="")
+    return path
+
+
+def test_a_number_in_backticks_must_be_in_the_results(project, config):
+    _write_notes(project, f"Lattice `0.55` and `a = 0.77 nm` ({RESULTS_SHA}).\n")
+    result = notes.verify_entry(config, EID)
+    assert not result["ok"]
+    assert [u["text"] for u in result["unmatched"]] == ["0.55", "0.77"]
+    _write_notes(project, f"Lattice `3.88` ({RESULTS_SHA}).\n")
+    assert notes.verify_entry(config, EID)["ok"]
+
+
+def test_identifiers_and_key_paths_in_backticks_are_still_not_numbers(project, config):
+    _write_notes(project, f"""Sample `S-9`, `RuO2`, entry `xrd-1a2b3c` and `xrd:lab:S-1_a.xrdml`,
+keys `xrd.a.fcc`, `fit.peaks[3].center`, `peaks[0]`, check `wh_unreliable`, sha `{RESULTS_SHA}`.
+Lattice 3.88 (results.json sha256 {RESULTS_SHA}).
+""")
+    result = notes.verify_entry(config, EID)
+    assert result["ok"], result["unmatched"]
+    assert result["numbers_checked"] == 1
+    _write_notes(project, f"Hidden `x[3]` is an index; but prose peaks[7] and `7` are numbers "
+                          f"({RESULTS_SHA}).\n")
+    assert [u["text"] for u in notes.verify_entry(config, EID)["unmatched"]] == ["7", "7"]
+
+
+def test_notes_that_passed_under_rules_1_with_a_number_in_backticks_stay_valid(project, config):
+    text = f"Lattice 3.88 and `0.55` ({RESULTS_SHA}).\n"
+    path = _write_notes(project, text)
+    assert not notes.verify_entry(config, EID)["ok"]            # not under the current rules
+    manifest_file = project / "manifest.json"
+    data = json.loads(manifest_file.read_text(encoding="utf-8"))
+    data["entries"][EID]["notes_check"] = {
+        "rules": 1, "labpipe": "v0.3.0", "results_sha256": RESULTS_SHA,
+        "notes_sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "utc": "2026-01-01T00:00:00Z"}
+    manifest_file.write_text(json.dumps(data), encoding="utf-8", newline="")
+    result = notes.verify_entry(config, EID)
+    assert result["ok"] and result["checked_with"] == {"rules": 1, "labpipe": "v0.3.0"}
+    assert result["problems_under_current_rules"]
+    assert notes.todo(config) == []
+    _write_notes(project, text.replace("0.55", "0.56"))         # changed text: no old pass
+    assert not notes.verify_entry(config, EID)["ok"]

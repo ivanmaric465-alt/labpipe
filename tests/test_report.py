@@ -246,6 +246,19 @@ def test_notes_that_passed_under_older_rules_are_shown_as_passed_with_a_line(
     assert "checked with the rules" not in _cards(build(project, config)[1])
 
 
+def test_the_card_calls_the_automatic_check_by_its_name_and_not_a_review(
+        project, config, monkeypatch):
+    label = "numbers checked against results.json by labpipe; not a review"
+    monkeypatch.setattr(report, "verify_entry", lambda config, eid: {"ok": True})
+    assert _cards(build(project, config)[1]).count(label) == 1      # the one card with notes
+    monkeypatch.setattr(report, "verify_entry", lambda config, eid: {"ok": False})
+    page = _cards(build(project, config)[1])
+    assert label not in page and "did not pass" in page             # a failure is not labelled
+    box = _howto(build(project, config)[1])
+    assert "not that it is used in the right place" in box and "a person still reads them" in box
+    assert "labpipe does not judge them" in box
+
+
 def _howto(page):
     match = re.search(r"<details class=howto>.*?</details>", page, re.S)
     return match.group(0) if match else None

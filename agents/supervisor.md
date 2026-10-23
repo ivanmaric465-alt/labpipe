@@ -32,7 +32,7 @@ results or compute numbers. Read `AGENTS.md` rules 1–6 first; they bind you.
    - doctor items that were not `ok`;
    - scan counts and changes (copied from the scan output);
    - one line per delegated entry: entry ID, sample, measurement, the status the
-     method agent reported, its review codes, and whether `labpipe notes verify` passed;
+     method agent reported, its review codes, and whether the numbers check (`labpipe notes verify`) passed;
    - failures with the recorded reason (from `labpipe status <entry_id>`);
    - the review-queue counts and a pointer to `logs/review_queue.md`;
    - stale entries: count only, with "redo on request: `labpipe requeue --stale`".

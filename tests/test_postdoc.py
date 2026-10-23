@@ -447,22 +447,22 @@ def test_verify_records_the_rules_and_the_release(config, project):
     from labpipe import __version__
     run = _run(config, project, _text())
     result = postdoc.verify(config, run)
-    assert result["ok"] and result["rules"] == postdoc.CHECKS_VERSION == 1
+    assert result["ok"] and result["rules"] == postdoc.CHECKS_VERSION == 2
     assert result["labpipe"] == __version__
     row = postdoc.list_runs(config)[0]
-    assert row["rules"] == 1 and row["older_rules"] is False
+    assert row["rules"] == 2 and row["older_rules"] is False
 
 
 def test_an_analysis_that_passed_stays_verified_when_the_rules_get_stricter(
         config, project, monkeypatch):
     run = _run(config, project, _text())
     assert postdoc.verify(config, run)["ok"]
-    monkeypatch.setattr(postdoc, "CHECKS_VERSION", 2)
+    monkeypatch.setattr(postdoc, "CHECKS_VERSION", 3)
     row = postdoc.list_runs(config)[0]
-    assert row["state"] == "verified" and row["older_rules"] is True and row["rules"] == 1
+    assert row["state"] == "verified" and row["older_rules"] is True and row["rules"] == 2
     again = postdoc.verify(config, run)
-    assert again["ok"] and again["unchanged"] and again["rules"] == 1     # not checked again
-    # a verify.json from before the versions were recorded passed under rules 1
+    assert again["ok"] and again["unchanged"] and again["rules"] == 2     # not checked again
+    # a verify.json from before the versions were recorded passed under rules 1 (older still)
     path = project / "analysis" / "_postdoc" / run / "verify.json"
     recorded = json.loads(path.read_text(encoding="utf-8"))
     del recorded["rules"], recorded["labpipe"]
@@ -474,8 +474,10 @@ def test_an_analysis_that_passed_stays_verified_when_the_rules_get_stricter(
 def test_the_report_says_which_rules_an_older_analysis_passed(config, project, monkeypatch):
     run = _run(config, project, _text())
     assert postdoc.verify(config, run)["ok"]
-    assert "checked with the rules" not in _section(config, monkeypatch, project)
-    monkeypatch.setattr(postdoc, "CHECKS_VERSION", 2)
+    first = _section(config, monkeypatch, project)
+    assert "checked with the rules" not in first
+    assert "numbers checked against the sources by labpipe; not a review" in first
+    monkeypatch.setattr(postdoc, "CHECKS_VERSION", 3)
     section = _section(config, monkeypatch, project)
     from labpipe import __version__
     assert f"checked with the rules of labpipe {__version__}" in section

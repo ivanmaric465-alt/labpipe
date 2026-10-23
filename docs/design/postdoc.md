@@ -154,7 +154,7 @@ must look different:
 `context/instructions.md` can ask for a structure or a focus; the template suggests one, e.g.
 "insights and ideas" and "suggested next steps".
 
-**`labpipe postdoc verify RUN`** checks only what keeps the text honest, not its content:
+**`labpipe postdoc verify RUN`** checks numbers against the sources, not the content (a person still reads it):
 - every number in `analysis.md` is in `dataset.json`, a `compare-N.json`, or the
   `results.json` of a measurement the text names. Free text without numbers is never
   restricted;

@@ -1,7 +1,8 @@
 """`labpipe report`: one self-contained HTML page for people (analysis/report.html).
 
 Built only from results.json, plot.png and notes.md (deterministic apart from
-the agent's plain-words summary, which `labpipe notes verify` has checked).
+the agent's plain-words summary, whose numbers `labpipe notes verify` has checked against
+results.json; a person has not necessarily read it).
 Each method may provide a summary module (methods.yaml → `summary`) with
 `summarize(results) -> {"overview": {...}, "check_before_using": [...], ...}`;
 methods without one get a generic card. Methods with `report: gallery` (SEM) get
@@ -409,6 +410,9 @@ def _rules_line(labpipe_version: str | None) -> str:
     return f"<p class=meta>checked with the rules of {which}</p>"
 
 
+AUTO_CHECK = "numbers checked against results.json by labpipe; not a review"
+
+
 def _removed_files(entry: dict, summary: dict, gone: set[tuple]) -> dict:
     """Your own analysis: a file of the measurement that was removed from the data folder after
     the analysis stays in the card (the copy made then) and the card says so, first under
@@ -467,8 +471,10 @@ def _card(entry: dict, results: dict, summary: dict, notes_text: str | None,
         if notes_ok is False:
             plain = ('<p class=warnbox>These notes did not pass <code>labpipe notes verify'
                      '</code>; read them with care.</p>') + plain
-        elif checked_with:
-            plain += _rules_line(checked_with.get("labpipe"))
+        elif notes_ok:
+            plain += f"<p class=meta>{AUTO_CHECK}</p>"
+            if checked_with:
+                plain += _rules_line(checked_with.get("labpipe"))
     # your own analyses have no labpipe settings to show (made outside labpipe)
     settings_used = [] if results.get("made_by") == "outside labpipe" else _settings_used(out)
     steer_html = ("<h3>Settings beyond the defaults</h3><ul class=know>" + "".join(
@@ -643,6 +649,8 @@ def _postdoc_section(config: dict, anchors: dict[str, str]) -> str:
             verified.get("model") and f"model {verified['model']}", verified.get("harness"),
             f"run {verified['run']}") if x)
         parts.append(f"<p class=meta>{_date(verified)} · {meta}</p>")
+        parts.append("<p class=meta>numbers checked against the sources by labpipe; "
+                     "not a review</p>")
         if verified.get("older_rules"):
             parts.append(_rules_line(verified.get("labpipe")))
         if not fresh["up_to_date"]:
@@ -868,12 +876,13 @@ def _how_to_read(settings: dict, records: list[dict], banner: str,
                if stale else "") + ".")
     if cards:
         bullets.append("<b>Check before using</b>: points the analysis itself flagged for a "
-                       "human to look at; read them before using a number."
+                       "person to look at; labpipe does not judge them, read them before using a number."
                        + ("" if compact else " <b>Worth knowing</b> lists lesser remarks."))
     if cards and not compact:
         bullets.append(
-            "<b>In plain words</b>: the notes of an AI analyst. They are checked by code "
-            "(<code>labpipe notes verify</code>): numbers must match the results. A warning box "
+            "<b>In plain words</b>: the notes of an AI analyst. Code checks only that each number "
+            "is found in the results (<code>labpipe notes verify</code>), not that it is used in "
+            "the right place or that the text is right; a person still reads them. A warning box "
             "means they failed that check; &ldquo;checked with the rules of labpipe X&rdquo; means "
             "they passed the checks of that older release.")
     if states & set(MARKS):
