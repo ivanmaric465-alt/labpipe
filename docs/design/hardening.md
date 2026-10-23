@@ -175,6 +175,28 @@ of `lab/methods/…` it runs the old code but records the version of the new sou
   old folder), AI notes included. Better: the new entry takes over the old one's results and
   notes, with replay finding the input at its new place by sha256.
 
+  **Built:** `scanner._keep_moved_analyses` (after the pass that marks gone files `missing`,
+  before duplicates): an entry that became pending "new file" in this scan takes over the one
+  `missing` entry that has the same method, sha256, sample ID and measurement ID, was `done` when
+  it went missing (its events), holds a folder with `provenance.json`, has the method's current
+  analysis version and settings (`settings.compare_entry` for the new entry) and the same
+  companions (base name and sha256 of `analysed_companions` and `companions`). Zero or several
+  candidates (or one claimed by two new entries): nothing is guessed, the file is analysed again
+  as before. `manifest.take_over_analysis` copies `ANALYSIS_FIELDS` (what `analyze_entry` and
+  `replot_entry` write, plus `notes_check`) and sets `done` "moved from <path>; its analysis is
+  kept"; the old entry loses `output_dir`, gets `output_moved_to`, stays `missing`. Provenance is
+  not edited: `other_owner` already counts the same input sha256 as the same owner, and replay
+  looks in the manifest for a non-missing entry of the method with the recorded sha256 when the
+  recorded path and raw root + relative path do not exist (`replay._moved_input`; note "input
+  moved: found at <path> by its sha256"). `notes verify`, `notes todo` and the report read the
+  manifest entry, so they work unchanged; the card shows the current path.
+  - A **renamed** file has another measurement ID, and its results.json and notes name the old
+    one: it is analysed again (into the old folder, A1), AI notes included.
+  - Files of an imported kind are excluded: their provenance lists several source paths.
+  - `index.json` is not touched by the scan (it never was for status changes); the next analysis
+    in the sample rewrites it.
+  - The A1 test of a moved file now renames the file: a plain move no longer needs the folder rule.
+
 ## C. Later
 
 - **Context documents:** symlinks out of `context/documents/` are refused, and unpacking and

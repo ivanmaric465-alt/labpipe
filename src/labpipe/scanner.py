@@ -31,6 +31,12 @@
   the others are recorded as duplicate ("part of the measurement"), and when one of them is new
   or changed its primary is analysed again. The sample ID comes from the file name, or with
   `sample_from: folder` from the name of its folder;
+* a moved file (the same content at a new place; its old entry is now missing): when the old entry
+  was done, has the current analysis version and settings, its folder (with provenance.json)
+  and the same companions, and the new one has the same sample and measurement ID, the new entry
+  takes the analysis over as done, without a new run or new AI notes (manifest.take_over_analysis).
+  A renamed file (another measurement ID), a changed one, or more than one candidate: analysed
+  again, as a new file;
 * a file byte-identical to another file of the same method (e.g. "X - Copy.htm")
   is recorded as duplicate of the one with the shortest path, not analysed;
 * baseline=True (setup, "only new files from now on"): files seen for the first
@@ -189,6 +195,63 @@ def _changed_since_failure(entry: dict[str, Any], versions: dict[str, Any],
     if then is None:
         return entry.get("code_version") != current_code
     return then != versions["analysis_version"]
+
+
+def _was_done(entry: dict[str, Any]) -> bool:
+    """A missing entry that was done when its file went missing (its last event says so)."""
+    gone = [e for e in entry.get("events", []) if e.get("to") == "missing"]
+    return bool(gone) and gone[-1].get("from") == "done"
+
+
+def _base_sha(companions: dict[str, str] | None) -> list[tuple[str, str]]:
+    return sorted((name.rsplit("/", 1)[-1], digest) for name, digest in (companions or {}).items())
+
+
+def _old_place(entries: dict[str, Any], new: dict[str, Any], versions: dict[str, Any],
+               imported: frozenset[str]) -> dict[str, Any] | None:
+    """The missing entry whose analysis a new entry (a file not seen before) can keep, or None.
+
+    All must hold: same method, content, sample and measurement ID (a renamed file has another
+    measurement ID: its results and notes name the old one, so it is analysed again); the old
+    one was done, holds a folder with provenance.json, has the current analysis version and
+    settings (for the new entry), and the same companions (base name and sha256). Exactly one
+    such entry, else nothing is guessed."""
+    if new["method"] in imported or not new.get("sample_id") or not new.get("sha256"):
+        return None
+    found = [e for e in entries.values()
+             if e is not new and e.get("status") == "missing" and e.get("output_dir")
+             and e["method"] == new["method"] and e.get("sha256") == new["sha256"]
+             and e.get("sample_id") == new["sample_id"]
+             and e.get("measurement_id") == new["measurement_id"] and _was_done(e)
+             and (PROJECT_ROOT / e["output_dir"] / "provenance.json").is_file()
+             and e.get("analysis_version") == versions[new["method"]]["analysis_version"]
+             and _base_sha(e.get("analysed_companions")) == _base_sha(new.get("companions"))]
+    if len(found) != 1:
+        return None
+    resolved = settings_mod.resolve(new["method"], new["sample_id"], new["measurement_id"])[0]
+    state = settings_mod.compare_entry(found[0], resolved)
+    return found[0] if found[0].get("settings_sha256") and state["analysis_current"] else None
+
+
+def _keep_moved_analyses(entries: dict[str, Any], changes: list[dict[str, Any]],
+                         counts: Counter, versions: dict[str, Any],
+                         imported: frozenset[str]) -> None:
+    """A file moved in the data folder keeps its analysis (and its notes): the entry that is new
+    in this scan takes over the done analysis of its old place (`_old_place`) instead of being
+    analysed again. An old place claimed by two new entries is left alone."""
+    pairs = [(change, entries[change["entry_id"]]) for change in changes
+             if change["to"] == "pending" and change["reason"] == "new file"]
+    claims = [(change, new, _old_place(entries, new, versions, imported)) for change, new in pairs]
+    taken = Counter(id(old) for _, _, old in claims if old is not None)
+    for change, new, old in claims:
+        if old is None or taken[id(old)] != 1:
+            continue
+        resolved = settings_mod.resolve(new["method"], new["sample_id"], new["measurement_id"])[0]
+        mf.take_over_analysis(old, new)
+        new.update(settings_mod.compare_entry(new, resolved)["adopt"])
+        change.update({"to": "done", "reason": new["status_reason"]})
+        counts["pending"] -= 1
+        counts["done"] += 1
 
 
 def sample_id_for(relative: str, spec: dict[str, Any], config: dict, overrides: dict[str, str]):
@@ -426,8 +489,10 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                 changes.append({"entry_id": eid, "relative_path": entry["relative_path"],
                                 "from": old, "to": "missing", "reason": entry["status_reason"]})
                 counts["missing"] += 1
-        _content_duplicates(entries, changes, counts, frozenset(
-            name for name, spec in methods.items() if spec.get("kind") == "imported"))
+        imported = frozenset(name for name, spec in methods.items()
+                             if spec.get("kind") == "imported")
+        _keep_moved_analyses(entries, changes, counts, versions, imported)
+        _content_duplicates(entries, changes, counts, imported)
         for change in mf.separate_shared_output_dirs(config, data):
             changes.append(change)
             counts[change["from"]] -= 1

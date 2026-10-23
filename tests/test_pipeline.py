@@ -624,9 +624,8 @@ def test_a_moved_file_takes_its_output_folder_along(tmp_path):
     _labpipe(env, "scan")
     (first,) = _labpipe(env, "pending")
     done = _labpipe(env, "xrd", "analyze", "--entry", first["entry_id"])
-    (raw / "XRD" / "2026-03").mkdir()
-    (raw / "XRD" / "S-1_scan.xrdml").rename(raw / "XRD" / "2026-03" / "S-1_scan.xrdml")   # reorganised
-    _labpipe(env, "scan")
+    (raw / "XRD" / "S-1_scan.xrdml").rename(raw / "XRD" / "S-1_scan_renamed.xrdml")   # renamed:
+    _labpipe(env, "scan")                                       # another measurement ID, so again
     (moved,) = _labpipe(env, "pending")
     again = _labpipe(env, "xrd", "analyze", "--entry", moved["entry_id"])
     assert again["status"] == "done" and again["output_dir"] == done["output_dir"]   # no ~ folder
@@ -637,6 +636,99 @@ def test_a_moved_file_takes_its_output_folder_along(tmp_path):
     assert sorted(p.name for p in (project / "analysis/S-1/xrd").iterdir()) == [
         "S-1_scan", "_superseded", "index.json"]                         # no ~ folder
     assert not [i for i in _labpipe(env, "doctor")["checks"] if i["check"] == "shared_output_dirs"]
+
+
+def _moved_project(tmp_path, seed=3):
+    """S-1 analysed, with a notes.md; returns (project, raw, env, first entry id, analyse result)."""
+    project, raw, env = _project(tmp_path)
+    positions = fcc_positions(3.8898)
+    peaks = [(positions[i], h, 1.2 + 0.3 * i, 0.6) for i, h in enumerate((6000.0, 3000.0, 2200.0, 2000.0))]
+    x, y = synthetic_pattern(peaks, seed=seed)
+    (raw / "XRD" / "S-1_scan.xrdml").write_text(xrdml_text(x, y, "S-1"), encoding="utf-8")
+    _labpipe(env, "scan")
+    (first,) = _labpipe(env, "pending")
+    done = _labpipe(env, "xrd", "analyze", "--entry", first["entry_id"])
+    (project / done["output_dir"] / "notes.md").write_text("Reviewed by hand.\n", encoding="utf-8")
+    (raw / "XRD" / "2026-03").mkdir()
+    return project, raw, env, first["entry_id"], done
+
+
+def test_a_moved_file_keeps_its_analysis_and_notes(tmp_path):
+    project, raw, env, old_id, done = _moved_project(tmp_path)
+    before = _manifest(project)[old_id]
+    (raw / "XRD" / "S-1_scan.xrdml").rename(raw / "XRD" / "2026-03" / "S-1_scan.xrdml")
+    scan = _labpipe(env, "scan")
+    assert _labpipe(env, "pending") == []                       # nothing to analyse
+    (change,) = [c for c in scan["changes"] if c["to"] == "done"]
+    assert change["reason"] == "moved from XRD/S-1_scan.xrdml; its analysis is kept"
+    entries = _manifest(project)
+    (new_id,) = [e for e in entries if e != old_id]
+    new, old = entries[new_id], entries[old_id]
+    assert new["status"] == "done" and new["relative_path"] == "XRD/2026-03/S-1_scan.xrdml"
+    assert new["output_dir"] == done["output_dir"] and new["attempts"] == 0   # not run
+    for key in ("results_sha256", "settings_sha256", "plot_sha256", "analysis_version",
+                "code_version", "review", "last_processed_utc"):
+        assert new[key] == before[key]
+    assert old["status"] == "missing" and "output_dir" not in old
+    assert old["output_moved_to"] == new_id
+    assert (project / done["output_dir"] / "notes.md").read_text(encoding="utf-8") == "Reviewed by hand.\n"
+    assert not (project / done["output_dir"].rsplit("/", 1)[0] / "_superseded").exists()
+    assert _labpipe(env, "scan")["changes"] == []
+    verify = _labpipe(env, "notes", "verify", "--entry", new_id)
+    assert verify["entry_id"] == new_id and not [p for p in verify["problems"] if "missing" in p or "no analysed" in p], verify
+    assert [r["entry_id"] for r in _labpipe(env, "notes", "todo")] != [old_id]
+    page = (project / _labpipe(env, "report")["report"]).read_text(encoding="utf-8")
+    assert "XRD/2026-03/S-1_scan.xrdml" in page and "XRD/S-1_scan.xrdml<" not in page
+
+
+def test_replay_finds_a_moved_input_by_its_sha256(tmp_path):
+    project, raw, env, old_id, done = _moved_project(tmp_path)
+    (raw / "XRD" / "S-1_scan.xrdml").rename(raw / "XRD" / "2026-03" / "S-1_scan.xrdml")
+    _labpipe(env, "scan")
+    replay = _labpipe(env, "replay", str(project / done["output_dir"] / "provenance.json"))
+    assert replay["all_outputs_identical"], replay
+    assert ("input moved: found at XRD/2026-03/S-1_scan.xrdml by its sha256") in replay["notes"]
+
+
+def test_a_changed_or_other_moved_file_is_analysed_again(tmp_path):
+    project, raw, env, old_id, done = _moved_project(tmp_path)
+    (raw / "XRD" / "S-1_scan.xrdml").unlink()
+    positions = fcc_positions(3.8898)
+    x, y = synthetic_pattern([(positions[0], 5000.0, 1.3, 0.6)], seed=9)
+    (raw / "XRD" / "2026-03" / "S-1_scan.xrdml").write_text(xrdml_text(x, y, "S-1"), encoding="utf-8")
+    _labpipe(env, "scan")
+    (again,) = _labpipe(env, "pending")                         # other content: a new file
+    assert again["relative_path"] == "XRD/2026-03/S-1_scan.xrdml"
+    assert _manifest(project)[old_id]["status"] == "missing"
+
+
+def test_a_moved_file_with_changed_settings_is_analysed_again(tmp_path):
+    project, raw, env, old_id, done = _moved_project(tmp_path)
+    (raw / "XRD" / "S-1_scan.xrdml").rename(raw / "XRD" / "2026-03" / "S-1_scan.xrdml")
+    measurements = project / "config" / "measurements" / "xrd"
+    measurements.mkdir(parents=True)
+    (measurements / "S-1_scan.yaml").write_text("background:\n  order: 3\n",
+                                                encoding="utf-8")
+    scan = _labpipe(env, "scan")
+    assert [c["to"] for c in scan["changes"] if c["reason"] == "new file"] == ["pending"]
+    (moved,) = _labpipe(env, "pending")
+    assert moved["relative_path"] == "XRD/2026-03/S-1_scan.xrdml"
+
+
+def test_two_old_places_are_not_guessed_between(tmp_path):
+    project, raw, env, old_id, done = _moved_project(tmp_path)
+    entries = _manifest(project)
+    copy = json.loads(json.dumps(entries[old_id]))
+    copy.update(entry_id=old_id + "-b", relative_path="XRD/gone/S-1_scan.xrdml",
+                output_dir=entries[old_id]["output_dir"] + "~b")
+    shutil.copytree(project / entries[old_id]["output_dir"], project / copy["output_dir"])
+    entries[copy["entry_id"]] = copy
+    (project / "manifest.json").write_text(
+        json.dumps({"schema": "labpipe.manifest/1", "entries": entries}), encoding="utf-8")
+    (raw / "XRD" / "S-1_scan.xrdml").rename(raw / "XRD" / "2026-03" / "S-1_scan.xrdml")
+    _labpipe(env, "scan")
+    (moved,) = _labpipe(env, "pending")
+    assert moved["relative_path"] == "XRD/2026-03/S-1_scan.xrdml"
 
 
 def test_doctor_names_output_folders_shared_by_two_files(tmp_path):

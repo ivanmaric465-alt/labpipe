@@ -5,8 +5,9 @@ and the reference files (checked by sha256). The code must match: the method's a
 plot version (records made since per-method versions), else the recorded commit, clean
 (older records). A different commit with equal versions is only noted. --force compares
 anyway. Output goes to logs/replay/<stamp>/. Every recorded output is compared (thumb.jpg too).
-A different python, library, requirements.lock or runtime is a warning in `notes`, not a
-refusal. A comparison figure (analysis/_compare/) is redrawn from the data recorded in its
+An input that is no longer at its recorded place is looked for in the manifest by its sha256
+(a moved file: "input moved: found at <path>" in `notes`). A different python, library, requirements.lock or runtime is a warning in `notes`,
+not a refusal. A comparison figure (analysis/_compare/) is redrawn from the data recorded in its
 provenance (`labpipe.compare.replay`).
 """
 
@@ -65,6 +66,26 @@ def _input_path(recorded: dict, config: dict) -> Path:
     return path
 
 
+def _moved_input(recorded: dict, method: str, config: dict) -> tuple[Path, str] | None:
+    """The input at its new place: a file of the manifest (not missing) of the same method
+    whose sha256 is the recorded one. (path, its relative path), or None. For a file that was
+    moved in the data folder after the analysis, which provenance.json still names at the old
+    place."""
+    from labpipe import manifest as mf
+    try:
+        entries = mf.load(config)["entries"].values()
+    except (OSError, ValueError, RuntimeError):
+        return None
+    for entry in sorted(entries, key=lambda e: e["entry_id"]):
+        if (entry.get("sha256") == recorded.get("sha256") and entry.get("method") == method
+                and entry.get("status") not in ("missing", "duplicate", "ignored")):
+            for root in config.get("raw_roots", []):
+                path = Path(root["path"]) / entry["relative_path"]
+                if root["id"] == entry["raw_root"] and path.is_file():
+                    return path, entry["relative_path"]
+    return None
+
+
 def _check_outside(record: dict, provenance_path: Path, config: dict) -> dict[str, Any]:
     """An analysis made outside labpipe (kind imported) cannot be redrawn. Check instead that
     each source file is still there with the recorded sha256, and that the copies labpipe made
@@ -117,6 +138,10 @@ def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[
         if recorded.get("dirty"):
             problems.append("the original run was made from a dirty working tree")
     input_path = _input_path(record["input"], config)
+    if not input_path.exists() and (moved := _moved_input(record["input"], record["method"],
+                                                          config)):
+        input_path = moved[0]
+        notes.append(f"input moved: found at {moved[1]} by its sha256")
     if not input_path.exists():
         return {"error": f"input not found: {input_path}"}
     if sha256_file(input_path) != record["input"]["sha256"]:
