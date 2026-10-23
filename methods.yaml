@@ -5,7 +5,8 @@
 # and, if the method names one, whose `recognise: module:function` content check
 # accepts it (for file types several methods share, e.g. .txt).
 # `companions: module:function` (optional) names the other files a method reads
-# (function(path) -> list of Paths that exist now); they are hashed with the main file.
+# (function(path, settings) -> list of Paths that exist now, settings = the measurement's
+# resolved settings); they are hashed with the main file.
 schema: labpipe.methods/1
 
 methods:
@@ -51,7 +52,7 @@ methods:
     patterns: ["**/*.htm", "**/*.html"]
     ignore: ["**/*.jpg", "**/*.jpeg", "**/*.ipj"]   # linked images and INCA projects belong to a report
     recognise: labpipe.methods.eds.analyze:recognise   # only INCA reports and what they link
-    companions: labpipe.methods.eds.inputs:companions  # the images the report links
+    companions: labpipe.methods.eds.inputs:companions  # its images (linked, or chosen with `images:`)
     subagent: eds-analyst
     cli: "labpipe eds analyze --entry {entry_id}"
     module: labpipe.methods.eds.analyze

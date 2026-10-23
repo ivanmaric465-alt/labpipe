@@ -90,10 +90,10 @@ If other methods use the same file type (`.txt`, `.jpg`), add a content check:
 If the analysis reads other files besides the main one (a metadata file, linked images), name them, so that a change to one of them makes the measurement out of date:
 
 ```yaml
-    companions: labpipe.methods.sem.inputs:companions   # companions(path) -> list of Paths, read-only
+    companions: labpipe.methods.sem.inputs:companions   # companions(path, settings) -> list of Paths, read-only
 ```
 
-`companions(input_path)` returns the other files the analysis reads that exist now. labpipe hashes them with the main file (`companions` in the manifest) and again after each analysis (`analysed_companions`); a companion that changes, appears or disappears sends the done or stale entry back to pending ("companion S-1 a001.txt changed"). Put the function in its own module (it may import from `analyze`, never the other way round, so the analysis version does not change). Also allowed in a lab method (`labpipe_lab.<name>…` or `labpipe.`).
+`companions(input_path, settings)` returns the other files the analysis reads that exist now (`settings`: the measurement's resolved settings, for a method whose settings choose files). labpipe hashes them with the main file (`companions` in the manifest) and again after each analysis (`analysed_companions`); a companion that changes, appears or disappears sends the done or stale entry back to pending ("companion S-1 a001.txt changed"). Put the function in its own module (it may import from `analyze`, never the other way round, so the analysis version does not change). Also allowed in a lab method (`labpipe_lab.<name>…` or `labpipe.`).
 
 Reused code from another project: port it into the package and record the source commit and every behaviour change (as `docs/PORTING.md` does for XRD).
 

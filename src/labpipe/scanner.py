@@ -338,7 +338,8 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                 current = None      # the companion files and their hashes, for an analysed entry
                 if kind != "ignore" and not primary and spec.get("companions"):
                     try:
-                        current = entry["companions"] = input_companions(spec, root_path, relative)
+                        current = entry["companions"] = input_companions(spec, root_path, relative, (
+                            settings_mod.resolve(method, sample, mid)[0] if sample else {}))
                     except OSError:
                         pass        # not readable now: the last record stays
 

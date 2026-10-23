@@ -10,8 +10,9 @@ lab's own (lab/methods.yaml), so a lab method never takes a file from a shipped 
 root (e.g. the watcher's cheap snapshot) only globs count.
 
 `companions: package.module:function` (optional) names the other files a method reads besides
-the main one (the SEM .txt, the images an EDS report links): function(path) -> list of Paths
-that exist now (it must only read). `input_companions` hashes them; the scanner and the
+the main one (the SEM .txt, the images an EDS report links or its settings choose):
+function(path, settings) -> list of Paths that exist now, `settings` being the measurement's
+resolved settings (it must only read). `input_companions` hashes them; the scanner and the
 pipeline compare those hashes, so a companion that changes, appears or disappears makes the
 measurement out of date.
 
@@ -122,16 +123,18 @@ def classify(relative_path: str, methods: dict[str, dict[str, Any]],
 
 
 @cache
-def _companion_finder(target: str) -> Callable[[Path], list[Path]]:
+def _companion_finder(target: str) -> Callable[[Path, dict], list[Path]]:
     module, _, function = target.partition(":")
     return getattr(importlib.import_module(module), function)
 
 
-def input_companions(spec: dict[str, Any], root: Path, relative_path: str) -> dict[str, str] | None:
+def input_companions(spec: dict[str, Any], root: Path, relative_path: str,
+                     settings: dict[str, Any]) -> dict[str, str] | None:
     """{path relative to the raw root (posix): sha256} of the companion files the method reads
-    for this file; None when the method names none (no `companions:`). Only reads."""
+    for this file with these (resolved) settings; None when the method names none (no
+    `companions:`). Only reads."""
     if not spec.get("companions"):
         return None
-    found = _companion_finder(spec["companions"])(Path(root) / relative_path)
+    found = _companion_finder(spec["companions"])(Path(root) / relative_path, settings)
     return {Path(path).relative_to(root).as_posix(): sha256_file(Path(path))
             for path in sorted(found, key=lambda p: str(p))}

@@ -125,9 +125,9 @@ of `lab/methods/…` it runs the old code but records the version of the new sou
 
   **Built:** `companions: <module>:<function>` in methods.yaml (shipped and lab methods;
   `registry.input_companions` hashes them). SEM: `methods/sem/inputs.py` (the JEOL `.txt`);
-  EDS: `methods/eds/inputs.py` (the linked images that exist, found with analyze's own
-  `_linked_images` and `find_image`; images chosen with `images:` in the settings are not
-  included, the settings are tracked on their own). The scanner records `companions` in the
+  EDS: `methods/eds/inputs.py` (the images that exist, found with analyze's own
+  `_linked_images` and `find_image`: those chosen with `images:` in the settings, else the
+  linked ones; the function gets the measurement's resolved settings for that). The scanner records `companions` in the
   entry, the pipeline stores `analysed_companions` on `done`; a done or stale entry whose
   companions differ goes to pending ("companion <name> changed / appeared / is gone"), ahead of
   the stale and settings checks. An entry analysed before: its provenance `companions` (base

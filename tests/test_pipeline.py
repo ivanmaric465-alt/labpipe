@@ -729,6 +729,23 @@ def test_a_changed_companion_outranks_stale_settings(tmp_path):
     assert (entry["status"], entry["status_reason"]) == ("pending", "companion s-91.jpg changed")
 
 
+def test_eds_images_chosen_in_the_settings_are_its_companions(tmp_path):
+    project, env, main, eid, rescan = _companion_project(tmp_path, "eds")
+    chosen = main.parent / "s-95.jpg"
+    chosen.write_bytes((main.parent / "s-90.jpg").read_bytes())
+    settings = project / "config/measurements/eds/S-9.yaml"
+    settings.parent.mkdir(parents=True, exist_ok=True)
+    settings.write_text("images: [s-95.jpg]\n", encoding="utf-8")
+    entry = rescan()[1]
+    assert list(entry["companions"]) == ["EDS/s-95.jpg"] and entry["status"] == "pending"
+    assert _labpipe(env, "eds", "analyze", "--entry", eid)["status"] == "done"
+    (main.parent / "s-91.jpg").write_bytes(b"not read any more")
+    assert rescan()[1]["status"] == "done"
+    chosen.write_bytes(b"another picture")
+    entry = rescan()[1]
+    assert (entry["status"], entry["status_reason"]) == ("pending", "companion s-95.jpg changed")
+
+
 def _forget_analysed_companions(project, eid, provenance=None):
     manifest = project / "manifest.json"
     data = json.loads(manifest.read_text(encoding="utf-8"))

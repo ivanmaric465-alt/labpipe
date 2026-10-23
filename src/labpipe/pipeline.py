@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from labpipe import manifest as mf
+from labpipe import settings as settings_mod
 from labpipe import versions as versions_mod
 from labpipe.provenance import code_version, sha256_file, utc_now
 from labpipe.registry import input_companions, load_methods
@@ -90,7 +91,9 @@ def analyze_entry(config: dict, eid: str, *, rerun: bool = False) -> dict[str, A
         digest = sha256_file(input_path)
         if digest != entry["sha256"]:
             raise RuntimeError("file changed since the last scan; run `labpipe scan` first")
-        companions = input_companions(spec, Path(root["path"]), entry["relative_path"])
+        companions = input_companions(spec, Path(root["path"]), entry["relative_path"],
+                                      settings_mod.resolve(entry["method"], entry["sample_id"],
+                                                           entry["measurement_id"])[0])
         module = importlib.import_module(spec["module"])
         summary = module.run(input_path, staging, context={
             "sample_id": entry["sample_id"], "measurement_id": entry["measurement_id"],
