@@ -26,6 +26,11 @@ once analysed, `analysed_companions` (the same, as of that analysis). When they 
 puts a done or stale entry back to pending; an entry analysed before this adopts the current
 ones, or is compared with the `companions` of its provenance.json.
 
+A moved file (the same content at a new place in the data folder; its old entry is `missing`) whose
+old entry was done and is still current takes the analysis over without a new run
+(`take_over_analysis`; the old entry gets `output_moved_to`). Otherwise it is analysed again into
+the old folder (`choose_output_dir`).
+
 `output_dir` is chosen once, at an entry's first analysis (`choose_output_dir`), and kept: the
 readable `<measurement_id>`, or `<measurement_id>~<6 characters of the entry id>` when another
 entry holds that folder. A folder whose provenance.json names another entry is never written to
@@ -132,6 +137,30 @@ def _moved_from(data: dict[str, Any], entry: dict[str, Any], base: Path) -> dict
              and e.get("method") == entry["method"] and e.get("sha256") == entry["sha256"]
              and (PROJECT_ROOT / e["output_dir"]).parent == base]
     return found[0] if len(found) == 1 else None
+
+
+# What an analysis leaves in its manifest entry (analyze_entry and replot_entry write these).
+ANALYSIS_FIELDS = (
+    "output_dir", "results_sha256", "settings_sha256", "plot_sha256", "fingerprint_version",
+    "analysis_version", "plot_version", "code_version", "review", "review_codes", "notes_check",
+    "same_analysis_sha256", "analysed_companions", "plot_outdated", "plot_outdated_reason",
+    "plot_sha256_wanted", "replot_problem", "last_processed_utc", "last_replot_utc")
+
+
+def take_over_analysis(old: dict[str, Any], new: dict[str, Any]) -> None:
+    """The entry of a moved file (`new`) takes the analysis of its old place (`old`, `missing`).
+
+    Copies the analysis fields (`ANALYSIS_FIELDS`) and sets `new` to done ("moved from <old
+    path>; its analysis is kept"). `old` loses its `output_dir` and gets `output_moved_to`, as
+    in `_moved_from`; it stays missing. The folder and its provenance.json are not touched (the
+    provenance still names the old path and entry id: `other_owner` and replay cope)."""
+    for key in ANALYSIS_FIELDS:
+        new.pop(key, None)
+        if key in old:
+            new[key] = json.loads(json.dumps(old[key]))
+    old.pop("output_dir")
+    old["output_moved_to"] = new["entry_id"]
+    set_status(new, "done", f"moved from {old['relative_path']}; its analysis is kept")
 
 
 def choose_output_dir(config: dict, data: dict[str, Any], entry: dict[str, Any]) -> str:

@@ -57,6 +57,19 @@ older projects that share a folder (`manifest.separate_shared_output_dirs`: the 
 the others go back to pending; `shared_output_dirs` only reports). The report's anchors and
 card titles use the folder name.
 
+**A moved file keeps its analysis.** A file moved in the data folder (same content; its old
+entry turns `missing`) gets a new entry. When the old entry was done, is current (analysis
+version, analysis settings for the new entry, companions by base name and sha256), holds its
+folder with `provenance.json`, and has the same sample and measurement ID, and it is the only
+such entry, the scanner (`_keep_moved_analyses`) gives the new entry the old analysis fields
+(`manifest.take_over_analysis`) and sets it `done` ("moved from <path>; its analysis is kept"):
+no run, no new AI notes, `notes.md` stays. The old entry keeps `missing` and gets
+`output_moved_to`. The folder's `provenance.json` still names the old path and entry id (never
+edited): `other_owner` treats the same input sha256 as the same owner, and `labpipe replay` finds
+a moved input in the manifest by its sha256 (`replay._moved_input`; noted in `notes`). A renamed
+file (another measurement ID) or a file of an imported kind is analysed again, into the old
+folder (`choose_output_dir`). `index.json` is rewritten by the next analysis in that sample.
+
 **Automatic processing** (inside the container):
 1. The watcher notices new files and waits until they settle.
 2. It runs one pass: scan, then the code-only analyses and replots.
@@ -201,7 +214,7 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 |---|---|---|
 | Entry | `cli.py` | argparse commands; forwards host commands into the container in container mode |
 | State | `manifest.py` | load, save and lock `manifest.json`; status changes; the output folder rule (`choose_output_dir`, `other_owner`, `shared_output_dirs`) |
-| | `scanner.py` | raw roots → manifest; settle time, hashes, duplicates (identical content of one method; for an imported kind only within one sample; also the files of one measurement of an imported kind, and its sample from the folder name), out of date because a companion file changed, stale (analysis version or settings), plot out of date (plot version or settings), unrecognised files |
+| | `scanner.py` | raw roots → manifest; settle time, hashes, duplicates (identical content of one method; for an imported kind only within one sample; also the files of one measurement of an imported kind, and its sample from the folder name), a moved file keeps its analysis (`_keep_moved_analyses`), out of date because a companion file changed, stale (analysis version or settings), plot out of date (plot version or settings), unrecognised files |
 | | `registry.py` | `methods.yaml` and the lab's `lab/methods.yaml` (shipped first): patterns, `recognise:` and `companions:` hooks, ignore rules |
 | | `labmethods.py` | the lab's own methods: reads and checks `lab/methods.yaml`, makes `labpipe_lab.<name>` importable; fills in an entry `kind: imported` (module, summary, settings file, analyst) |
 | | `naming.py` | sample ID and measurement ID from file names |
