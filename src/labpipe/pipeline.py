@@ -22,7 +22,7 @@ from typing import Any
 from labpipe import manifest as mf
 from labpipe import versions as versions_mod
 from labpipe.provenance import code_version, sha256_file, utc_now
-from labpipe.registry import load_methods
+from labpipe.registry import input_companions, load_methods
 from labpipe.safety import PROJECT_ROOT, assert_pipeline_writable, atomic_write_text
 
 RUNNABLE = {"pending"}
@@ -83,12 +83,14 @@ def analyze_entry(config: dict, eid: str, *, rerun: bool = False) -> dict[str, A
     assert_pipeline_writable(staging, config)
 
     status, reason, summary = "failed", None, None
+    companions = None   # {path: sha256} of the other files the method reads
     versions = versions_mod.current(entry["method"])   # of the code this run uses
     try:
         _refuse_foreign(final, entry)
         digest = sha256_file(input_path)
         if digest != entry["sha256"]:
             raise RuntimeError("file changed since the last scan; run `labpipe scan` first")
+        companions = input_companions(spec, Path(root["path"]), entry["relative_path"])
         module = importlib.import_module(spec["module"])
         summary = module.run(input_path, staging, context={
             "sample_id": entry["sample_id"], "measurement_id": entry["measurement_id"],
@@ -126,6 +128,8 @@ def analyze_entry(config: dict, eid: str, *, rerun: bool = False) -> dict[str, A
             stored["settings_sha256"] = summary["settings_sha256"]
             stored["plot_sha256"] = summary.get("plot_sha256")
             stored["fingerprint_version"] = summary.get("fingerprint_version")
+            if companions is not None:
+                stored["analysed_companions"] = companions
             stored["plot_outdated"] = False
             for key in ("plot_outdated_reason", "plot_sha256_wanted", "replot_problem"):
                 stored.pop(key, None)

@@ -44,7 +44,7 @@ RESERVED = frozenset({
 })
 NAME = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
 # Entries of the registry that name a Python module (or module:function).
-MODULE_KEYS = ("module", "summary", "gallery", "recognise", "cli_extension", "compare")
+MODULE_KEYS = ("module", "summary", "gallery", "recognise", "companions", "cli_extension", "compare")
 KINDS = ("imported",)
 IMPORTED_MODULE = "labpipe.methods.imported"
 SAMPLE_FROM = ("file", "folder")
@@ -128,7 +128,8 @@ def _check_imported(where: str, name: str, spec: dict[str, Any]) -> None:
     if spec.get("sample_from", "file") not in SAMPLE_FROM:
         raise MethodsError(f"{where}: `sample_from` is 'file' (the sample ID is in the file name) "
                            f"or 'folder' (in the folder name), not {spec['sample_from']!r}")
-    for key in ("module", "summary", "config", "gallery", "recognise", "cli_extension"):
+    for key in ("module", "summary", "config", "gallery", "recognise", "companions",
+                "cli_extension"):
         if spec.get(key):
             raise MethodsError(f"{where}: `kind: imported` brings its own `{key}`; remove it "
                                "(your own code would be a method of its own: "

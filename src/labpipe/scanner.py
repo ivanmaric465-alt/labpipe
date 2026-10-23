@@ -7,6 +7,13 @@
   change the method's calculation changes nothing. Settings that only concern the plots
   (`plot:` blocks, plot style) or another plot version leave it done and mark it
   `plot_outdated` (`labpipe replot` redraws);
+* a method with `companions` in methods.yaml (SEM: the JEOL .txt; EDS: the images the report
+  links): the entry records their hashes (`companions`, by path relative to the raw root). A
+  done or stale entry whose companions differ from the ones it was analysed with
+  (`analysed_companions`) goes back to pending, naming the file ("companion S-1 a001.txt
+  changed", "appeared", "is gone"), before the stale and settings checks, as a changed main file
+  does. An entry analysed before this adopts the current ones when its provenance.json lists
+  the same files and hashes (or lists none), and goes to pending when it does not;
 * done and analysed before versions existed: the current versions are adopted if the
   entry's code_version is the current, clean commit; otherwise it is marked stale;
 * stale, but its method's analysis version and its analysis settings are the current ones
@@ -39,6 +46,7 @@ Raw files are only ever opened for reading (hashing).
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from collections import Counter
@@ -53,7 +61,7 @@ from labpipe import settings as settings_mod
 from labpipe import versions as versions_mod
 from labpipe.naming import DEFAULT_SEPARATORS, derive_sample_id, entry_id, measurement_id
 from labpipe.provenance import code_version, sha256_file, utc_now
-from labpipe.registry import classify, load_methods, skip_reason, user_ignore
+from labpipe.registry import classify, input_companions, load_methods, skip_reason, user_ignore
 from labpipe.safety import PROJECT_ROOT
 
 
@@ -104,6 +112,45 @@ def _content_duplicates(entries: dict[str, dict[str, Any]], changes: list, count
             if not _is_content_duplicate(twin) or twin.get("duplicate_of") != keeper["entry_id"]:
                 twin["duplicate_of"] = keeper["entry_id"]
                 move(twin, "duplicate", f"identical content to {keeper['relative_path']}")
+
+
+def _companion_changes(then: dict[str, str], now: dict[str, str]) -> list[str]:
+    """What differs between two {path: sha256} sets of companions, as short phrases."""
+    name = lambda path: PurePosixPath(path).name      # noqa: E731
+    return ([f"{name(p)} changed" for p in sorted(then.keys() & now.keys()) if then[p] != now[p]]
+            + [f"{name(p)} appeared" for p in sorted(now.keys() - then.keys())]
+            + [f"{name(p)} is gone" for p in sorted(then.keys() - now.keys())])
+
+
+def _companion_reason(entry: dict[str, Any], current: dict[str, str] | None) -> str | None:
+    """Why a done or stale entry is out of date because a companion file changed, appeared or
+    disappeared (None: it is not). An entry analysed before companions were tracked has no
+    `analysed_companions`: the ones in its provenance.json are compared (by file name), and it
+    adopts the current ones when they agree or when the provenance lists none."""
+    if current is None:
+        return None
+    recorded = entry.get("analysed_companions")
+    if recorded is None:
+        try:
+            provenance = json.loads((PROJECT_ROOT / entry["output_dir"] / "provenance.json")
+                                    .read_text(encoding="utf-8"))
+            listed = {item["file"]: item["sha256"] for item in provenance["companions"]}
+        except (OSError, ValueError, KeyError, TypeError):
+            listed = None       # nothing to compare with
+        if listed is not None:
+            changes = _companion_changes(
+                listed, {PurePosixPath(path).name: sha for path, sha in current.items()})
+            if changes:
+                return _companion_text(changes)
+        entry["analysed_companions"] = dict(current)
+        return None
+    changes = _companion_changes(recorded, current)
+    return _companion_text(changes) if changes else None
+
+
+def _companion_text(changes: list[str]) -> str:
+    shown = [f"companion {change}" for change in changes[:3]]
+    return ", ".join(shown) + (f" and {len(changes) - 3} more" if len(changes) > 3 else "")
 
 
 def _stale_reason(entry: dict[str, Any], versions: dict[str, Any], current_code: str) -> str | None:
@@ -288,6 +335,12 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                         "code_version": entry.get("code_version"), "replaced_utc": utc_now()})
                     entry["attempts"] = 0
                 entry["sha256"] = digest
+                current = None      # the companion files and their hashes, for an analysed entry
+                if kind != "ignore" and not primary and spec.get("companions"):
+                    try:
+                        current = entry["companions"] = input_companions(spec, root_path, relative)
+                    except OSError:
+                        pass        # not readable now: the last record stays
 
                 old_status = entry.get("status")
                 if kind == "ignore":
@@ -310,6 +363,9 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                                   if previous_hash != digest else "file reappeared")
                 elif old_status == "needs_review":
                     mf.set_status(entry, "pending", "review resolved")
+                elif old_status in ("done", "stale") and (reason := _companion_reason(
+                        entry, current)):
+                    mf.set_status(entry, "pending", reason)
                 elif old_status == "done" and (reason := _stale_reason(
                         entry, versions[method], current_code)):
                     mf.set_status(entry, "stale", reason)

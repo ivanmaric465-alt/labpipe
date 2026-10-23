@@ -16,6 +16,7 @@ Status: APPROVED 2026-10-17 (gallery picks across both series). Implemented.
 
 ## How (deterministic)
 1. Recognise: a `.tif` counts as SEM only if a JEOL `.txt` with the same stem exists (`recognise:`); the `.txt` itself is claimed by SEM as a companion (not a measurement, not "unrecognised"). Other `.tif` files stay unrecognised and are shown to the user.
+   The `.txt` is also tracked as an input (`companions:`): if it changes, appears or disappears after the analysis, the image goes back to pending ("companion S-1 a001.txt changed") and is analysed again.
 2. Parse the `.txt` (UTF-8, falling back to cp1252; CRLF) into key/value pairs; numbers with their units.
 3. Read the TIFF (Pillow, already installed with matplotlib): check its size against `$CM_IMAGE_RES`.
 4. Pixel size and field of view from the scale bar (code; the label is parsed as value + unit nm/µm/mm).

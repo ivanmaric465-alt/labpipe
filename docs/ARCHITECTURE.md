@@ -200,8 +200,8 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 |---|---|---|
 | Entry | `cli.py` | argparse commands; forwards host commands into the container in container mode |
 | State | `manifest.py` | load, save and lock `manifest.json`; status changes; the output folder rule (`choose_output_dir`, `other_owner`, `shared_output_dirs`) |
-| | `scanner.py` | raw roots → manifest; settle time, hashes, duplicates (identical content of one method; for an imported kind only within one sample; also the files of one measurement of an imported kind, and its sample from the folder name), stale (analysis version or settings), plot out of date (plot version or settings), unrecognised files |
-| | `registry.py` | `methods.yaml` and the lab's `lab/methods.yaml` (shipped first): patterns, `recognise:` hooks, ignore rules |
+| | `scanner.py` | raw roots → manifest; settle time, hashes, duplicates (identical content of one method; for an imported kind only within one sample; also the files of one measurement of an imported kind, and its sample from the folder name), out of date because a companion file changed, stale (analysis version or settings), plot out of date (plot version or settings), unrecognised files |
+| | `registry.py` | `methods.yaml` and the lab's `lab/methods.yaml` (shipped first): patterns, `recognise:` and `companions:` hooks, ignore rules |
 | | `labmethods.py` | the lab's own methods: reads and checks `lab/methods.yaml`, makes `labpipe_lab.<name>` importable; fills in an entry `kind: imported` (module, summary, settings file, analyst) |
 | | `naming.py` | sample ID and measurement ID from file names |
 | | `inventory.py` | what is recognised in the data folder (read-only) |
@@ -278,6 +278,7 @@ A method is a package, registered in a methods file. Two homes, one contract:
 - **Optional**:
   - `summary.summarize` / `quantities`;
   - a `recognise:` content check;
+  - a `companions:` function (the other files the analysis reads: hashed, and a change makes the measurement out of date);
   - a `cli_extension`;
   - a `compare:` module (`figures(measurements, context)`, optional `COVERS`: the method's own comparison figures, docs/ADDING_A_METHOD.md);
   - `report: gallery` (+ `gallery.select`);
@@ -319,6 +320,12 @@ characters, stored per entry in `manifest.json` and in `provenance.json` → `co
   otherwise it is stale ("analysed before per-method versions; redo to be sure"). A stale entry
   whose analysis version and analysis settings are the current ones again (a rollback, a setting
   changed back) is done again ("current again").
+- **Companions**: a method with `companions:` in `methods.yaml` (SEM: the JEOL `.txt`; EDS: the
+  images the report links) has them hashed by the scanner (`companions` in the entry) and after
+  each analysis (`analysed_companions`). A done or stale entry whose companions differ goes back
+  to pending ("companion <name> changed / appeared / is gone"), before the stale and settings
+  checks. An entry from before this adopts the current companions if its `provenance.json` lists
+  the same files and hashes, or none; if they differ it goes to pending.
 - **Replay** needs the same analysis and plot versions; another commit is only noted.
 
 ## Settings migrations and versioned checks
