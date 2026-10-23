@@ -344,8 +344,12 @@ def test_the_watcher_restarts_when_lab_methods_change(tmp_path, monkeypatch):
     monkeypatch.setattr(automation, "_snapshot", lambda config: {})
     monkeypatch.setattr(automation, "_last_nightly", lambda config: None)
     monkeypatch.setattr(automation, "_log", lambda config, event: events.append(event))
-    monkeypatch.setattr(automation.time, "sleep",
-                        lambda seconds: method.write_text("x = 2\n", encoding="utf-8"))
+    # Only the watcher's own sleep edits the method: time.sleep itself is shared with
+    # subprocess, which sleeps while git (code_version) runs, before the watcher's first hash.
+    import time
+    from types import SimpleNamespace
+    monkeypatch.setattr(automation, "time", SimpleNamespace(
+        time=time.time, sleep=lambda seconds: method.write_text("x = 2\n", encoding="utf-8")))
     config = {"settle_minutes": 3, "logs_dir": "logs", "automation": {}}
     with pytest.raises(SystemExit) as stopped:
         automation.watch(config)
