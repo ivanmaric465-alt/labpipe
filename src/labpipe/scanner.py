@@ -63,6 +63,7 @@ import yaml
 
 from labpipe import manifest as mf
 from labpipe import migrations
+from labpipe import pipeline
 from labpipe import settings as settings_mod
 from labpipe import versions as versions_mod
 from labpipe.naming import DEFAULT_SEPARATORS, derive_sample_id, entry_id, measurement_id
@@ -289,7 +290,8 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
     versions = {name: versions_mod.current(name) for name in methods}
     now = time.time()
     counts: Counter[str] = Counter()
-    changes: list[dict[str, Any]] = []
+    # a crash between the two renames of a publication is rolled back first (hardening B2)
+    changes: list[dict[str, Any]] = pipeline.recover_publications(config)
 
     ignored = user_ignore()
     new_unrecognised: list[str] = []

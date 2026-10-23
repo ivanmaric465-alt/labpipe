@@ -885,3 +885,173 @@ def test_companion_modules_do_not_change_the_versions():
     from labpipe import versions
     assert versions.current("sem")["analysis_version"] == "811b8cdc7190637b"
     assert versions.current("eds")["analysis_version"] == "101a66334f2b4456"
+
+
+# --- B2: publication is one step ----------------------------------------------------------------
+
+_DRIVER = """
+import json, sys
+from labpipe import pipeline
+from labpipe.safety import load_pipeline_config
+config = load_pipeline_config()
+eid = sys.argv[1]
+"""
+
+
+def _driver(env, eid, code):
+    """Run `code` in a fresh process with `config`, `eid` and `pipeline` ready (so it can patch
+    pipeline, which a command line cannot); its last printed line is JSON."""
+    done = subprocess.run([sys.executable, "-c", _DRIVER + code, eid], env=env,
+                          capture_output=True, text=True, encoding="utf-8", timeout=600)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+_RERUN = "print(json.dumps(pipeline.analyze_entry(config, eid, rerun=True)))"
+
+
+def _tree(folder):
+    return {p.name: p.read_bytes() for p in folder.iterdir()}
+
+
+def _publishing_left(project):
+    folder = project / "logs" / "publishing"
+    return sorted(p.name for p in folder.glob("*.json")) if folder.is_dir() else []
+
+
+def test_a_normal_run_leaves_no_journal(tmp_path):
+    project, env, main, eid, rescan = _companion_project(tmp_path, "sem")
+    assert _publishing_left(project) == []
+    assert (project / "logs" / "locks" / f"{eid}.lock").exists()
+    assert _driver(env, eid, _RERUN)["status"] == "done"
+    assert _publishing_left(project) == []
+
+
+def test_a_second_run_of_the_same_measurement_is_skipped(tmp_path):
+    project, env, main, eid, rescan = _companion_project(tmp_path, "sem")
+    before = _manifest(project)[eid]
+    result = _driver(env, eid, "from labpipe.locking import try_exclusive\n"
+                     "with try_exclusive(pipeline._lock_path(config, eid)):\n"
+                     "    print(json.dumps(pipeline.analyze_entry(config, eid, rerun=True)))\n"
+                     "    print(json.dumps(pipeline.replot_entry(config, eid)))")
+    assert result["status"] == "skipped" and result["reason"] == "being analysed by another run"
+    assert _manifest(project)[eid] == before
+    assert not list((project / "analysis").rglob("_superseded"))
+
+
+_TAMPER = """
+import importlib
+from labpipe.registry import load_methods
+module = importlib.import_module(load_methods()["sem"]["module"])
+real = module.run
+def run(input_path, out_dir, **kw):
+    summary = real(input_path, out_dir, **kw)
+    {tamper}
+    return summary
+module.run = run
+"""
+
+
+@pytest.mark.parametrize("tamper, reason", [
+    ("(out_dir / 'thumb.jpg').write_bytes(b'x')", "does not match the sha256"),
+    ("(out_dir / 'thumb.jpg').unlink()", "not in the staging folder"),
+    ("(out_dir / 'results.json').write_text('{'); summary['outputs']['results.json'] = "
+     "__import__('labpipe.provenance').provenance.sha256_file(out_dir / 'results.json')",
+     "not valid JSON"),
+    ("summary.pop('settings_sha256')", "summary lacks"),
+    ("(out_dir / 'provenance.json').unlink()", "provenance.json is missing"),
+    ("summary['outputs']['results.json'] = '0' * 64", "does not match the sha256"),
+])
+def test_a_summary_that_disagrees_with_the_files_fails_before_anything_moves(
+        tmp_path, tamper, reason):
+    project, env, main, eid, rescan = _companion_project(tmp_path, "sem")
+    entry = _manifest(project)[eid]
+    final = project / entry["output_dir"]
+    before = _tree(final)
+    result = _driver(env, eid, _TAMPER.format(tamper=tamper) + _RERUN)
+    assert result["status"] == "failed" and reason in result["reason"], result
+    assert _tree(final) == before
+    assert not list((project / "analysis").rglob("_superseded"))
+    assert len(list((project / "analysis").rglob("_failed/*/*"))) == 1
+    assert _publishing_left(project) == []
+    assert _manifest(project)[eid]["attempts"] == entry["attempts"] + 1
+
+
+@pytest.mark.parametrize("changed", ["main", "companion"])
+def test_an_input_that_changes_during_the_run_makes_it_pending(tmp_path, changed):
+    project, env, main, eid, rescan = _companion_project(tmp_path, "sem")
+    entry = _manifest(project)[eid]
+    final = project / entry["output_dir"]
+    before = _tree(final)
+    target = main if changed == "main" else main.with_suffix(".txt")
+    tamper = f"open({str(target)!r}, 'ab').write(b'\\n')"
+    result = _driver(env, eid, _TAMPER.format(tamper=tamper) + _RERUN)
+    assert result["status"] == "pending", result
+    assert f"the input changed while it was analysed ({target.name})" in result["reason"]
+    assert _tree(final) == before
+    stored = _manifest(project)[eid]
+    assert stored["status"] == "pending" and stored["attempts"] == entry["attempts"]
+    assert not list((project / "analysis").rglob("_superseded"))
+    assert _publishing_left(project) == []
+    # the next scan sees the new file; the analysis then goes through
+    rescan()
+    assert _labpipe(env, "sem", "analyze", "--entry", eid)["status"] == "done"
+
+
+_CRASH_BETWEEN = """
+real = pipeline._move
+def move(source, target, config):
+    if source.name.startswith('.staging'):
+        raise KeyboardInterrupt('crash between the renames')
+    real(source, target, config)
+pipeline._move = move
+try:
+    pipeline.analyze_entry(config, eid, rerun=True)
+except KeyboardInterrupt:
+    print(json.dumps('crashed'))
+"""
+
+_CRASH_AFTER = """
+def boom(*args, **kw):
+    raise KeyboardInterrupt('crash before the manifest is updated')
+pipeline.write_index = boom
+try:
+    pipeline.analyze_entry(config, eid, rerun=True)
+except KeyboardInterrupt:
+    print(json.dumps('crashed'))
+"""
+
+
+@pytest.mark.parametrize("crash, renamed", [(_CRASH_BETWEEN, False), (_CRASH_AFTER, True)])
+def test_an_interrupted_publication_is_rolled_back_by_the_next_scan(tmp_path, crash, renamed):
+    project, env, main, eid, rescan = _companion_project(tmp_path, "sem")
+    entry = _manifest(project)[eid]
+    final = project / entry["output_dir"]
+    before = _tree(final)
+    assert _driver(env, eid, crash) == "crashed"
+    assert _publishing_left(project) == [f"{eid}.json"]
+    if not renamed:
+        assert not final.exists()       # the old outputs are aside, the new ones in staging
+    result, stored = rescan()
+    assert _publishing_left(project) == []
+    assert stored["status"] == "pending"
+    assert stored["status_reason"] == "publication was interrupted; analysed again"
+    assert [c["entry_id"] for c in result["changes"]] == [eid]
+    assert _tree(final) == before                              # the earlier outputs are back
+    kept = list((final.parent / "_failed" / final.name).glob("*-interrupted"))
+    assert len(kept) == 1 and (kept[0] / "results.json").is_file()
+    assert not any(p for p in final.parent.glob(".staging-*"))
+    # analysed again, and nothing is left to recover
+    assert _labpipe(env, "sem", "analyze", "--entry", eid)["status"] == "done"
+    assert rescan()[0]["changes"] == []
+
+
+def test_a_run_recovers_its_own_interrupted_publication_first(tmp_path):
+    project, env, main, eid, rescan = _companion_project(tmp_path, "sem")
+    final = project / _manifest(project)[eid]["output_dir"]
+    before = _tree(final)
+    assert _driver(env, eid, _CRASH_BETWEEN) == "crashed"
+    assert _labpipe(env, "sem", "analyze", "--entry", eid)["status"] == "done"
+    assert _publishing_left(project) == []
+    assert list((final.parent / "_failed" / final.name).glob("*-interrupted"))
+    assert (final / "results.json").read_bytes() == before["results.json"]

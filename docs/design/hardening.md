@@ -139,6 +139,26 @@ of `lab/methods/…` it runs the old code but records the version of the new sou
   - the method's return value and every output are checked while still in staging;
   - just before publishing, the input hashes are compared again;
   - an interrupted publication is recovered on the next scan.
+
+  **Built:** `pipeline.analyze_entry` and `replot_entry` hold `logs/locks/<entry_id>.lock`
+  (`try_exclusive`) for the whole run; a second one returns `skipped`, "being analysed by another
+  run", and changes nothing. `_check_staged` runs before anything moves: results.json parses, every
+  output in the summary exists in staging with that sha256, provenance.json names the entry and
+  lists the same outputs, the summary has `settings_sha256`, `status`, `checks`, `outputs["results.json"]`;
+  a failure fails the analysis (staging to `_failed/`, no traceback). `_changed_input` hashes the main
+  file and the companions again (same resolved settings) just before publishing: a difference ends
+  as `pending` ("the input changed while it was analysed (<file>); analysed again on the next scan"),
+  the attempt is not counted, staging goes to `_failed/`. A journal `logs/publishing/<entry_id>.json`
+  (staging, final, aside, stamp) is written before the first rename and removed after the manifest
+  update. `recover_publications(config)` (start of `scanner.scan`, before the manifest lock, listed
+  in `changes`; and for its own entry at the start of an analysis or replot) rolls back each journal
+  whose entry is not locked. Decided while building: "final holds the new outputs" is read from where
+  things are, not from hashes: the staging folder is gone only after the second rename, so then final
+  is new; otherwise final is the old outputs (crash before the first rename) or missing (the old ones
+  are in the aside folder). The new outputs, or what staging still holds, go to
+  `_failed/<folder>/<stamp>-interrupted/`, the aside folder moves back, the entry is `pending`
+  ("publication was interrupted; analysed again"). A hash comparison would be wrong when a rerun
+  gives byte-identical results. Replot has no journal (its figure moves are not covered).
 - **B3. "Notes checked" says what it is.** "Numbers checked against the results", not
   validation:
   - `docs/SETUP.md` is corrected;
