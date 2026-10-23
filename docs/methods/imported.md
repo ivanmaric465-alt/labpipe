@@ -90,7 +90,7 @@ Only the ones you name in `quantities`, as `<name>.<quantity>` (your choice), va
 
 ## The analyst agent
 
-`lab/agents/<name>-analyst.md` reads the description page first, then `labpipe <name> summary --entry …`, looks at `plot.png` and writes a short `notes.md` ([docs/WRITING.md](../WRITING.md)): what your analysis shows, numbers quoted only from your table (`labpipe notes verify` accepts a number that is in the table, and rejects an invented one), plot impressions marked "(plot)", and what is missing for a reader (units, σ, how the fit was done). It never redoes your analysis.
+`lab/agents/<name>-analyst.md` reads the description page first, then `labpipe <name> summary --entry …`, looks at `plot.png` and writes a short `notes.md` ([docs/WRITING.md](../WRITING.md)): what your analysis shows, numbers quoted only from your table (`labpipe notes verify` checks that each number is found in the table, not that it is used in the right place), plot impressions marked "(plot)", and what is missing for a reader (units, σ, how the fit was done). It never redoes your analysis.
 
 ## Reading the card
 

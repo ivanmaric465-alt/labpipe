@@ -12,7 +12,8 @@ docs belong to which code: `docs/docmap.yaml` (`scripts/check_docs.py` checks it
    `atomic_write_*`; raw roots and `protected_paths` are refused. In the container the data is
    also mounted read-only.
 2. **Numbers come from code.** Analyses are deterministic Python. Agent text is checked by code
-   (`notes verify`, `postdoc verify`): every number must be found in the outputs.
+   (`notes verify`, `postdoc verify`): every number must be found in the outputs (not that it is
+   used in the right place; a person reads the text).
 3. **Every output can be regenerated from its `provenance.json`**: input hash, resolved
    settings, the settings files used and their hashes (each with its root, `code` or
    `project`), git commit, the method's analysis and plot version, environment, output hashes

@@ -261,7 +261,7 @@ def recommended(harness: str) -> dict[str, dict[str, str]]:
 def agent_models(config: dict) -> None:
     current = config.get("agents") or {}
     print("Agents run labpipe commands and write notes; they never compute numbers "
-          "(`labpipe notes verify` and `labpipe postdoc verify` reject invented ones). "
+          "(`labpipe notes verify` and `labpipe postdoc verify` check each number against the results; a person still reads the text). "
           "Three roles, each with its own model:")
     for role in ROLE_ORDER:
         print(f"  {role}: {ROLE_TEXT[role]}")

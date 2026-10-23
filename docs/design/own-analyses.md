@@ -86,7 +86,7 @@ It reads the README.md description, looks at the figure and reads the table thro
 `labpipe <name> summary`. Then it writes a short `notes.md`:
 
 - what the analysis shows;
-- numbers quoted only from the table, verified by `labpipe notes verify` as now;
+- numbers quoted only from the table, numbers checked against the table by `labpipe notes verify` as now;
 - plot impressions marked "(plot)";
 - what is missing for a reader: units, σ, how the fit was done.
 

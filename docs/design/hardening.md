@@ -134,6 +134,17 @@ of `lab/methods/…` it runs the old code but records the version of the new sou
   - the report keeps the automatic check apart from a human's review.
   
   Structured claims (result keys, units, σ) are a later option.
+
+  **Built:** every description of the two verify commands (SETUP, ARCHITECTURE, AGENTS, CLI help,
+  setup wizard, analyst and postdoc texts, docstrings) now says "numbers checked against the
+  results", not that they are used in the right place; a person reads the notes. `notes.CHECKS_VERSION`
+  and `postdoc.CHECKS_VERSION` are 2 (the postdoc shares the number rules): numbers in `inline code`
+  are checked; identifiers (S-9, `xrd-1a2b3c`, `xrd.a.fcc`) stay out through the number pattern, and
+  the only added exemption is an index glued to a name inside backticks (`peaks[3]`). Notes and
+  analyses that passed rules 1 stay valid ("checked with the rules of labpipe X"). In the report a
+  passing card carries "numbers checked against results.json by labpipe; not a review" (the postdoc
+  section likewise), and "Check before using" is described as needing a person. Added while building:
+  the how-to-read text says the same.
 - **B4. Replay compares everything it can.**
   - every recorded output, `thumb.jpg` included;
   - a warning when the recorded package versions differ from the current ones;

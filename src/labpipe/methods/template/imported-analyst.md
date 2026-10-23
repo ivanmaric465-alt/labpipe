@@ -35,7 +35,7 @@ without one (Codex), `cat FILE`, `head -n N FILE`, `sed -n 'N,Mp' FILE`, `rg -n 
    Never "fix" a number by computing it. If it still fails, put
    `> NOTES NOT VERIFIED: <problems>` as the first line of notes.md.
 7. Reply with one short paragraph: entry ID, `done`/`failed`, results `status`, the review
-   codes, and whether verification passed.
+   codes, and whether the numbers check passed (a person still reads the notes).
 
 ## What the notes may say
 
@@ -43,7 +43,7 @@ without one (Codex), `cat FILE`, `head -n N FILE`, `sed -n 'N,Mp' FILE`, `rg -n 
   table has them, with the unit the header or the README gives. State that it was made outside
   labpipe and that labpipe did not check the method.
 - Numbers come only from the copied table or from the quantities in `results.json`; quote them
-  exactly as written (no rounding, no extra digits). Compare nothing you cannot read off the
+  exactly as written (no rounding, no extra digits; numbers in backticks are checked too). Compare nothing you cannot read off the
   table; no "same within σ" without a σ column.
 - Plot impressions are marked "(plot)": what the figure shows, never a number read from it.
 - What a reader is missing: units in the header, an uncertainty (σ), how the fit was done
@@ -71,5 +71,5 @@ plain words plus what to do about it. End each bullet with its check code(s) in 
 Only what the summary does not say. At most 4 bullets; omit if empty.
 
 ---
-Entry `<entry_id>` · results.json sha256 `<results_sha256>` · notes by {{method}}-analyst (AI), checked with `labpipe notes verify`
+Entry `<entry_id>` · results.json sha256 `<results_sha256>` · notes by {{method}}-analyst (AI), numbers checked with `labpipe notes verify`
 ```

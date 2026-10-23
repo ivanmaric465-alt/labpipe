@@ -2,7 +2,8 @@
 
 `labpipe postdoc start "Q"` makes analysis/_postdoc/<UTC time>/ with request.md, inputs.json
 (sha256 of everything the answer depends on) and dataset.json (`labpipe dataset`). The agent
-writes analysis.md there; `labpipe postdoc verify RUN` checks only what keeps it honest:
+writes analysis.md there; `labpipe postdoc verify RUN` checks numbers against the sources, not
+the prose (a person still reads it):
 
 * every number is in dataset.json, a compare-N.json of the run, or the results.json of a
   measurement the text names (its measurement_id or entry_id);
@@ -14,9 +15,10 @@ writes analysis.md there; `labpipe postdoc verify RUN` checks only what keeps it
 
 Free text without numbers is never restricted. Number matching is the one of
 `labpipe notes verify` (labpipe.notes: identifiers like S-9 or RuO2, hkl, ISO dates, list
-markers and inline code are not numbers). Also exempt here: the question text, the run id and
-timestamps, page numbers after "p."/"pp.", and `documents/...` file names. As with notes, a
-number is checked as "found somewhere in the sources", not "used in the right place".
+markers are not numbers; numbers in `inline code` are checked). Also exempt here: the question
+text, the run id and timestamps, page numbers after "p."/"pp.", and `documents/...` file names. As with notes, a
+number is checked as "found somewhere in the sources", not "used in the right place", and what
+the text says about it is not checked.
 
 The rules are versioned (CHECKS_VERSION): verify.json records the version and labpipe's release.
 An analysis that passed keeps passing when a later release makes the rules stricter (its text is
@@ -44,7 +46,7 @@ from labpipe.notes import _matches, _walk_numbers, numbers_in_notes
 from labpipe.provenance import sha256_file, utc_now
 from labpipe.safety import PROJECT_ROOT, assert_pipeline_writable, atomic_write_text
 
-CHECKS_VERSION = 1      # bump when the rules in `_check` get stricter (like notes.CHECKS_VERSION)
+CHECKS_VERSION = 2      # bump when the rules in `_check` get stricter (like notes.CHECKS_VERSION)
 RUN_ID = re.compile(r"^\d{8}T\d{6}Z(?:-\d+)?$")
 MAX_ATTEMPTS = 3
 PARTS = {"Question": r"question", "Summary": r"summary", "Check before using": r"check before using"}

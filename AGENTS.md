@@ -94,7 +94,7 @@ Roles are defined once, harness-neutral, in `agents/` (in a project they are rea
 |---|---|---|
 | main session (you) | talks with the user: setup, steering, questions | settings files (with the user), notes |
 | `supervisor` | one pipeline pass: doctor → scan → delegate pending entries → notes → review → report | `logs/runs/*-summary.md` |
-| `<method>-analyst` | analyse one entry, check the plot, write and verify short `notes.md` | `analysis/**/notes.md` |
+| `<method>-analyst` | analyse one entry, check the plot, write short `notes.md`, numbers checked by `labpipe notes verify` | `analysis/**/notes.md` |
 | `postdoc` | only when the user asks: the whole project with its context, one question per run | `analysis/_postdoc/<run>/analysis.md` |
 
 - Interactive: delegate to `supervisor` for "process the new data", to the method's analyst for notes after a rerun, to `postdoc` for "ask the postdoc …" (below).
