@@ -661,3 +661,118 @@ def test_report_cards_stay_unique_and_replay_works(tmp_path):
     out = project / results["XRD/old/S-1_scan.xrdml"]["output_dir"]
     replay = _labpipe(env, "replay", str(out / "provenance.json"))
     assert replay["all_outputs_identical"], replay
+
+
+# --- B1: every input of a measurement is tracked --------------------------------------------
+
+def _companion_project(tmp_path, method):
+    """A project with one analysed SEM image (S-1 a001) or EDS report (S-9); its raw folder, the
+    entry id and a function to rescan and read the entry."""
+    from tests import test_eds, test_sem
+    project, raw, env = _project(tmp_path)
+    if method == "sem":
+        main = test_sem.make_example(raw / "SEM", "S-1 a001")
+    else:
+        main = test_eds.make_example(raw / "EDS", "S-9")
+    _labpipe(env, "scan")
+    eid = _labpipe(env, "pending")[0]["entry_id"]
+    assert _labpipe(env, method, "analyze", "--entry", eid)["status"] == "done"
+
+    def rescan():
+        result = _labpipe(env, "scan")
+        return result, _manifest(project)[eid]
+    return project, env, main, eid, rescan
+
+
+def test_companions_are_recorded_and_unchanged_ones_leave_it_done(tmp_path):
+    project, env, main, eid, rescan = _companion_project(tmp_path, "sem")
+    entry = _manifest(project)[eid]
+    assert list(entry["companions"]) == ["SEM/S-1 a001.txt"]
+    assert entry["analysed_companions"] == entry["companions"]
+    result, entry = rescan()
+    assert result["changes"] == [] and entry["status"] == "done"
+
+
+def test_a_changed_sem_companion_makes_it_pending(tmp_path):
+    project, env, main, eid, rescan = _companion_project(tmp_path, "sem")
+    text = main.with_suffix(".txt")
+    text.write_bytes(text.read_bytes() + b"$CM_NOTE changed\r\n")
+    result, entry = rescan()
+    assert entry["status"] == "pending"
+    assert entry["status_reason"] == "companion S-1 a001.txt changed"
+    assert _labpipe(env, "sem", "analyze", "--entry", eid)["status"] == "done"
+    assert rescan()[1]["status"] == "done"
+
+
+def test_an_eds_image_that_disappears_and_reappears(tmp_path):
+    project, env, main, eid, rescan = _companion_project(tmp_path, "eds")
+    image = main.parent / "s-91.jpg"
+    assert list(_manifest(project)[eid]["companions"]) == ["EDS/s-90.jpg", "EDS/s-91.jpg"]
+    kept = image.read_bytes()
+    image.unlink()
+    assert rescan()[1]["status_reason"] == "companion s-91.jpg is gone"
+    assert _labpipe(env, "eds", "analyze", "--entry", eid)["status"] == "done"
+    assert list(_manifest(project)[eid]["analysed_companions"]) == ["EDS/s-90.jpg"]
+    image.write_bytes(kept)
+    entry = rescan()[1]
+    assert (entry["status"], entry["status_reason"]) == ("pending", "companion s-91.jpg appeared")
+
+
+def test_a_changed_companion_outranks_stale_settings(tmp_path):
+    project, env, main, eid, rescan = _companion_project(tmp_path, "eds")
+    manifest = project / "manifest.json"
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    data["entries"][eid]["settings_sha256"] = "0" * 16        # settings would say stale
+    manifest.write_text(json.dumps(data), encoding="utf-8")
+    (main.parent / "s-91.jpg").write_bytes(b"not the same picture")
+    entry = rescan()[1]
+    assert (entry["status"], entry["status_reason"]) == ("pending", "companion s-91.jpg changed")
+
+
+def _forget_analysed_companions(project, eid, provenance=None):
+    manifest = project / "manifest.json"
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    entry = data["entries"][eid]
+    del entry["analysed_companions"]
+    manifest.write_text(json.dumps(data), encoding="utf-8")
+    path = project / entry["output_dir"] / "provenance.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    if provenance == "drop":
+        del record["companions"]
+    elif provenance == "other hash":
+        record["companions"][0]["sha256"] = "0" * 64
+    path.write_text(json.dumps(record), encoding="utf-8")
+
+
+@pytest.mark.parametrize("method", ["sem", "eds"])
+def test_an_older_entry_adopts_companions_its_provenance_agrees_with(tmp_path, method):
+    project, env, main, eid, rescan = _companion_project(tmp_path, method)
+    expected = _manifest(project)[eid]["companions"]
+    _forget_analysed_companions(project, eid)
+    result, entry = rescan()
+    assert result["changes"] == [] and entry["status"] == "done"
+    assert entry["analysed_companions"] == expected
+
+
+@pytest.mark.parametrize("method", ["sem", "eds"])
+def test_an_older_entry_goes_pending_when_its_provenance_disagrees(tmp_path, method):
+    project, env, main, eid, rescan = _companion_project(tmp_path, method)
+    _forget_analysed_companions(project, eid, "other hash")
+    entry = rescan()[1]
+    name = "S-1 a001.txt" if method == "sem" else "s-90.jpg"
+    assert (entry["status"], entry["status_reason"]) == ("pending", f"companion {name} changed")
+    assert "analysed_companions" not in entry
+
+
+def test_an_older_entry_without_companions_in_its_provenance_adopts_the_current(tmp_path):
+    project, env, main, eid, rescan = _companion_project(tmp_path, "sem")
+    expected = _manifest(project)[eid]["companions"]
+    _forget_analysed_companions(project, eid, "drop")
+    entry = rescan()[1]
+    assert entry["status"] == "done" and entry["analysed_companions"] == expected
+
+
+def test_companion_modules_do_not_change_the_versions():
+    from labpipe import versions
+    assert versions.current("sem")["analysis_version"] == "811b8cdc7190637b"
+    assert versions.current("eds")["analysis_version"] == "101a66334f2b4456"

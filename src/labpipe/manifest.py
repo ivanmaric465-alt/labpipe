@@ -20,6 +20,12 @@ hold the old single fingerprint and are converted by the next scan, settings.com
 `plot_outdated` (the plot settings changed: `labpipe replot`, status stays done) and, if a
 replot could not be done, `replot_problem`.
 
+An entry of a method with `companions` in methods.yaml (the SEM .txt, the images an EDS report
+links) carries `companions` ({path relative to the raw root: sha256}, as of the last scan) and,
+once analysed, `analysed_companions` (the same, as of that analysis). When they differ the scanner
+puts a done or stale entry back to pending; an entry analysed before this adopts the current
+ones, or is compared with the `companions` of its provenance.json.
+
 `output_dir` is chosen once, at an entry's first analysis (`choose_output_dir`), and kept: the
 readable `<measurement_id>`, or `<measurement_id>~<6 characters of the entry id>` when another
 entry holds that folder. A folder whose provenance.json names another entry is never written to

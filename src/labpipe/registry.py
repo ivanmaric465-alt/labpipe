@@ -9,6 +9,12 @@ is tried. Methods are tried in the order of `load_methods()`: the shipped ones f
 lab's own (lab/methods.yaml), so a lab method never takes a file from a shipped one. Without a
 root (e.g. the watcher's cheap snapshot) only globs count.
 
+`companions: package.module:function` (optional) names the other files a method reads besides
+the main one (the SEM .txt, the images an EDS report links): function(path) -> list of Paths
+that exist now (it must only read). `input_companions` hashes them; the scanner and the
+pipeline compare those hashes, so a companion that changes, appears or disappears makes the
+measurement out of date.
+
 Before any method is asked, `skip_reason` leaves out system files
 (config/pipeline.yaml → `system_files`, names such as Thumbs.db or `~$x.docx`)
 and files the user chose to ignore (config/ignore.yaml, git-ignored): those are
@@ -26,6 +32,7 @@ from typing import Any, Callable
 import yaml
 
 from labpipe import labmethods, migrations
+from labpipe.provenance import sha256_file
 from labpipe.safety import CODE_ROOT, PROJECT_ROOT
 
 
@@ -112,3 +119,19 @@ def classify(relative_path: str, methods: dict[str, dict[str, Any]],
             if _recognised(spec, root, relative_path):
                 return name, "analyse"
     return None, ""
+
+
+@cache
+def _companion_finder(target: str) -> Callable[[Path], list[Path]]:
+    module, _, function = target.partition(":")
+    return getattr(importlib.import_module(module), function)
+
+
+def input_companions(spec: dict[str, Any], root: Path, relative_path: str) -> dict[str, str] | None:
+    """{path relative to the raw root (posix): sha256} of the companion files the method reads
+    for this file; None when the method names none (no `companions:`). Only reads."""
+    if not spec.get("companions"):
+        return None
+    found = _companion_finder(spec["companions"])(Path(root) / relative_path)
+    return {Path(path).relative_to(root).as_posix(): sha256_file(Path(path))
+            for path in sorted(found, key=lambda p: str(p))}

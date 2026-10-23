@@ -59,6 +59,7 @@ def _entry(name: str, description: str, extension: str, agent: str | None, *, la
             f'    patterns: ["**/*{extension}"]      # narrow this if other methods use {extension}\n'
             f"    ignore: []\n"
             f"    # recognise: {package}.analyze:recognise   # optional content check\n"
+            f"    # companions: {package}.inputs:companions   # optional: other files it reads\n"
             + (f"    subagent: {agent}\n" if agent else
                "    subagent: null                     # analysed by code alone\n"
                "    notes: false\n")

@@ -20,6 +20,7 @@ Status: APPROVED 2026-10-17 with changes (below). Implemented.
 
 ## How (deterministic)
 1. Recognise: `.htm`/`.html` with INCA markers ("Processing option", a Weight%/Atomic% table) (`recognise:`); its linked JPGs and `.ipj` files are claimed by EDS as companions, so `s-100.jpg` is never read as a sample "S-100".
+   The images the report links are tracked as inputs (`companions:`): if one changes, appears or disappears after the analysis, the report goes back to pending ("companion s-91.jpg changed") and is analysed again. Images chosen with `images:` in the settings are not tracked this way (a settings change marks the analysis stale).
 2. Parse with the standard library HTML parser; numbers with `.` or `,` as decimal mark (never silently dropped); keep the Totals row.
 3. Compute in code: metal basis, renormalised at%, comparison with nominal. A negative value (INCA can report e.g. Ru −0.1 wt% after background subtraction) is below detection, an artefact of the method: it counts as 0 in the metal basis (the element stays, with 0), is listed in `metal_basis.taken_as_zero` with the recorded value, and raises the review check `negative_value`. The table as recorded keeps the negative value.
 4. Duplicates: a report byte-identical to another (`S-11 - Copy.htm` = `S-11.htm`) is recorded as `duplicate`, not analysed. This is a general scanner rule (same content within a method = duplicate), useful for every method.

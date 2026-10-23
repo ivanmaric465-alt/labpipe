@@ -122,6 +122,18 @@ of `lab/methods/…` it runs the old code but records the version of the new sou
   SEM `.txt`, the images an EDS report links). Their hashes go into the manifest and
   provenance. A companion that changes, appears or disappears makes the measurement out of
   date, as for your own analyses.
+
+  **Built:** `companions: <module>:<function>` in methods.yaml (shipped and lab methods;
+  `registry.input_companions` hashes them). SEM: `methods/sem/inputs.py` (the JEOL `.txt`);
+  EDS: `methods/eds/inputs.py` (the linked images that exist, found with analyze's own
+  `_linked_images` and `find_image`; images chosen with `images:` in the settings are not
+  included, the settings are tracked on their own). The scanner records `companions` in the
+  entry, the pipeline stores `analysed_companions` on `done`; a done or stale entry whose
+  companions differ goes to pending ("companion <name> changed / appeared / is gone"), ahead of
+  the stale and settings checks. An entry analysed before: its provenance `companions` (base
+  names) are compared; equal → adopted silently; different → pending. When the provenance
+  lists no companions (or cannot be read) there is nothing to compare, so the current ones are
+  adopted. A companion that cannot be read during a scan leaves the entry as it was.
 - **B2. Publication is one step.**
   - a lock per measurement, so the watcher and a manual run never do the same one;
   - the method's return value and every output are checked while still in staging;
