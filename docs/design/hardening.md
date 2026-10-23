@@ -1,7 +1,7 @@
 # Hardening after an external review (design)
 
-Status: approved 2026-10-22 (user: "write the design note, start with A"). Group A is being
-built (branch `hardening`); B and C follow, each stopping for review.
+Status: approved 2026-10-22 (user: "write the design note, start with A"). Group A is merged;
+group B is built (branch `hardening-b`, 2026-10-23) and waits for review; C follows.
 
 An external review (2026-10-22) checked the code and ran parts of it in isolation. Each
 finding below was checked against the code before it went in here. Its main point stands: the
