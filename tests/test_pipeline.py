@@ -1046,6 +1046,34 @@ def test_an_interrupted_publication_is_rolled_back_by_the_next_scan(tmp_path, cr
     assert rescan()[0]["changes"] == []
 
 
+_CRASH_RECORDED = """
+from pathlib import Path
+real = Path.unlink
+def unlink(self, *args, **kw):
+    if self.parent.name == 'publishing':
+        raise KeyboardInterrupt('crash after the manifest update, before the journal goes')
+    real(self, *args, **kw)
+Path.unlink = unlink
+try:
+    pipeline.analyze_entry(config, eid, rerun=True)
+except KeyboardInterrupt:
+    print(json.dumps('crashed'))
+"""
+
+
+def test_a_publication_the_manifest_recorded_is_kept(tmp_path):
+    project, env, main, eid, rescan = _companion_project(tmp_path, "sem")
+    before = _manifest(project)[eid]
+    assert _driver(env, eid, _CRASH_RECORDED) == "crashed"
+    assert _publishing_left(project) == [f"{eid}.json"]
+    result, stored = rescan()
+    assert _publishing_left(project) == [] and result["changes"] == []
+    assert stored["status"] == "done" and stored["published_stamp"] != before["published_stamp"]
+    final = project / stored["output_dir"]
+    assert not list((final.parent / "_failed").glob("*/*-interrupted"))
+    assert len(list((final.parent / "_superseded" / final.name).iterdir())) == 1
+
+
 def test_a_run_recovers_its_own_interrupted_publication_first(tmp_path):
     project, env, main, eid, rescan = _companion_project(tmp_path, "sem")
     final = project / _manifest(project)[eid]["output_dir"]

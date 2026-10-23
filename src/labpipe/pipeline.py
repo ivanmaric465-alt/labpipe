@@ -19,9 +19,10 @@ Publication is one step (hardening B2):
 - just before publishing, the main file and its companions are hashed again; if one changed
   while the run was going, the entry goes back to `pending` (no attempt counted);
 - before the first rename a journal (logs/publishing/<entry_id>.json) names staging, final and
-  the folder the old outputs go to; it is removed after the manifest is updated. A journal found
-  later (`recover_publications`, at the start of every scan and of an analysis of that entry)
-  means a crash: the new outputs (or what is left in staging) move to
+  the folder the old outputs go to; it is removed after the manifest is updated (which records
+  the publication's stamp, `published_stamp`). A journal found later (`recover_publications`, at
+  the start of every scan and of an analysis of that entry) whose stamp the manifest does not
+  record means a crash: the new outputs (or what is left in staging) move to
   .../_failed/<folder>/<stamp>-interrupted/, the old outputs move back, and the entry is
   `pending` again.
 """
@@ -241,6 +242,7 @@ def _analyze_locked(config: dict, eid: str, *, rerun: bool) -> dict[str, Any]:
         stored["last_processed_utc"] = utc_now()
         if status == "done":
             stored["output_dir"] = final.relative_to(PROJECT_ROOT).as_posix()
+            stored["published_stamp"] = stamp     # this publication is recorded (recovery)
             stored["results_sha256"] = summary["outputs"]["results.json"]
             stored["settings_sha256"] = summary["settings_sha256"]
             stored["plot_sha256"] = summary.get("plot_sha256")
@@ -271,7 +273,8 @@ def _recover_one(config: dict, journal: Path) -> dict[str, Any] | None:
     rename, so then `final` holds the new outputs; otherwise `final` is the old outputs (crash
     before the first rename) or missing (between the renames; the old ones are in `aside`).
     The new outputs, or what is left in staging, go to _failed/<folder>/<stamp>-interrupted/,
-    the old ones back, and the entry is pending. Nothing is deleted."""
+    the old ones back, and the entry is pending. Nothing is deleted. If the manifest already
+    records this publication (`published_stamp`), it was complete: only the journal goes."""
     try:
         record = json.loads(journal.read_text(encoding="utf-8"))
         eid = record["entry_id"]
@@ -280,6 +283,9 @@ def _recover_one(config: dict, journal: Path) -> dict[str, Any] | None:
         return None
     except (OSError, ValueError, KeyError):
         return None         # not ours to guess at; left for a human
+    if mf.load(config)["entries"].get(eid, {}).get("published_stamp") == record["stamp"]:
+        journal.unlink(missing_ok=True)     # the crash came after the manifest update: complete
+        return None
     kept = _free(final.parent / "_failed" / final.name / f"{record['stamp']}-interrupted")
     new_is_final = not staging.exists() and final.exists()
     if new_is_final:

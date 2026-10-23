@@ -158,7 +158,9 @@ of `lab/methods/…` it runs the old code but records the version of the new sou
   are in the aside folder). The new outputs, or what staging still holds, go to
   `_failed/<folder>/<stamp>-interrupted/`, the aside folder moves back, the entry is `pending`
   ("publication was interrupted; analysed again"). A hash comparison would be wrong when a rerun
-  gives byte-identical results. Replot has no journal (its figure moves are not covered).
+  gives byte-identical results. The manifest update records the stamp (`published_stamp`): a journal
+  whose stamp it records was complete (the crash came just after) and is only removed. Replot has
+  no journal (its figure moves are not covered).
 - **B3. "Notes checked" says what it is.** "Numbers checked against the results", not
   validation:
   - `docs/SETUP.md` is corrected;
