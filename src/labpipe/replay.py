@@ -4,8 +4,10 @@ Uses: the input path + sha256, the resolved settings (stored in full), the code 
 and the reference files (checked by sha256). The code must match: the method's analysis and
 plot version (records made since per-method versions), else the recorded commit, clean
 (older records). A different commit with equal versions is only noted. --force compares
-anyway. Output goes to logs/replay/<stamp>/. A comparison figure (analysis/_compare/) is
-redrawn from the data recorded in its provenance (`labpipe.compare.replay`).
+anyway. Output goes to logs/replay/<stamp>/. Every recorded output is compared (thumb.jpg too).
+A different python, library, requirements.lock or runtime is a warning in `notes`, not a
+refusal. A comparison figure (analysis/_compare/) is redrawn from the data recorded in its
+provenance (`labpipe.compare.replay`).
 """
 
 from __future__ import annotations
@@ -20,10 +22,35 @@ from labpipe.provenance import git_info, sha256_file, utc_now
 from labpipe.safety import CODE_ROOT, PROJECT_ROOT
 
 
+# Files that a method run does not regenerate (provenance.json is the record itself).
+_NOT_REGENERATED = {"provenance.json", "notes.md"}
+
+
 def _compared(record: dict) -> list[str]:
-    """results.json and every figure the record lists (plot.*, zoom.*)."""
-    return ["results.json"] + [name for name in record["outputs"]
-                               if name.startswith(("plot.", "zoom."))]
+    """Every output the record lists (results, figures, thumb.jpg, ...)."""
+    return [name for name in record["outputs"] if name not in _NOT_REGENERATED]
+
+
+def environment_notes(record: dict) -> list[str]:
+    """Warnings where the recorded environment (python, libraries, requirements.lock, native or
+    container) differs from this one. Never a refusal: the outputs may still be identical."""
+    from labpipe.provenance import environment, runtime
+    notes = []
+    then, now = record.get("environment") or {}, environment()
+    if then.get("python") and then["python"] != now["python"]:
+        notes.append(f"recorded python {then['python']}, now {now['python']}: outputs may differ")
+    for name, old in sorted((then.get("libraries") or {}).items()):
+        new = now["libraries"].get(name)
+        if old != new:
+            notes.append(f"recorded {name} {old or 'not installed'}, now "
+                         f"{new or 'not installed'}: outputs may differ")
+    if then.get("requirements_lock_sha256") and \
+            then["requirements_lock_sha256"] != now["requirements_lock_sha256"]:
+        notes.append("requirements.lock differs from the recorded one: outputs may differ")
+    mode = (record.get("runtime") or {}).get("mode")
+    if mode and mode != runtime()["mode"]:
+        notes.append(f"recorded run was {mode}, now {runtime()['mode']}: outputs may differ")
+    return notes
 
 
 def _input_path(recorded: dict, config: dict) -> Path:
@@ -68,7 +95,7 @@ def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[
         return compare.replay(provenance_path, config, force=force)
     if record.get("made_by") == "outside labpipe":       # made elsewhere: checked, not redrawn
         return _check_outside(record, provenance_path, config)
-    problems, notes = [], []
+    problems, notes = [], environment_notes(record)
     code = git_info()
     recorded = record["code"]
     if recorded.get("analysis_version"):
@@ -120,7 +147,8 @@ def replay(provenance_path: Path, config: dict, *, force: bool = False) -> dict[
     comparison = {}
     for name in _compared(record):
         recorded = record["outputs"].get(name)
-        regenerated = sha256_file(work / "out" / name)
+        made = work / "out" / name
+        regenerated = sha256_file(made) if made.is_file() else None
         comparison[name] = {"recorded": recorded, "regenerated": regenerated,
                             "identical": recorded == regenerated}
     return {"replay_dir": work.relative_to(PROJECT_ROOT).as_posix(), "problems": problems,

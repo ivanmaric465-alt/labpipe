@@ -139,6 +139,15 @@ of `lab/methods/…` it runs the old code but records the version of the new sou
   - a warning when the recorded package versions differ from the current ones;
   - the README names the exception for your own analyses (checked, not redrawn).
 
+  **Built:** `replay._compared` is now every recorded output except `provenance.json` and
+  `notes.md` (no method lists them; they are not regenerated). `thumb.jpg` is byte-identical
+  run to run (tested on real SEM, XRD and EDS entries: all outputs identical twice), so nothing
+  is excluded. `replay.environment_notes` compares python, each tracked library,
+  `requirements_lock_sha256` and `runtime.mode` with the current ones and puts "recorded numpy
+  2.3.1, now 2.3.2: outputs may differ" lines in `notes` (the CLI prints the whole result as JSON);
+  records without an environment field are skipped. Comparison figures (`compare.replay`) already
+  compared every output; they record the environment too, so `compare.replay` gives the same warnings.
+
 - **B5. A moved file keeps its analysis.** Today a moved file is analysed again (into its
   old folder), AI notes included. Better: the new entry takes over the old one's results and
   notes, with replay finding the input at its new place by sha256.

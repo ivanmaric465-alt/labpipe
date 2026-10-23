@@ -16,7 +16,7 @@ docs belong to which code: `docs/docmap.yaml` (`scripts/check_docs.py` checks it
 3. **Every output can be regenerated from its `provenance.json`**: input hash, resolved
    settings, the settings files used and their hashes (each with its root, `code` or
    `project`), git commit, the method's analysis and plot version, environment, output hashes
-   (`replay`). The comparison figures of samples (`analysis/_compare/`) record the figure's
+   (`replay`: every recorded output is compared, `thumb.jpg` included; a different python, library, `requirements.lock` or native/container run is a warning in the result's `notes`, never a refusal). The comparison figures of samples (`analysis/_compare/`) record the figure's
    spec (the plotted values, the `results.json` or raw file they came from with their hashes),
    the settings and their own `compare_version`, and replay the same way. **The one exception**:
    an analysis made outside labpipe (`kind: imported`, `made_by: "outside labpipe"`) cannot be

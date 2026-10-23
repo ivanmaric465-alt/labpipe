@@ -321,3 +321,24 @@ def test_a_stale_entry_is_redone_on_requeue_and_records_the_new_version(project)
     entry = project.entry()
     assert entry["analysis_version"] == project.run("methods", "versions")["xrd"]["analysis_version"]
     assert project.run("scan")["changes"] == []
+
+
+def test_replay_warns_about_a_different_environment_and_still_replays(project):
+    path = project.root / project.entry()["output_dir"] / "provenance.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["environment"]["libraries"]["numpy"] = "0.0.1"
+    record["environment"]["python"] = "2.7.0"
+    record["environment"]["requirements_lock_sha256"] = "0" * 64
+    record["runtime"]["mode"] = "container"
+    path.write_text(json.dumps(record), encoding="utf-8")
+    out = project.run("replay", str(path))
+    assert out["all_outputs_identical"] is True and out["problems"] == [], out
+    text = "\n".join(out["notes"])
+    assert "recorded numpy 0.0.1, now " in text and "outputs may differ" in text
+    assert "recorded python 2.7.0" in text and "requirements.lock differs" in text
+    assert "recorded run was container, now native" in text
+
+
+def test_replay_of_the_same_environment_has_no_warning(project):
+    path = project.root / project.entry()["output_dir"] / "provenance.json"
+    assert project.run("replay", str(path))["notes"] == []

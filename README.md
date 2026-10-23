@@ -3,7 +3,7 @@
 Reproducible analysis of lab data, driven by AI agents.
 
 - Code computes every number; agents run commands and write notes.
-- Every figure is regenerable from its `provenance.json`.
+- Every figure is regenerable from its `provenance.json` (your own analyses made elsewhere are checked, not redrawn).
 - Raw data is only ever read, from a read-only folder.
 
 | Method | Input | Output |
