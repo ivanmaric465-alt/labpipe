@@ -234,8 +234,13 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | `comparekinds/` | the figure kinds `dots`, `lines`, `bars`, `images`, one module each: `render(spec, stem)` (matplotlib, ACS, deterministic), `html(spec, fig_id)` (inline SVG with checkboxes; marks carry `data-m`/`data-s`, no script of its own: the report's script switches them), `check`, `caption`, `inventory`; spec schemas in their docstrings |
 | | `notes.py` | `notes verify` (numbers vs results; `CHECKS_VERSION`, `notes_check` in the manifest), `todo`, `retire` |
 | | `postdoc.py` | postdoc runs: start, verify (`CHECKS_VERSION`), freshness, list, headless run |
+<<<<<<< HEAD
 | | `context.py` | `context/` init and text index of documents; bounded (links and anything resolving outside `documents/` never read; limits on file size, DOCX unpacking and entries, `pdftotext` time and pages, DOCX table rows and cells, text length, each recorded with its reason, truncation as `=== truncated ... ===` and `truncated: true` in `index.json`) |
 | Agents | `agents.py` | `agents/*.md` (+ the lab's overlays and extra roles) → harness files, models per role |
+=======
+| | `context.py` | `context/` init and text index of documents |
+| Agents | `agents.py` | `agents/*.md` (+ the lab's overlays and extra roles) → harness files, models per role; `CAPABILITIES`: what each agent tool can do (one source for `labpipe setup` / the installer and docs/settings/agents.md) |
+>>>>>>> hc-c3
 | | `project.py` | `project new`; `project sync`: the generated files of a project, `generated.json`, status for doctor |
 | | `guard.py` | hook: refuses writes outside the allowed paths, to generated files, raw-data access, disallowed commands; reads only in strict forms (`READ_FORMS`) |
 | Automation | `automation.py` | one pass (code-only methods: one fresh `labpipe <method> analyze` process per measurement; review flags notified once, `to_check`), the watcher (the container's entry point; refuses elsewhere; restarts, exit 3, when labpipe's code or `labmethods.source_hash()` of `lab/methods/` + `lab/methods.yaml` changes), nightly run, notifications (`notifications.jsonl`, Linux `notify-send`), `setup` (timings, autostart, removing old native units), headless agent commands |
@@ -243,7 +248,7 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | | `inbox.py` | notifications page (local, token, read-only) |
 | | `container.py` | build (staged context), start (name, port, mounts per project), stop, login, shell, pop-up proxy; forwarding of host commands (and `forward_json`: the doctor's file list comes from the container, since recognising a file imports method code) |
 | Setup | `doctor.py` | setup state and next step (read-only; also `settings_migrations`, and the non-blocking `onboarding` warning while steps of `docs/ONBOARDING.md` remain) |
-| | `onboarding.py` | `labpipe onboarding`: the steps of the first conversation (`docs/ONBOARDING.md`), their record in `logs/onboarding.json`, the doctor's `onboarding` item (host side, no numpy) |
+| | `onboarding.py` | `labpipe onboarding`: the steps of the first conversation (`docs/ONBOARDING.md`), their record in `logs/onboarding.json`, the doctor's `onboarding` item; the steps that mention notes end with the methods of `methods.yaml` and whether each has an analyst and notes (host side, no numpy) |
 | | `migrations.py` | settings migrations: `labpipe migrate`, old keys understood in memory for one release (host side, no numpy) |
 | | `update.py` | `labpipe update`: releases, backups, switching the code, the state file and the re-exec into the new code, settings, restart, what is out of date (host side) |
 | | `preview.py` | `labpipe update --preview`: the release's code folder, the scratch project, the comparison of the numbers (host side; the analyses run in a subprocess or a throwaway container) |

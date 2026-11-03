@@ -241,7 +241,19 @@ of `lab/methods/…` it runs the old code but records the version of the new sou
   the agent tool's provider generically and say not to put documents there that may not leave the lab.
 - **Agent tools:** a short capability table (Claude Code, Codex, OpenCode: install,
   container, unattended runs, cost cap), shown when choosing one.
+  **Built:** rows defined once in `agents.CAPABILITIES` (six columns: install, container,
+  automatic runs, guard hook, cost cap, models per role). `labpipe setup --only agents` and the
+  installer print it as plain text before asking (the installer only the two tools it offers);
+  the same table is in docs/settings/agents.md, and `tests/test_docs.py` compares it cell by
+  cell. Facts come from the code: OpenCode is not installed, not in the container, not run
+  unattended and has no guard hook; Codex has no USD cap (tokens logged); its models line is
+  marked "untested" because only the file rendering is tested.
 - **Generic agent text** follows the registry (`subagent: null`, `notes: false`).
+  **Built:** the generated supervisor already delegates only to methods with a `subagent`
+  (tested). The onboarding steps `first-results` and `tour-agents` end with a list generated from
+  `load_methods()` (`onboarding.methods_text`); AGENTS.md, SETUP.md, ONBOARDING.md, the
+  supervisor text and the `notes todo` help are worded conditionally ("for methods with an
+  analyst"; code-only methods: show their checks).
 - **Lab methods** (decisions 2026-11-03, user):
   - **Disable a shipped method per project:** `disable: [eds]` in the project's
     `lab/methods.yaml`. Nothing is recognised, analysed or reported for it; `labpipe methods

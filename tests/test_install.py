@@ -491,3 +491,13 @@ def test_autostart_answer_is_saved_in_the_defaults_and_defaults_to_yes(scratch):
     shutil.rmtree(scratch / "projects")
     assert installer.run(str(_answers(scratch)), start=False) == 0
     assert yaml.safe_load(path.read_text(encoding="utf-8"))["container"]["autostart"] is False
+
+
+def test_choosing_the_agent_tool_shows_what_each_can_do(capsys):
+    from labpipe import installer
+    q = installer.Questions(None)
+    q.ask = lambda key, prompt, default="", section=None: default
+    installer.choose_harness(q, {})
+    out = capsys.readouterr().out
+    assert "Cost cap per AI run" in out and "Claude Code (claude-code)" in out
+    assert "OpenCode" not in out        # the installer offers Claude Code and Codex only

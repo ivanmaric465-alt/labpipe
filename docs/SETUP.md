@@ -12,9 +12,9 @@ Read this when `labpipe doctor` says `ready: false`. Lead the user **one item at
 - **Recognising the user's files**: right after the data folder is set (AGENTS.md → Recognising the user's files).
 - **Sample IDs**: doctor shows file names that give no sample ID. Show them, ask the user how their files are named, then adapt `config/pipeline.yaml` → `sample_id.pattern` (or add overrides in `config/sample_ids.yaml`). Rerun doctor until the examples look right to the user.
 - **Method specifics**: for each method the user has data for, the setup questions in `docs/methods/<method>.md` → Setup (e.g. XRD reference phases and internal standards). Put the answers into settings, never code.
-- **First analysis**: `labpipe scan`, pick one file with the user, `labpipe <method> analyze --entry ID`, show `plot.png`, walk through `results.json` and its checks, write the notes (delegate to the method's analyst). Then explain steering (AGENTS.md) with their own plot.
+- **First analysis**: `labpipe scan`, pick one file with the user, `labpipe <method> analyze --entry ID`, show `plot.png`, walk through `results.json` and its checks, write the notes (delegate to the method's analyst; a method without one, e.g. `sem`, has no notes: show its `summary` and checks instead). Then explain steering (AGENTS.md) with their own plot.
 - **Agents and models**:
-  - Ask which agent tool the user works with (Claude Code, Codex, OpenCode).
+  - Ask which agent tool the user works with (Claude Code, Codex, OpenCode); the table of what each can do is in `docs/settings/agents.md`.
   - Ask which model each role should use; `labpipe setup --only agents` asks the same in the terminal. Explain each role in a sentence:
     - **supervisor**: runs the commands and keeps the books, on every new measurement. A small, fast model is enough.
     - **analysts**: look at one measurement's plot and write its notes, on every new measurement. A standard model writes better notes.

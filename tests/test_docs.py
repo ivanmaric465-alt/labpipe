@@ -137,3 +137,15 @@ def test_every_shipped_method_page_has_reading_the_plot(method):
     assert section, f"docs/methods/{method}.md has no 'Reading the plot' section"
     bullets = re.findall(r"^- +\S", section.group(1), re.M)
     assert 3 <= len(bullets) <= 5, f"'Reading the plot' of {method} has {len(bullets)} bullets (3-5)"
+
+
+def test_agents_page_has_the_capability_table_of_the_code():
+    from labpipe import agents
+    page = _text("docs/settings/agents.md")
+    for column in agents.CAPABILITY_COLUMNS.values():
+        assert column in page
+    for row in agents.CAPABILITIES.values():
+        line = next((ln for ln in page.splitlines() if ln.startswith(f"| {row['name']} |")), None)
+        assert line, f"no table row for {row['name']} in docs/settings/agents.md"
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        assert cells[1:] == [row[c] for c in agents.CAPABILITY_COLUMNS]

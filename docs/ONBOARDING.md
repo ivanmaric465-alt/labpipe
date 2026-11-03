@@ -40,7 +40,7 @@ Per method, one measurement the user picks (suggest one):
 1. `labpipe scan`, then `labpipe <method> analyze --entry ID`. Code does this, not you.
 2. Show `plot.png`. Explain it with the method page's **Reading the plot** section (`docs/methods/<method>.md`): three to five bullets, what each line, panel and colour is.
 3. The key numbers (`labpipe <method> summary --entry ID`) and the checks, in plain words; what each flag means and what to do about it.
-4. The notes: delegate to the method's analyst as usual (AGENTS.md → Agents), then `labpipe notes verify --entry ID`, and show them.
+4. The notes, for a method with an analyst (`subagent` in `methods.yaml`; the list below says which): delegate to the analyst as usual (AGENTS.md → Agents), then `labpipe notes verify --entry ID`, and show them. A method analysed by code alone has no notes: show its checks instead.
 
 Then `labpipe onboarding done first-results`.
 
@@ -54,7 +54,7 @@ One change on their own plot, only with the user's OK. Ask what they would chang
 
 ## `tour-agents`
 
-The roles and their models (`docs/settings/agents.md`): the supervisor (runs commands, small model), the analysts (write the notes, standard model), the postdoc (answers questions about the whole project, strongest model, only when asked). Say which model each uses now (`labpipe doctor`, item `agents`), and that they change it by saying so. `labpipe onboarding done tour-agents`.
+The roles and their models (`docs/settings/agents.md`): the supervisor (runs commands, small model), the analysts (write the notes of the methods that have one, standard model), the postdoc (answers questions about the whole project, strongest model, only when asked). Say which model each uses now (`labpipe doctor`, item `agents`), and that they change it by saying so. `labpipe onboarding done tour-agents`.
 
 ## `tour-automation`
 

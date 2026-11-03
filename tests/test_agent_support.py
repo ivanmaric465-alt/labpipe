@@ -286,3 +286,33 @@ def test_codex_trust_reads_user_config(tmp_path, monkeypatch):
     monkeypatch.setenv("CODEX_HOME", str(tmp_path))
     assert agents.codex_trust(tmp_path / "repo") == "trusted"
     assert agents.codex_trust(tmp_path) is None
+
+
+def test_supervisor_delegates_only_to_methods_with_an_analyst(monkeypatch):
+    from labpipe import agents
+    methods = {"abc": {"subagent": "abc-analyst"}, "codeonly": {"subagent": None, "notes": False}}
+    monkeypatch.setattr(agents, "load_methods", lambda: methods)
+    role = {"name": "supervisor", "role": "supervisor", "description": "d", "source": "s.md",
+            "capabilities": ["shell"], "delegates_to": "method-analysts", "body": "B\n", "text": "x"}
+    assert agents._delegates(role) == ["abc-analyst"]
+    text, _ = agents._render(role, "claude-code", {})
+    assert "Agent(abc-analyst)" in text and "codeonly" not in text
+
+
+def test_capability_text_lists_each_tool_and_column():
+    from labpipe import agents
+    text = agents.capability_text()
+    for key, row in agents.CAPABILITIES.items():
+        assert row["name"] in text and key in text
+        assert all(row[c] in text for c in agents.CAPABILITY_COLUMNS)
+    assert "not supported" in agents.capability_text(["opencode"])
+    assert "OpenCode" not in agents.capability_text(["codex"])
+
+
+def test_setup_agents_shows_the_capabilities_before_asking(local_project, monkeypatch, capsys):
+    from labpipe import wizard
+    shown = []
+    monkeypatch.setattr("builtins.input", lambda prompt="": shown.append(capsys.readouterr().out)
+                        or "none")
+    wizard.agent_models(wizard.load_pipeline_config())
+    assert "Cost cap per AI run" in shown[0] and "OpenCode" in shown[0]
