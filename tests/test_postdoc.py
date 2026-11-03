@@ -154,6 +154,21 @@ def test_context_index_refuses_links(project, config, tmp_path):
     assert not postdoc.current_inputs(config)["documents"].keys() - {"context/documents/plan.md"}
 
 
+def test_context_index_refuses_a_linked_documents_folder(project, config, tmp_path):
+    if not _can_link(tmp_path):
+        pytest.skip("symlinks need privileges here")
+    context.init(config)
+    docs = project / "context" / "documents"
+    docs.rmdir()
+    outside = tmp_path / "home"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("PRIVATE-HOME-CONTENT", encoding="utf-8")
+    docs.symlink_to(outside, target_is_directory=True)
+    result = context.index(config)
+    assert result["indexed"] == [] and "link" in result["not_indexed"]["secret.txt"]
+    assert "PRIVATE" not in _all_text(project)
+
+
 def test_context_index_refuses_a_huge_docx_without_reading_it(project, config, monkeypatch):
     context.init(config)
     docs = project / "context" / "documents"

@@ -16,7 +16,7 @@ labpipe context index    # after adding documents: text with page numbers, for c
 
 Write `context.md` yourself, or ask your agent: *let's write the project context*. It drafts, you correct, it saves only with your OK.
 
-`labpipe context index` never follows links: a link in `documents/` (to a file or a folder) is listed as "not indexed" and not read. A file over 50 MB, a DOCX that unpacks to over 20 MB, a PDF that takes over 2 minutes are skipped with the reason; PDFs are read to page 500, text is cut at 1,000,000 characters and DOCX tables at 200 rows (`=== truncated ... ===` in the text, `truncated: true` in `.text/index.json`). The limits are constants at the top of `src/labpipe/context.py`.
+`labpipe context index` never follows links: a link in `documents/` (to a file or a folder) is listed as "not indexed" and not read, and so is everything when `context/` or `documents/` itself is a link: copy the files in. A file over 50 MB, a DOCX that unpacks to over 20 MB, a PDF that takes over 2 minutes are skipped with the reason; PDFs are read to page 500, text is cut at 1,000,000 characters and DOCX tables at 200 rows (`=== truncated ... ===` in the text, `truncated: true` in `.text/index.json`). The limits are constants at the top of `src/labpipe/context.py`.
 
 ## You say → setting
 

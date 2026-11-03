@@ -178,7 +178,14 @@ def documents() -> list[Path]:
 
 
 def link_problem(path: Path, base: Path) -> str | None:
-    """Why `path` must not be read: a link on its way, or a resolved place outside documents/."""
+    """Why `path` must not be read: a link on its way (context/ or documents/ itself included),
+    or a resolved place outside documents/ or the project."""
+    if base.is_symlink() or base.parent.is_symlink():
+        return "context/documents is a link: not read (copy the files into the project)"
+    try:
+        base.resolve().relative_to(PROJECT_ROOT.resolve())
+    except (ValueError, OSError):
+        return "context/documents is outside the project: not read"
     relative = path.relative_to(base)
     here = base
     for part in relative.parts:
