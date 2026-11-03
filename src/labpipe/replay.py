@@ -6,7 +6,7 @@ plot version (records made since per-method versions), else the recorded commit,
 (older records). A different commit with equal versions is only noted. --force compares
 anyway. Output goes to logs/replay/<stamp>/. Every recorded output is compared (thumb.jpg too).
 An input that is no longer at its recorded place is looked for in the manifest by its sha256
-(a moved file: "input moved: found at <path>" in `notes`). A different python, library, requirements.lock or runtime is a warning in `notes`,
+(a moved file: "input moved: found at <path>" in `notes`). A different python, library, requirements.lock, lab/requirements.txt or runtime is a warning in `notes`,
 not a refusal. A comparison figure (analysis/_compare/) is redrawn from the data recorded in its
 provenance (`labpipe.compare.replay`).
 """
@@ -48,6 +48,14 @@ def environment_notes(record: dict) -> list[str]:
     if then.get("requirements_lock_sha256") and \
             then["requirements_lock_sha256"] != now["requirements_lock_sha256"]:
         notes.append("requirements.lock differs from the recorded one: outputs may differ")
+    if "lab_requirements_sha256" in then:       # records since lab packages existed
+        if then["lab_requirements_sha256"] != now["lab_requirements_sha256"]:
+            notes.append("lab/requirements.txt differs from the recorded one: outputs may differ")
+        for name, old in sorted((then.get("lab_packages") or {}).items()):
+            new = now["lab_packages"].get(name)
+            if old != new:
+                notes.append(f"recorded lab package {name} {old or 'not installed'}, now "
+                             f"{new or 'not installed'}: outputs may differ")
     mode = (record.get("runtime") or {}).get("mode")
     if mode and mode != runtime()["mode"]:
         notes.append(f"recorded run was {mode}, now {runtime()['mode']}: outputs may differ")

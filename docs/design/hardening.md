@@ -237,6 +237,24 @@ of `lab/methods/…` it runs the old code but records the version of the new sou
   - **Packages:** `lab/requirements.txt` (pinned versions) in the project; `labpipe container
     build` adds a layer on top of labpipe's image for that project only. Recorded in provenance;
     never in labpipe's own image.
+    **Built:** `labpackages.py` (parse: only `name==version`, comments allowed, anything else
+    refused with the line and why; hash; installed versions; the layer's Containerfile; native
+    install command), `container.build_lab` / `project_image`: the layer is
+    `localhost/labpipe-<slug>-lab:<hash of the file + base image id>`, built by `container
+    build`, and by `start` when missing (so `labpipe update`, whose last step is `container start
+    --replace`, rebuilds it on the new base). The layer installs with the image's own
+    `/usr/local/bin/python -m pip`, the base's installed versions (`pip freeze`) as constraints
+    (a lab package cannot change labpipe's), then `pip check`; the user is the base's. Decided
+    while building: the image's `ENV` points pip at the in-container proxy, which runs only in
+    the started container, so the RUN unsets the proxy variables (the build uses the engine's
+    network; the allow-list is for the running container). `container status` has
+    `lab_packages_up_to_date` / `lab_packages` (label `labpipe.lab_requirements` on the
+    container vs the file; doctor warns). Provenance `environment` gets
+    `lab_requirements_sha256` and `lab_packages`; replay compares them only for records that
+    have the keys. `methods check` has a "lab packages" line (form on the host; for a lab method
+    also installed here, with the `pip install -r` command natively or "labpipe container build"
+    inside the container), doctor the same. Not done: `labpipe update --preview` runs the
+    release in a throwaway container from the base image, without the project's layer.
 - **CI:** GitHub actions pinned to commit hashes.
   **Built:** `actions/checkout` v4.4.0 and `actions/setup-python` v5.6.0 by commit hash, the
   version in a comment (Dependabot keeps both up to date); docs/RELEASING.md says so. Moving to

@@ -359,3 +359,22 @@ def test_the_watcher_restarts_when_lab_methods_change(tmp_path, monkeypatch):
     assert labmethods.source_hash() == start
     (tmp_path / "lab/methods.yaml").write_text("methods: {a: {}}\n", encoding="utf-8")
     assert labmethods.source_hash() != start                 # the registry counts too
+
+
+def test_methods_check_validates_and_reports_lab_requirements(tmp_path):
+    project, raw, env, example, made = _scaffold(tmp_path)
+
+    def lab_packages(**_):
+        checked = _labpipe(env, "methods", "check", "demo", "--example", str(example))
+        return checked, next(c for c in checked["checks"] if c["check"] == "lab packages")
+
+    assert lab_packages()[1]["ok"]                      # no file: today's behaviour
+    (project / "lab" / "requirements.txt").write_text("six>=1.0\n", encoding="utf-8")
+    checked, item = lab_packages()
+    assert not checked["ok"] and not item["ok"] and "name==version" in item["detail"]
+    (project / "lab" / "requirements.txt").write_text("no-such-package-xyz==1.0\n", encoding="utf-8")
+    checked, item = lab_packages()      # native here: the exact command, never run
+    assert not item["ok"] and "no-such-package-xyz==1.0 (not installed)" in item["detail"]
+    assert "-m pip install -r" in item["detail"]
+    todo = [c for c in _labpipe(env, "doctor")["checks"] if c["check"] == "lab_packages"]
+    assert todo and todo[0]["status"] == "todo" and "pip install -r" in todo[0]["next"]

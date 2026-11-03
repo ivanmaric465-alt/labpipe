@@ -49,7 +49,18 @@ In a project the entry's `module` is `labpipe_lab.sem.analyze` and its `config` 
 
 Patterns: a file goes to the first method whose pattern matches, shipped methods first, then yours in the order of `lab/methods.yaml`. To claim a file type a shipped method also uses, add a `recognise:` content check (below), or narrow the patterns.
 
-**Packages**: in the container (and the installed labpipe) a lab method can use only what the image has: numpy, scipy, matplotlib, Pillow, PyYAML and their dependencies (`container/requirements.lock`). Another package would need your own image (not supported yet).
+**Packages**: a lab method can use what labpipe's image has: numpy, scipy, matplotlib, Pillow, PyYAML and their dependencies (`container/requirements.lock`). For anything else, list it in `lab/requirements.txt`, one exact version per line:
+
+```
+# lab/requirements.txt
+tabulate==0.9.0      # comments are fine
+```
+
+Only `name==version` is accepted (no ranges, URLs, `-e`, `-r`, options); `labpipe methods check` says which line is wrong, without building. Its own dependencies are installed at whatever versions fit (never changing labpipe's), and only the listed packages are recorded in provenance.
+- **Container**: `labpipe container build` adds a layer on top of labpipe's image for this project only (`localhost/labpipe-<project>-lab:<hash>`; the build needs the internet, the container's allow-list applies only once it runs). `labpipe container start` builds it when missing, `labpipe update` rebuilds it on the new image. After you edit the file, `labpipe container status` and `labpipe doctor` say "lab/requirements.txt changed: labpipe container build"; then `labpipe container start --replace`. Old layers stay (remove them with `podman image rm`).
+- **Native** (no container): `labpipe methods check` and `labpipe doctor` print the exact command, `"<venv python>" -m pip install -r lab/requirements.txt` (into labpipe's own environment); you run it, labpipe never does.
+- **Provenance**: `environment` records `lab_requirements_sha256` and the installed version of each listed package; `labpipe replay` warns when they differ.
+- No file: nothing changes, and labpipe's own image never contains lab packages.
 
 ## 3. Implement
 
