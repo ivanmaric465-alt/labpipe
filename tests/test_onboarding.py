@@ -120,3 +120,17 @@ def test_the_command_is_host_local_and_reserved(tmp_path):
     assert "onboarding" in container.LOCAL_COMMANDS and "onboarding" in labmethods.RESERVED
     assert container.forward_argv(["onboarding", "done", "welcome"], tmp_path, tmp_path,
                                   "podman", "labpipe", 1000, 1001, False) is None
+
+
+def test_notes_steps_follow_the_registry(monkeypatch):
+    """A method without an analyst or notes is listed as code-only, never as getting notes."""
+    from labpipe import registry
+    methods = {"abc": {"subagent": "abc-analyst"},
+               "codeonly": {"subagent": None, "notes": False}}
+    monkeypatch.setattr(registry, "load_methods", lambda: methods)
+    for step in onboarding.NOTES_STEPS:
+        text = onboarding.section(step)
+        assert "- abc: analyst `abc-analyst` writes the notes" in text
+        assert "- codeonly: analysed by code alone, no notes" in text
+        assert "codeonly-analyst" not in text and "codeonly: analyst" not in text
+    assert "Methods of this installation" not in onboarding.section("welcome")

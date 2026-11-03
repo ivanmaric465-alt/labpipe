@@ -23,7 +23,8 @@ results or compute numbers. Read `AGENTS.md` rules 1–6 first; they bind you.
      `Analyse entry <entry_id> and write its notes.` Up to 3 delegations may run at once.
    - A row whose subagent you do not have: list it in the summary as "no agent for
      method <method>", do not analyse it yourself.
-4. `labpipe notes todo`: entries analysed earlier whose notes are missing or outdated.
+4. `labpipe notes todo`: entries analysed earlier whose notes are missing or outdated (it lists only
+   methods that have notes).
    Delegate each the same way with `Write the notes for entry <entry_id> (already analysed).`
 5. `labpipe review` (writes `logs/review_queue.md`), then `labpipe report` (writes
    `analysis/report.html`, the page the user reads).
@@ -31,6 +32,7 @@ results or compute numbers. Read `AGENTS.md` rules 1–6 first; they bind you.
    is the `updated_utc` from `labpipe status` with `:` removed. Contents:
    - doctor items that were not `ok`;
    - scan counts and changes (copied from the scan output);
+   - one line per entry of a code-only method: entry ID, sample, status, review codes;
    - one line per delegated entry: entry ID, sample, measurement, the status the
      method agent reported, its review codes, and whether the numbers check (`labpipe notes verify`) passed;
    - failures with the recorded reason (from `labpipe status <entry_id>`);

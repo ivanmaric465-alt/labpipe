@@ -25,6 +25,7 @@ STEPS = ("welcome", "files", "methods", "first-results",
          "tour-report", "tour-steering", "tour-agents", "tour-automation",
          "tour-postdoc", "tour-settings", "tour-updates", "done")
 TOUR = tuple(step for step in STEPS if step.startswith("tour-")) + ("done",)
+NOTES_STEPS = ("first-results", "tour-agents")      # steps whose text depends on who writes notes
 _HEADING = re.compile(r"^#{2,3} `([a-z-]+)`", re.M)
 _ANY_HEADING = re.compile(r"^#{1,3} ", re.M)
 
@@ -64,14 +65,31 @@ def next_step(steps: dict[str, dict[str, str]]) -> str | None:
     return next((step for step in STEPS if step not in steps), None)
 
 
+def methods_text() -> str:
+    """Per method of the registry (methods.yaml): has it an analyst, does it have notes?
+    Generated, so the steps never tell the agent to write notes for a method without them."""
+    from labpipe.registry import load_methods
+    lines = []
+    for name, spec in load_methods().items():
+        analyst = spec.get("subagent")
+        if spec.get("notes") is False or not analyst:
+            lines.append(f"- {name}: analysed by code alone, no notes: show `labpipe {name} "
+                         "summary --entry ID` and its checks instead")
+        else:
+            lines.append(f"- {name}: analyst `{analyst}` writes the notes")
+    return "Methods of this installation:\n" + "\n".join(lines)
+
+
 def section(step: str) -> str:
-    """The step's part of docs/ONBOARDING.md (its heading up to the next step's)."""
+    """The step's part of docs/ONBOARDING.md (its heading up to the next step's); the steps
+    that talk about notes end with the methods list (`methods_text`)."""
     text = (CODE_ROOT / DOC).read_text(encoding="utf-8")
     marks = list(_HEADING.finditer(text))
     for mark in marks:
         if mark.group(1) == step:
             later = _ANY_HEADING.search(text, mark.end())
-            return text[mark.start():later.start() if later else len(text)].strip()
+            body = text[mark.start():later.start() if later else len(text)].strip()
+            return body + "\n\n" + methods_text() if step in NOTES_STEPS else body
     return ""
 
 

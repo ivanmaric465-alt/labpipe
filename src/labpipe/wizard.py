@@ -265,6 +265,8 @@ def agent_models(config: dict) -> None:
           "Three roles, each with its own model:")
     for role in ROLE_ORDER:
         print(f"  {role}: {ROLE_TEXT[role]}")
+    print("\nThe agent tools differ in what labpipe can do with them:\n\n"
+          + agents.capability_text() + "\n")
     harness = _ask("Agent harness: claude-code, codex, opencode, or none",
                    current.get("harness") or "claude-code")
     if harness == "none":

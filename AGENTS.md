@@ -4,7 +4,7 @@ Instructions for any AI agent working in this repository, whatever the harness (
 
 labpipe turns raw instrument files into reproducible analyses:
 - `results.json`, a plot (`plot.png` + `plot.pdf`) and `provenance.json` per measurement;
-- a human-readable `notes.md` written by an agent.
+- a human-readable `notes.md` written by an agent (for methods with an analyst; a method analysed by code alone, e.g. `sem`, has none: `subagent: null` / `notes: false` in `methods.yaml`).
 
 The numerics are deterministic Python. **Agents run commands, read results, write notes and edit settings files. They never compute numbers themselves.** Human-facing overview: `README.md`. The code's skeleton (modules, data flow, what is written where): `docs/ARCHITECTURE.md`. Read `docs/SAFETY.md` before changing anything that touches paths or permissions.
 
@@ -94,10 +94,10 @@ Roles are defined once, harness-neutral, in `agents/` (in a project they are rea
 |---|---|---|
 | main session (you) | talks with the user: setup, steering, questions | settings files (with the user), notes |
 | `supervisor` | one pipeline pass: doctor → scan → delegate pending entries → notes → review → report | `logs/runs/*-summary.md` |
-| `<method>-analyst` | analyse one entry, check the plot, write short `notes.md`, numbers checked by `labpipe notes verify` | `analysis/**/notes.md` |
+| `<method>-analyst` (methods with a `subagent` in `methods.yaml`) | analyse one entry, check the plot, write short `notes.md`, numbers checked by `labpipe notes verify` | `analysis/**/notes.md` |
 | `postdoc` | only when the user asks: the whole project with its context, one question per run | `analysis/_postdoc/<run>/analysis.md` |
 
-- Interactive: delegate to `supervisor` for "process the new data", to the method's analyst for notes after a rerun, to `postdoc` for "ask the postdoc …" (below).
+- Interactive: delegate to `supervisor` for "process the new data", to the method's analyst for notes after a rerun (methods without an analyst have no notes: show their `summary` and checks), to `postdoc` for "ask the postdoc …" (below).
 - Extra safety layers (permissions, guard hook, sandbox) depend on the harness: Claude Code `CLAUDE.md`; Codex `.codex/` (`docs/SAFETY.md` → Codex). OpenCode has only the read-only view and labpipe's own write checks: do not run it unattended.
 
 ## Project context and the postdoc
@@ -158,7 +158,7 @@ Do this after the data folder is set, and whenever doctor or the review queue re
    - **not recognised**: ask what these files are. Not data (reports, photos, slides): with the user's OK, add them to `config/ignore.yaml` (`ignore:` globs relative to the data folder, e.g. `"TEM/**"`, with a `#` comment saying why). Exports of a format a method already reads: propose a pattern. Figures and tables the user made themselves (an Origin fit, instrument software): `labpipe methods import`, "Your own analyses" below. A technique labpipe cannot analyse yet: offer to design a new method with the user (below);
    - **no sample ID**: show the names, ask how their files are named, adapt `sample_id.pattern` or add overrides.
 3. Rerun `labpipe inventory` and show the difference. Repeat until the user says it is right.
-4. If the manifest is still empty for this folder, ask whether to analyse everything already there, or only files added from now on (`labpipe scan --baseline`). The user decides; analysis is free, AI notes cost money.
+4. If the manifest is still empty for this folder, ask whether to analyse everything already there, or only files added from now on (`labpipe scan --baseline`). The user decides; analysis is free, AI notes (for methods with an analyst) cost money.
 
 ### Your own analyses (made outside labpipe)
 

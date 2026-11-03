@@ -33,7 +33,7 @@
   labpipe replay PROVENANCE.json            regenerate outputs from provenance and compare hashes
   labpipe compare [--method M]              (re)draw the comparison figures of samples (analysis/_compare/)
   labpipe xrd refs list|add|build           manage XRD reference phases (CIFs)
-  labpipe notes todo                        analysed entries whose notes.md is missing or outdated
+  labpipe notes todo                        analysed entries (of methods with notes) whose notes.md is missing or outdated
   labpipe notes verify --entry ID           check numbers in notes.md against results.json, and review codes (not a review)
   labpipe notes retire --entry ID [...]     move notes.md to _superseded/ so the analyst rewrites it
   labpipe container setup|build|start|stop|status|logs|login   the container (Podman or Docker)

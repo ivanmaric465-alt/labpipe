@@ -8,6 +8,18 @@ labpipe's numbers come from code; AI agents run the commands, look at plots and 
 | method analysts | look at one measurement's plot and results; write and check short notes | every new measurement | Sonnet / standard, medium reasoning |
 | postdoc | answers your questions about the whole project, with its context | only when you ask | Opus / strongest, high reasoning |
 
+## The tools
+
+What labpipe can do with each tool (shown by `labpipe setup --only agents` and by the installer when you choose):
+
+| Tool | Installed by labpipe | Container mode | Automatic runs | Guard hook | Cost cap per AI run | Models per role |
+|---|---|---|---|---|---|---|
+| Claude Code | container image: yes; on your computer: command shown, you run it | yes | yes | yes (.claude/settings.json); automatic runs: only labpipe commands and notes | yes, in USD (automation.max_budget_usd) | yes: haiku, sonnet, opus or anthropic/<model> |
+| Codex | container image: yes; on your computer: command shown, you run it | yes (login: labpipe container login codex) | yes, if Codex trusts the project | yes (.codex/hooks.json): shell commands and patches; reads in strict forms only | no USD cap: tokens are logged, the batch size is the cap | yes, and a reasoning effort per role |
+| OpenCode | no, you install it | not supported | not supported | no hook: only the read-only view and labpipe's own write checks | none (no automatic runs) | yes: provider/model; untested |
+
+Safety layers per tool: [SAFETY.md](../SAFETY.md). Unattended runs and the cost cap: [automation.md](automation.md).
+
 ## Settings
 
 `config/local.yaml`:

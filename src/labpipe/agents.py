@@ -51,6 +51,55 @@ LAB_ROLES = "lab/agents"           # in the project: overlays and extra roles
 def without_comments(text: str) -> str:
     """The lab's text without <!-- comments --> (explanations and examples in the templates)."""
     return re.sub(r"<!--.*?-->", "", text, flags=re.S).strip()
+# What labpipe can do with each agent tool, from its own code (container image, automation,
+# guard hook, agent files). One source: shown by `labpipe setup` and the installer when you
+# choose a tool, and checked against the table in docs/settings/agents.md (tests/test_docs.py).
+CAPABILITY_COLUMNS = {
+    "install": "Installed by labpipe", "container": "Container mode",
+    "unattended": "Automatic runs", "guard": "Guard hook",
+    "cost": "Cost cap per AI run", "models": "Models per role",
+}
+CAPABILITIES = {
+    "claude-code": {
+        "name": "Claude Code",
+        "install": "container image: yes; on your computer: command shown, you run it",
+        "container": "yes",
+        "unattended": "yes",
+        "guard": "yes (.claude/settings.json); automatic runs: only labpipe commands and notes",
+        "cost": "yes, in USD (automation.max_budget_usd)",
+        "models": "yes: haiku, sonnet, opus or anthropic/<model>",
+    },
+    "codex": {
+        "name": "Codex",
+        "install": "container image: yes; on your computer: command shown, you run it",
+        "container": "yes (login: labpipe container login codex)",
+        "unattended": "yes, if Codex trusts the project",
+        "guard": "yes (.codex/hooks.json): shell commands and patches; reads in strict forms only",
+        "cost": "no USD cap: tokens are logged, the batch size is the cap",
+        "models": "yes, and a reasoning effort per role",
+    },
+    "opencode": {
+        "name": "OpenCode",
+        "install": "no, you install it",
+        "container": "not supported",
+        "unattended": "not supported",
+        "guard": "no hook: only the read-only view and labpipe's own write checks",
+        "cost": "none (no automatic runs)",
+        "models": "yes: provider/model; untested",
+    },
+}
+
+
+def capability_text(harnesses: list[str] | None = None) -> str:
+    """The capability table as plain text, one short block per tool (for the terminal)."""
+    blocks = []
+    for key in harnesses or list(CAPABILITIES):
+        row = CAPABILITIES[key]
+        blocks.append("\n".join([f"{row['name']} ({key})"] + [
+            f"  {label}: {row[column]}" for column, label in CAPABILITY_COLUMNS.items()]))
+    return "\n\n".join(blocks)
+
+
 CODE_COPY = ".labpipe"             # in the project: the code-side files agents may read
 REQUIRED_KEYS = ("name", "role", "description")
 _BACKTICKED = re.compile(r"`([^`\n]+)`")

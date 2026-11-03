@@ -177,7 +177,8 @@ def choose_harness(q: Questions, previous: dict[str, Any]) -> str:
     current = (previous.get("agents") or {}).get("harness")
     default = current if current in HARNESSES else "claude-code"
     if q.interactive:
-        print("\nWhich agent tool do you work with?")
+        print("\nWhich agent tool do you work with?\n\n"
+              + agents.capability_text(list(HARNESSES)) + "\n")
         for number, name in enumerate(HARNESSES.values(), 1):
             print(f"  {number}  {name}")
     answer = q.ask("harness", "Choice", str(list(HARNESSES).index(default) + 1)
