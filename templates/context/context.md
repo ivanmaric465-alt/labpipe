@@ -2,6 +2,7 @@
 
 Written by you (or by the agent with you). The postdoc reads this before the data.
 Keep it short and plain; update it when the project changes.
+The postdoc sends this file to your agent tool's AI provider: write nothing here that may not leave the lab.
 
 ## Project aims
 What is this project trying to find out or make? One short paragraph.

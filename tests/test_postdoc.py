@@ -121,6 +121,106 @@ def test_context_index_pdf_pages_and_missing_pdftotext(project, config, monkeypa
     assert doc["pages"] == 2 and doc["status"] == "indexed"
 
 
+def _can_link(tmp_path) -> bool:
+    try:
+        (tmp_path / "probe").symlink_to(tmp_path)
+        return True
+    except (OSError, NotImplementedError):
+        return False
+
+
+def _all_text(project) -> str:
+    return "".join(p.read_text(encoding="utf-8", errors="replace")
+                   for p in (project / "context" / ".text").rglob("*") if p.is_file())
+
+
+def test_context_index_refuses_links(project, config, tmp_path):
+    if not _can_link(tmp_path):
+        pytest.skip("symlinks need privileges here")
+    context.init(config)
+    docs = project / "context" / "documents"
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("PRIVATE-KEY-CONTENT", encoding="utf-8")
+    (outside / "inner.md").write_text("PRIVATE-FOLDER-CONTENT", encoding="utf-8")
+    (docs / "link.txt").symlink_to(outside / "secret.txt")
+    (docs / "linked-folder").symlink_to(outside, target_is_directory=True)
+    (docs / "plan.md").write_text("Aim: 5 samples\n", encoding="utf-8")
+    result = context.index(config)
+    assert result["indexed"] == ["plan.md"]
+    assert set(result["not_indexed"]) == {"link.txt", "linked-folder"}
+    assert all("not read" in why for why in result["not_indexed"].values())
+    assert "PRIVATE" not in _all_text(project)
+    assert not postdoc.current_inputs(config)["documents"].keys() - {"context/documents/plan.md"}
+
+
+def test_context_index_refuses_a_huge_docx_without_reading_it(project, config, monkeypatch):
+    context.init(config)
+    docs = project / "context" / "documents"
+    _docx(docs / "bomb.docx", ["x"])
+    monkeypatch.setattr(context, "MAX_DOCX_XML_BYTES", 5)
+    read = []
+    monkeypatch.setattr(zipfile.ZipFile, "read", lambda self, *a: read.append(a))
+    monkeypatch.setattr(zipfile.ZipExtFile, "read", lambda self, *a: read.append(a))
+    result = context.index(config)
+    assert "unpacked" in result["not_indexed"]["bomb.docx"] and not read
+
+
+def test_context_index_refuses_a_docx_with_too_many_entries(project, config, monkeypatch):
+    context.init(config)
+    _docx(project / "context" / "documents" / "many.docx", ["x"])
+    monkeypatch.setattr(context, "MAX_DOCX_ENTRIES", 0)
+    assert "entries" in context.index(config)["not_indexed"]["many.docx"]
+
+
+def test_context_index_size_limit_and_truncation(project, config, monkeypatch):
+    context.init(config)
+    docs = project / "context" / "documents"
+    (docs / "long.txt").write_text("abcdefghij" * 100, encoding="utf-8")
+    (docs / "big.txt").write_text("z" * 2000, encoding="utf-8")
+    (docs / "ok.md").write_text("fine\n", encoding="utf-8")
+    monkeypatch.setattr(context, "MAX_TEXT_CHARS", 50)
+    monkeypatch.setattr(context, "MAX_DOCUMENT_BYTES", 1500)
+    result = context.index(config)
+    assert "limit" in result["not_indexed"]["big.txt"] and result["truncated"] == ["long.txt"]
+    text = (project / "context" / ".text" / "long.txt.txt").read_text(encoding="utf-8")
+    assert text.endswith("=== truncated at 50 characters ===\n") and len(text) < 120
+    index = json.loads((project / "context" / ".text" / "index.json").read_text(
+        encoding="utf-8"))["documents"]
+    assert index["long.txt"]["truncated"] is True and index["ok.md"]["truncated"] is False
+
+
+def test_context_docx_table_is_bounded(project, config, monkeypatch):
+    context.init(config)
+    docs = project / "context" / "documents"
+    rows = "".join(f"<w:tr><w:tc><w:p><w:r><w:t>r{n}</w:t></w:r></w:p></w:tc>"
+                   f"<w:tc><w:p><w:r><w:t>{'c' * 40}</w:t></w:r></w:p></w:tc></w:tr>" for n in range(5))
+    xml = ('<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+           f"<w:body><w:p><w:r><w:t>Before</w:t></w:r></w:p><w:tbl>{rows}</w:tbl></w:body></w:document>")
+    with zipfile.ZipFile(docs / "t.docx", "w") as archive:
+        archive.writestr("word/document.xml", xml)
+    monkeypatch.setattr(context, "MAX_TABLE_ROWS", 2)
+    monkeypatch.setattr(context, "MAX_CELL_CHARS", 10)
+    context.index(config)
+    text = (project / "context" / ".text" / "t.docx.txt").read_text(encoding="utf-8")
+    assert text == ("Before\nr0 | cccccccccc…\nr1 | cccccccccc…\n"
+                    "=== table truncated at 2 of 5 rows ===\n")
+
+
+def test_context_pdftotext_timeout_is_recorded(project, config, monkeypatch):
+    context.init(config)
+    (project / "context" / "documents" / "paper.pdf").write_bytes(b"%PDF-1.4 fake")
+    (project / "context" / "documents" / "plan.md").write_text("ok\n", encoding="utf-8")
+    monkeypatch.setattr(context.shutil, "which", lambda name: "/usr/bin/pdftotext")
+
+    def slow(*args, **kwargs):
+        assert kwargs["timeout"] == context.PDFTOTEXT_TIMEOUT_S
+        raise subprocess.TimeoutExpired(args[0], kwargs["timeout"])
+    monkeypatch.setattr(context.subprocess, "run", slow)
+    result = context.index(config)
+    assert "took longer" in result["not_indexed"]["paper.pdf"] and result["indexed"] == ["plan.md"]
+
+
 # ---- run files -----------------------------------------------------------------------
 
 def _run(config, project, body: str | None = None, question: str = QUESTION) -> str:

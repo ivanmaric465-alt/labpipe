@@ -109,6 +109,7 @@ The postdoc answers the user's questions about the whole project, with its conte
   - `instructions.md`: how the postdoc uses the context;
   - `documents/`: work plan, papers; read-only.
 
+  Everything the postdoc reads (and you read here) goes to the user's agent tool's AI provider (e.g. Anthropic for Claude Code, OpenAI for Codex): never suggest putting documents there that may not leave the lab, and say so when the user adds documents.
   If it does not exist, offer `labpipe context init`. After documents are added, run `labpipe context index`.
 - **"Let's write the project context"**:
   1. Ask about the aims, hypotheses, the samples and what they should show.

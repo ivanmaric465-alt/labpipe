@@ -133,9 +133,9 @@ def _tree(paths: list[Path]) -> dict[str, str]:
 
 def current_inputs(config: dict) -> dict[str, Any]:
     context = PROJECT_ROOT / "context"
-    documents = sorted(p for p in (context / "documents").rglob("*") if p.is_file()
-                       and not any(part.startswith(".") for part in
-                                   p.relative_to(context / "documents").parts))
+    from labpipe import context as context_folder
+    documents = [p for p in context_folder.documents()      # links are never read, not even hashed
+                 if context_folder.link_problem(p, context / "documents") is None]
     settings = [PROJECT_ROOT / "config" / "samples.yaml",
                 *sorted((PROJECT_ROOT / "config" / "measurements").rglob("*"))]
     return {"labpipe_version": __version__,
