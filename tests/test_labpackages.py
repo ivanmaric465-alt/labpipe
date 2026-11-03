@@ -206,7 +206,7 @@ def test_native_mode_prints_the_install_command_and_never_runs_it(tmp_path, monk
     status, message, step = lp.problem(project, host_container=False, in_container=False)
     assert status == "todo" and "no-such-package-xyz==1.0 (not installed)" in message
     import sys
-    assert step == f'the user runs: "{sys.executable}" -m pip install -r "{project}/lab/requirements.txt"'
+    assert step == f'the user runs: "{sys.executable}" -m pip install -r "{project / 'lab' / 'requirements.txt'}"'
     ok, detail = lp.check_result(project, True)
     assert not ok and "pip install -r" in detail
     assert lp.check_result(project, False)[0] is True       # a shipped method does not need them
