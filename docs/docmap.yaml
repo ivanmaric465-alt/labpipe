@@ -52,7 +52,7 @@ areas:
     code: ["src/labpipe/methods/imported/*", src/labpipe/labmethods.py]
     docs: [docs/methods/imported.md, docs/ARCHITECTURE.md]
   method-template:  # the contract every method follows
-    code: ["src/labpipe/methods/template/*", src/labpipe/methods_kit.py]
+    code: ["src/labpipe/methods/template/*", src/labpipe/methods_kit.py, src/labpipe/labpackages.py]
     docs: [docs/ADDING_A_METHOD.md, docs/ARCHITECTURE.md]
   notes:            # the rules and their CHECKS_VERSION
     code: [src/labpipe/notes.py]
@@ -71,7 +71,7 @@ areas:
     docs: [docs/settings/automation.md, docs/settings/container.md, docs/SETUP.md, README.md,
            AGENTS.md, .agents/skills/labpipe-pass/SKILL.md]
   container:
-    code: [src/labpipe/container.py, "container/*"]
+    code: [src/labpipe/container.py, src/labpipe/labpackages.py, "container/*"]
     docs: [docs/settings/container.md, docs/ARCHITECTURE.md, README.md]
   setup:
     code: [src/labpipe/doctor.py, src/labpipe/wizard.py, src/labpipe/installer.py, install.sh,

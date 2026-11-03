@@ -23,7 +23,7 @@ from labpipe import manifest as mf
 from labpipe.labmethods import MethodsError
 from labpipe.registry import load_methods
 from labpipe.container import container_mode
-from labpipe import safety
+from labpipe import labpackages, safety
 from labpipe.safety import (CODE_ROOT, PROJECT_ROOT, SetupError, in_container,
                             load_pipeline_config, synced_marker)
 
@@ -238,6 +238,9 @@ def _container() -> list[dict[str, Any]]:
                                           if state["image_up_to_date"] is False else ""),
                    "labpipe container start --replace" if state["image_up_to_date"] is False
                    else None)]
+    if state.get("lab_packages"):
+        items.append(_item("lab_packages", "warn", f"the running container's lab packages layer "
+                           f"is out of date: {state['lab_packages']}", state["next"]))
     harness = ((load_pipeline_config().get("agents") or {}).get("harness"))
     if harness == "claude-code" and not state["claude_login"]:
         items.append(_item("container_login", "todo", "the container has no Claude login, so "
@@ -396,6 +399,10 @@ def _method_setup() -> list[dict[str, Any]]:
             items.append(_item(f"agent:{agent}", "todo", f"{'lab/methods.yaml' if spec.get('lab') else 'methods.yaml'}"
                                f" names agent {agent}, but {where} does not exist",
                                "see docs/ADDING_A_METHOD.md"))
+    found = labpackages.problem(PROJECT_ROOT, host_container=container_mode(),
+                                in_container=in_container())
+    if found:       # lab/requirements.txt: not valid, or its packages are not installed here
+        items.append(_item("lab_packages", *found))
     catalogue = CODE_ROOT / "references" / "xrd" / "phases.yaml"
     if catalogue.exists():
         phases = (yaml.safe_load(catalogue.read_text(encoding="utf-8")) or {}).get("phases") or []

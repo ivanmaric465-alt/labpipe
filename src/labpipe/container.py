@@ -30,7 +30,7 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
-from labpipe import migrations, safety
+from labpipe import labpackages, migrations, safety
 from labpipe.safety import SetupError, load_pipeline_config
 
 PROJECT_MOUNT = "/project"       # the project folder, read-write; the working folder
@@ -38,6 +38,7 @@ CODE_MOUNT = "/opt/labpipe"      # the code: baked into the image; mounted for `
 HOME_MOUNT = "/home/labpipe"
 HASH_LABEL = "labpipe.container_hash"
 DEV_LABEL = "labpipe.container_dev"
+LAB_LABEL = "labpipe.lab_requirements"  # sha256 of lab/requirements.txt, on the project's layer
 CODE_IDENTITY = ".labpipe-code.json"   # commit of the baked code (the image has no .git)
 FIRST_PORT = 8765
 SECRET_NAME = "labpipe-claude-token"
@@ -541,9 +542,55 @@ def build(engine: str, cfg: dict, code: Path | None = None) -> str:
     return tag
 
 
+def build_lab(engine: str, cfg: dict, base_tag: str, project: Path | None = None) -> str:
+    """Build this project's layer on top of labpipe's image `base_tag`: the packages of
+    lab/requirements.txt (labpackages), pinned, installed with pip at build time. Tag
+    `localhost/labpipe-<slug>-lab:<hash of the file + the base image's id>`. Returns it."""
+    project = Path(project or _root())
+    try:
+        packages = labpackages.listed(project)      # refuses anything but name==version
+    except labpackages.LabPackagesError as exc:
+        raise ContainerError(str(exc)) from exc
+    base_id = _image_id(engine, base_tag)
+    if not base_id:
+        raise ContainerError(f"image {base_tag} not found: build it first (labpipe container build)")
+    tag = f"{labpackages.lab_repository(cfg)}:{labpackages.lab_hash(project, base_id)}"
+    digest = labpackages.sha256(project)
+    with tempfile.TemporaryDirectory(prefix="labpipe-lab-build-") as folder:
+        context = Path(folder)
+        (context / "requirements.txt").write_bytes(labpackages.path(project).read_bytes())
+        (context / "Containerfile").write_text(labpackages.containerfile(base_tag),
+                                               encoding="utf-8")
+        command = [engine, "build", "-f", "Containerfile", "-t", tag,
+                   "--label", f"{LAB_LABEL}={digest}", str(context)]
+        sys.stderr.write(f"lab packages ({len(packages)}) on top of {base_tag}\n")
+        if subprocess.run(command, cwd=context, stdout=sys.stderr).returncode != 0:
+            raise ContainerError(f"building the lab packages layer failed: {' '.join(command)}"
+                                 f" (check that the versions in {labpackages.FILE} exist)")
+    return tag
+
+
+def project_image(engine: str, cfg: dict, base_tag: str, project: Path | None = None) -> str:
+    """The image this project's container starts from: labpipe's own (`base_tag`) when the
+    project has no lab/requirements.txt, else the layer on top of it (built when missing).
+    `base_tag` must exist."""
+    project = Path(project or _root())
+    if labpackages.text(project) is None:
+        return base_tag
+    try:
+        labpackages.listed(project)
+    except labpackages.LabPackagesError as exc:
+        raise ContainerError(str(exc)) from exc
+    tag = (f"{labpackages.lab_repository(cfg)}:"
+           f"{labpackages.lab_hash(project, _image_id(engine, base_tag))}")
+    return tag if image_exists(engine, tag) else build_lab(engine, cfg, base_tag, project)
+
+
 def cmd_build(args) -> int:
     _, cfg, engine = _prepare()
-    _say({"built": build(engine, cfg), "engine": engine})
+    base = build(engine, cfg)
+    image = project_image(engine, cfg, base)
+    _say({"built": base, "engine": engine, **({"lab_image": image} if image != base else {})})
     return 0
 
 
@@ -610,6 +657,11 @@ def cmd_start(args) -> int:
         subprocess.run([engine, "rm", "-f", name], capture_output=True)
     if not image_exists(engine, tag):
         build(engine, cfg)
+    try:
+        tag = project_image(engine, cfg, tag)   # + the project's lab packages, if it has any
+    except ContainerError as exc:
+        _say({"error": str(exc)})
+        return 1
     command = run_args(config, engine, image_id=_image_id(engine, tag),
                        engine_text=engine_version(engine),
                        claude_login=claude_login_present(engine), tag=tag,
@@ -646,15 +698,22 @@ def status_record() -> dict:
     state = (record or {}).get("State") or {}
     labels = ((record or {}).get("Config") or {}).get("Labels") or {}
     have, current = labels.get(HASH_LABEL), container_hash()
+    lab_have, lab_now = labels.get(LAB_LABEL), labpackages.sha256(_root())
+    lab_current = (lab_have == lab_now) if record else None
+    lab_next = "labpipe container build, then labpipe container start --replace"
     return {"engine": engine, "name": cfg["name"], "exists": record is not None,
             "running": bool(state.get("Running")), "started_at": state.get("StartedAt"),
             "image_hash": have, "current_hash": current,
             "image_up_to_date": have == current if record else None,
+            "lab_packages_up_to_date": lab_current,
+            "lab_packages": (None if lab_current in (None, True) else
+                             f"{labpackages.FILE} changed: {lab_next}"),
             "dev": labels.get(DEV_LABEL) == "1", "project": str(_root()),
             "claude_login": claude_login_present(engine),
             "page": page_url(cfg["port"], cfg.get("page_token", "")),
-            "next": None if (record and have == current) else
-            "labpipe container start --replace" if record else "labpipe container start"}
+            "next": ("labpipe container start --replace" if record and have != current else
+                     lab_next if record and lab_current is False else
+                     "labpipe container start" if not record else None)}
 
 
 def cmd_status(args) -> int:

@@ -17,7 +17,7 @@ docs belong to which code: `docs/docmap.yaml` (`scripts/check_docs.py` checks it
 3. **Every output can be regenerated from its `provenance.json`**: input hash, resolved
    settings, the settings files used and their hashes (each with its root, `code` or
    `project`), git commit, the method's analysis and plot version, environment, output hashes
-   (`replay`: every recorded output is compared, `thumb.jpg` included; a different python, library, `requirements.lock` or native/container run is a warning in the result's `notes`, never a refusal). The comparison figures of samples (`analysis/_compare/`) record the figure's
+   (`replay`: every recorded output is compared, `thumb.jpg` included; a different python, library, `requirements.lock`, `lab/requirements.txt` (hash and the installed versions of its packages) or native/container run is a warning in the result's `notes`, never a refusal). The comparison figures of samples (`analysis/_compare/`) record the figure's
    spec (the plotted values, the `results.json` or raw file they came from with their hashes),
    the settings and their own `compare_version`, and replay the same way. **The one exception**:
    an analysis made outside labpipe (`kind: imported`, `made_by: "outside labpipe"`) cannot be
@@ -186,6 +186,7 @@ context/                the user's project context and documents
 lab/LAB.md              the lab's conventions for all agents
 lab/agents/<role>.md    appended to that role; <new>.md with frontmatter = an extra role
 lab/methods.yaml        the lab's own methods: same entries as `methods.yaml`
+lab/requirements.txt     pinned packages (`name==version`) for lab methods: a layer on the image (`labpackages.py`)
 lab/methods/<name>/     one lab method: analyze.py, summary.py, config.yaml (defaults), README.md (its page)
 lab/references/xrd/     the lab's own XRD reference phases (`labpipe xrd refs add`)
 analysis/  manifest.json  logs/       results and state (analysis/_compare/: the figures across samples)
@@ -246,7 +247,8 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | Automation | `automation.py` | one pass (code-only methods: one fresh `labpipe <method> analyze` process per measurement; review flags notified once, `to_check`), the watcher (the container's entry point; refuses elsewhere; restarts, exit 3, when labpipe's code or `labmethods.source_hash()` of `lab/methods/` + `lab/methods.yaml` changes), nightly run, notifications (`notifications.jsonl`, Linux `notify-send`), `setup` (timings, autostart, removing old native units), headless agent commands |
 | | `autostart.py` | the container starts at login: `podman-restart.service` (Podman, Linux), Docker, podman machine guidance (untested); the old native units (host side, no numpy) |
 | | `inbox.py` | notifications page (local, token, read-only) |
-| | `container.py` | build (staged context), start (name, port, mounts per project), stop, login, shell, pop-up proxy; forwarding of host commands (and `forward_json`: the doctor's file list comes from the container, since recognising a file imports method code) |
+| | `labpackages.py` | `lab/requirements.txt`: parse (only `name==version`), hash, installed versions (provenance `environment`), the Containerfile of the project's layer, the native install command, the doctor / `methods check` messages |
+| | `container.py` | build (staged context; `build_lab`/`project_image`: the project's lab layer on top, tagged by file hash + base image id), start (name, port, mounts per project), stop, login, shell, pop-up proxy; forwarding of host commands (and `forward_json`: the doctor's file list comes from the container, since recognising a file imports method code) |
 | Setup | `doctor.py` | setup state and next step (read-only; also `settings_migrations`, and the non-blocking `onboarding` warning while steps of `docs/ONBOARDING.md` remain) |
 | | `onboarding.py` | `labpipe onboarding`: the steps of the first conversation (`docs/ONBOARDING.md`), their record in `logs/onboarding.json`, the doctor's `onboarding` item; the steps that mention notes end with the methods of `methods.yaml` and whether each has an analyst and notes (host side, no numpy) |
 | | `migrations.py` | settings migrations: `labpipe migrate`, old keys understood in memory for one release (host side, no numpy) |

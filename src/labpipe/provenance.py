@@ -14,7 +14,8 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
-from labpipe.safety import CODE_ROOT
+from labpipe import labpackages
+from labpipe.safety import CODE_ROOT, PROJECT_ROOT
 
 TRACKED_LIBRARIES = ["labpipe", "numpy", "scipy", "matplotlib", "PyYAML"]
 
@@ -98,6 +99,9 @@ def environment() -> dict[str, Any]:
         "executable": sys.executable,
         "libraries": libraries,
         "requirements_lock_sha256": sha256_file(lock) if lock.exists() else None,
+        # the lab's own packages (lab/requirements.txt): the file's hash and what is installed
+        "lab_requirements_sha256": labpackages.sha256(PROJECT_ROOT),
+        "lab_packages": labpackages.installed(PROJECT_ROOT),
     }
 
 

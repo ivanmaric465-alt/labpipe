@@ -31,7 +31,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from labpipe import labmethods, safety
+from labpipe import labmethods, labpackages, safety
 from labpipe.naming import measurement_id
 from labpipe.provenance import sha256_file, utc_now
 from labpipe.registry import classify, load_methods
@@ -289,6 +289,7 @@ def check(name: str, example: Path, config: dict | None = None,
     lab = bool(spec.get("lab"))
     _check(results, "settings file", spec.get("config") and
            labmethods.defaults_file(spec).exists(), str(spec.get("config")))
+    _check(results, "lab packages", *labpackages.check_result(PROJECT_ROOT, lab))
     if spec.get("subagent"):
         base = PROJECT_ROOT if lab else CODE_ROOT
         role = base / ("lab/agents" if lab else "agents") / f"{spec['subagent']}.md"
