@@ -92,5 +92,5 @@ Also check:
 
 They open pull requests; CI tests them; nothing reaches users before a release.
 
-- `.github/dependabot.yml`: weekly, the image's base (`container/Dockerfile`), the npm packages (`container/package.json`, Codex), the actions in `.github/workflows`.
+- `.github/dependabot.yml`: weekly, the image's base (`container/Dockerfile`), the npm packages (`container/package.json`, Codex), the actions in `.github/workflows` (pinned to commit hashes, the version in a comment; Dependabot updates both).
 - `.github/workflows/updates.yml` (weekly, or run it by hand): `scripts/check_updates.py --apply` looks up the latest PyPI version of every pin in `requirements.lock`, `container/requirements.lock` (identical sets) and `pyproject.toml` (`analysis`, `refbuild`), and of `@anthropic-ai/claude-code` against `CLAUDE_CODE_VERSION` in `container/versions.env`, and opens one pull request listing old -> new. `python scripts/check_updates.py` alone only reports. pymatgen stays out of both lock files. A pull request opened with the workflow's token does not start CI by itself: push an empty commit to it, or close and reopen it.

@@ -1,7 +1,7 @@
 # Hardening after an external review (design)
 
 Status: approved 2026-10-22 (user: "write the design note, start with A"). Groups A and B are
-merged (B on 2026-11-03); C follows.
+merged (B on 2026-11-03); C is being built (branch `hardening-c`).
 
 An external review (2026-10-22) checked the code and ran parts of it in isolation. Each
 finding below was checked against the code before it went in here. Its main point stands: the
@@ -227,11 +227,20 @@ of `lab/methods/…` it runs the old code but records the version of the new sou
 - **Agent tools:** a short capability table (Claude Code, Codex, OpenCode: install,
   container, unattended runs, cost cap), shown when choosing one.
 - **Generic agent text** follows the registry (`subagent: null`, `notes: false`).
-- **Lab methods:**
-  - an explicit enable/disable of shipped methods per project;
-  - a known-answer test scaffold for a lab method;
-  - a supported way to add packages.
+- **Lab methods** (decisions 2026-11-03, user):
+  - **Disable a shipped method per project:** `disable: [eds]` in the project's
+    `lab/methods.yaml`. Nothing is recognised, analysed or reported for it; `labpipe methods
+    list` shows it as off.
+  - **Known-answer test:** `labpipe methods new NAME` also writes `lab/methods/NAME/known_answer/`
+    (an example input and `expected.yaml`: values with tolerances); `labpipe methods check` runs
+    it and fails when a number drifts.
+  - **Packages:** `lab/requirements.txt` (pinned versions) in the project; `labpipe container
+    build` adds a layer on top of labpipe's image for that project only. Recorded in provenance;
+    never in labpipe's own image.
 - **CI:** GitHub actions pinned to commit hashes.
+  **Built:** `actions/checkout` v4.4.0 and `actions/setup-python` v5.6.0 by commit hash, the
+  version in a comment (Dependabot keeps both up to date); docs/RELEASING.md says so. Moving to
+  newer majors stays with Dependabot's pull requests.
 
 ## Not taken
 
