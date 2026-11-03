@@ -41,7 +41,8 @@ def test_methods_new_in_a_project_writes_only_into_lab(tmp_path):
     assert sorted(made["created"]) == sorted([
         "lab/methods/demo/__init__.py", "lab/methods/demo/analyze.py",
         "lab/methods/demo/config.yaml", "lab/methods/demo/README.md",
-        "lab/agents/demo-analyst.md", "lab/methods.yaml (entry)"])
+        "lab/methods/demo/known_answer/README.md", "lab/methods/demo/known_answer/expected.yaml",
+        "lab/methods/demo/known_answer/example.dat", "lab/agents/demo-analyst.md", "lab/methods.yaml (entry)"])
     assert not (REPO / "src" / "labpipe" / "methods" / "demo").exists()
     assert not (REPO / "config" / "demo.yaml").exists()
     analyze = (project / "lab/methods/demo/analyze.py").read_text(encoding="utf-8")
@@ -67,6 +68,7 @@ def test_a_lab_method_scans_analyses_reports_versions_and_replays(tmp_path):
     project, raw, env, example, _ = _scaffold(tmp_path)
     checked = _labpipe(env, "methods", "check", "demo", "--example", str(example))
     assert checked["ok"] and "Reading the plot" in checked["warnings"][0]   # warns, does not fail
+    assert any(c["check"] == "known answer" and c["ok"] for c in checked["checks"])
     page = project / "lab/methods/demo/README.md"
     page.write_text(page.read_text(encoding="utf-8").replace(
         "## Reading the plot\n", "## Reading the plot\n- x is time (s), y the signal (V).\n"),
@@ -359,3 +361,130 @@ def test_the_watcher_restarts_when_lab_methods_change(tmp_path, monkeypatch):
     assert labmethods.source_hash() == start
     (tmp_path / "lab/methods.yaml").write_text("methods: {a: {}}\n", encoding="utf-8")
     assert labmethods.source_hash() != start                 # the registry counts too
+
+
+# ---- disable: [name] -----------------------------------------------------------------------
+
+
+def _xy(raw: Path, name: str = "S-1_a.xy") -> Path:
+    path = raw / "XRD" / name
+    path.write_text("\n".join(f"{20 + i * 0.1:.1f} {100 + i}" for i in range(50)) + "\n",
+                    encoding="utf-8")
+    return path
+
+
+def _disable(project: Path, text: str) -> None:
+    (project / "lab").mkdir(exist_ok=True)
+    (project / "lab/methods.yaml").write_text(text, encoding="utf-8")
+
+
+def test_a_disabled_method_is_not_recognised_analysed_listed_or_reported(tmp_path):
+    project, raw, env = _project(tmp_path)
+    _xy(raw)
+    first = _labpipe(env, "scan")
+    assert first["counts"] == {"pending": 1} and first["unrecognised_new"] == []
+    (kept,) = _labpipe(env, "pending")
+    _disable(project, "disable: [xrd]\n")
+    again = _labpipe(env, "scan")            # the old entry is left as it is, nothing crashes
+    assert again["unrecognised_new"] == [] and again["counts"].get("disabled") == 1
+    assert _labpipe(env, "pending") == []
+    assert _labpipe(env, "status", kept["entry_id"])["status"] == "pending"   # entry kept as it was
+    assert "xrd" not in _labpipe(env, "methods", "versions")
+    assert _labpipe(env, "analyze", "--pending")["processed"] == 0
+    assert _labpipe(env, "requeue", "--stale")["requeued"] == []
+    shown = {m["method"]: m for m in _labpipe(env, "methods", "list")["methods"]}
+    assert shown["xrd"]["status"] == "off (disabled in lab/methods.yaml)"
+    assert shown["sem"]["status"] == "on"
+    assert _labpipe(env, "report")
+    inventory = _labpipe(env, "inventory")["roots"][0]
+    assert "xrd" not in inventory["recognised"] and inventory["not_recognised"] == {}
+    assert inventory["left_out"] == {"method xrd is disabled in lab/methods.yaml": 1}
+
+
+def test_a_file_of_a_disabled_method_is_left_out_from_the_start(tmp_path):
+    project, raw, env = _project(tmp_path)
+    _disable(project, "disable: [xrd]\n")
+    _xy(raw)
+    out = _labpipe(env, "scan")
+    assert out["counts"] == {"disabled": 1} and out["unrecognised_new"] == []
+    assert _labpipe(env, "pending") == []
+
+
+def test_disable_is_checked(tmp_path):
+    project, raw, env = _project(tmp_path)
+    own = ("methods:\n  demo:\n    patterns: ['**/*.zzz']\n    module: labpipe_lab.demo.analyze\n"
+           "    config: lab/methods/demo/config.yaml\n")
+    for text, fragment in (
+            ("disable: [nosuch]\n", "'nosuch'"),
+            ("disable: eds\n", "must be a list"),
+            ("disable: [1]\n", "must be a list"),
+            (f"disable: [demo]\n{own}", "only shipped methods can be disabled")):
+        _disable(project, text)
+        status, out = _cli(env, "scan")
+        error = json.loads(out)["error"]
+        assert status == 2 and fragment in error and "lab/methods.yaml" in error, (text, out)
+    _disable(project, "disable: []\n")
+    assert _cli(env, "scan")[0] == 0
+    _disable(project, "disable: [eds, eds]\n")
+    assert [m["status"] for m in _labpipe(env, "methods", "list")["methods"]
+            if m["method"] == "eds"] == ["off (disabled in lab/methods.yaml)"]
+
+
+# ---- known-answer test -----------------------------------------------------------------------
+
+
+def _expected(project: Path, name: str = "demo") -> Path:
+    return project / "lab/methods" / name / "known_answer/expected.yaml"
+
+
+def test_a_new_method_passes_its_own_known_answer_check(tmp_path):
+    project, raw, env, example, _ = _scaffold(tmp_path)
+    for args in (("--example", str(example)), ()):          # without --example: the known answer
+        result = _labpipe(env, "methods", "check", "demo", *args)
+        assert result["ok"], result
+        assert "warnings" in result and not any("known-answer" in w for w in result["warnings"])
+        assert any(c["check"] == "known answer" and c["ok"] for c in result["checks"])
+    work = next((project / "logs" / "method-check").glob("demo-known-answer-*"))
+    assert (work / "results.json").is_file()
+    assert not (project / "analysis").exists()
+
+
+def test_a_wrong_expected_value_fails_the_check_and_names_the_key(tmp_path):
+    project, raw, env, example, _ = _scaffold(tmp_path)
+    path = _expected(project)
+    path.write_text(path.read_text(encoding="utf-8").replace("value: 3.61", "value: 3.9"),
+                    encoding="utf-8")
+    code, out = _cli(env, "methods", "check", "demo")
+    result = json.loads(out)
+    assert code == 1 and not result["ok"]
+    failed = [c for c in result["checks"] if not c["ok"]]
+    assert [c["check"] for c in failed] == ["known answer: summary.y_max"]
+    assert "expected 3.9 ± 0.01, got 3.61" in failed[0]["detail"]
+    path.write_text("input: example.dat\nexpect:\n  - {key: summary.nope, value: 1, "
+                    "tolerance: 0.1}\n", encoding="utf-8")
+    failed = [c for c in _labpipe(env, "methods", "check", "demo")["checks"] if not c["ok"]]
+    assert "not in results.json" in failed[0]["detail"]
+    path.write_text("input: example.dat\nexpect: [{key: a, value: 1}]\n", encoding="utf-8")
+    assert "tolerance" in _labpipe(env, "methods", "check", "demo")["error"]
+    failed = [c for c in _labpipe(env, "methods", "check", "demo", "--example", str(example)
+                                  )["checks"] if not c["ok"]]
+    assert "tolerance" in failed[0]["detail"]
+
+
+def test_a_method_without_known_answer_gets_a_warning_not_an_error(tmp_path):
+    import shutil
+    project, raw, env, example, _ = _scaffold(tmp_path)
+    shutil.rmtree(project / "lab/methods/demo/known_answer")
+    result = _labpipe(env, "methods", "check", "demo", "--example", str(example))
+    assert result["ok"]
+    assert any("no known-answer test" in w for w in result["warnings"])
+    assert "error" in _labpipe(env, "methods", "check", "demo")      # nothing to run on: asks
+
+
+def test_known_answer_keys_reach_into_lists():
+    from labpipe.methods_kit import _compare_known, value_at
+    data = {"peaks": [{"center": 38.2}, {"center": 44.4}], "a": {"b": 2}}
+    assert value_at(data, "peaks[1].center") == 44.4 and value_at(data, "a.b") == 2
+    rows = _compare_known([{"key": "peaks[0].center", "value": 38.0, "tolerance": 0.1},
+                           {"key": "peaks[5].center", "value": 1, "tolerance": 0}], data)
+    assert [r["ok"] for r in rows] == [False, False] and rows[1]["got"].startswith("(not")

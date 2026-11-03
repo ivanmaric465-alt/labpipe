@@ -15,6 +15,11 @@ outside labpipe) into the report, in a project only: it writes lab/methods/NAME/
 description form) and config.yaml, lab/agents/NAME-analyst.md and an entry `kind: imported` in
 lab/methods.yaml, never overwriting; no Python (labpipe.methods.imported does the work).
 
+A lab method also gets `known_answer/` (an example input, `expected.yaml`: the values the method
+must give for it, README.md). `check NAME [--example FILE]` runs it too and fails when a number
+drifts; without --example the known-answer input is the example. A lab method without
+`known_answer/` gets a warning.
+
 `check NAME --example FILE` runs the method on the example (outputs under
 logs/method-check/, the example is only read) and verifies the contract that
 the pipeline, replay and the agents rely on: registry entry, recognition,
@@ -31,6 +36,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from labpipe import labmethods, safety
 from labpipe.naming import measurement_id
 from labpipe.provenance import sha256_file, utc_now
@@ -39,6 +46,7 @@ from labpipe.safety import CODE_ROOT, PROJECT_ROOT, atomic_write_text, is_dev
 
 TEMPLATE = CODE_ROOT / "src" / "labpipe" / "methods" / "template"
 NAME = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
+KNOWN_ANSWER = "known_answer"
 REQUIRED_OUTPUTS = ("results.json", "plot.png", "plot.pdf", "provenance.json")
 SEVERITIES = {"info", "warning", "review"}
 
@@ -109,6 +117,11 @@ def new(name: str, example: Path, description: str, analyst: bool = True) -> dic
                 f"config/lab.yaml → {name}"),
             folder / "README.md": _fill(template("design.md"), name, description, extension)
                 .replace(f"`config/{name}.yaml`", f"`lab/methods/{name}/config.yaml`"),
+            folder / KNOWN_ANSWER / "README.md": _fill(template("known-answer-readme.md"), name,
+                                                        description, extension),
+            folder / KNOWN_ANSWER / "expected.yaml": _fill(template("known-answer-expected.yaml"),
+                                                           name, description, extension),
+            folder / KNOWN_ANSWER / f"example{extension}": template("known-answer-example.txt"),
         }
         if agent:
             targets[PROJECT_ROOT / "lab" / "agents" / f"{agent}.md"] = _fill(
@@ -145,6 +158,7 @@ def new(name: str, example: Path, description: str, analyst: bool = True) -> dic
     else:
         text = ("# The lab's own methods (docs/ADDING_A_METHOD.md). Same entries as labpipe's "
                 "methods.yaml;\n# modules are labpipe_lab.<name>, the package lab/methods/<name>/.\n"
+                "# Switch a shipped method off for this project: disable: [eds]\n"
                 "schema: labpipe.methods/1\n\nmethods:\n")
     atomic_write_text(registry, text + entry, pipeline=False)
     where = "lab/" if lab else ""
@@ -159,7 +173,10 @@ def new(name: str, example: Path, description: str, analyst: bool = True) -> dic
                      *([] if lab else [f"write the synthetic test in tests/test_{name}.py"]),
                      *([f"adapt {where}agents/{agent}.md (what to look at, what the notes say)"]
                        if agent else []),
-                     f"labpipe methods check {name} --example <file>  (until it passes)",
+                     *([f"replace lab/methods/{name}/known_answer/ with one file whose result you "
+                        "know and the values it must give (expected.yaml)"] if lab else []),
+                     f"labpipe methods check {name}" + ("" if lab else " --example <file>")
+                     + "  (until it passes)",
                      "labpipe project sync; labpipe scan" if lab else "labpipe agents sync; labpipe scan"]}
 
 
@@ -232,7 +249,8 @@ def import_analysis(name: str, folder: str, files: str, description: str, *,
         text = ("# The lab's own methods (docs/ADDING_A_METHOD.md). Same entries as labpipe's "
                 "methods.yaml;\n# modules are labpipe_lab.<name>, the package lab/methods/<name>/; "
                 "`kind: imported` entries\n# are your own analyses made outside labpipe "
-                "(docs/methods/imported.md).\nschema: labpipe.methods/1\n\nmethods:\n")
+                "(docs/methods/imported.md).\n# Switch a shipped method off for this project: "
+                "disable: [eds]\nschema: labpipe.methods/1\n\nmethods:\n")
     atomic_write_text(registry, text + entry, pipeline=False)
     page = f"lab/methods/{name}/README.md"
     missing = [] if not raw_roots else ([] if any((Path(r["path"]) / folder).is_dir()
@@ -245,6 +263,20 @@ def import_analysis(name: str, folder: str, files: str, description: str, *,
                      "report; your agent can write it from what you tell it)",
                      "labpipe project sync   (so the agents see the new role)",
                      "labpipe scan", "labpipe analyze --pending"]}
+
+
+def listing() -> dict[str, Any]:
+    """Every method: its kind (shipped, the lab's own, imported) and what it is for; a shipped
+    one the project disables (`disable:` in lab/methods.yaml) is shown as off."""
+    from labpipe.registry import disabled_methods
+    rows = [{"method": name, "kind": ("imported" if spec.get("kind") == "imported" else
+                                      "lab" if spec.get("lab") else "shipped"),
+             "description": spec.get("description"), "status": "on"}
+            for name, spec in load_methods().items()]
+    rows += [{"method": name, "kind": "shipped", "description": spec.get("description"),
+              "status": f"off (disabled in {labmethods.REGISTRY_FILE})"}
+             for name, spec in disabled_methods().items()]
+    return {"methods": sorted(rows, key=lambda r: (r["kind"] != "shipped", r["method"]))}
 
 
 def reading_the_plot_missing(page: Path) -> str | None:
@@ -274,9 +306,104 @@ def _run(module, example: Path, out: Path, pipeline: bool, settings=None,
         "relative_path": example.name, "method": method}, pipeline=pipeline)
 
 
-def check(name: str, example: Path, config: dict | None = None,
+_PATH_PART = re.compile(r"([^.\[\]]+)|\[(\d+)\]")
+
+
+def value_at(data: Any, key: str) -> Any:
+    """`a.b[0].c` in a loaded results.json; KeyError (naming the key) when it is not there."""
+    here = data
+    for name, index in _PATH_PART.findall(key):
+        try:
+            here = here[int(index)] if index else here[name]
+        except (KeyError, IndexError, TypeError):
+            raise KeyError(key) from None
+    return here
+
+
+def _known_answer_file(name: str) -> dict[str, Any]:
+    """lab/methods/NAME/known_answer/expected.yaml, checked: input (a file next to it),
+    sample_id, expect (list of key, value, tolerance). MethodKitError for what is wrong."""
+    folder = PROJECT_ROOT / "lab" / "methods" / name / KNOWN_ANSWER
+    where = f"lab/methods/{name}/{KNOWN_ANSWER}/expected.yaml"
+    try:
+        data = yaml.safe_load((folder / "expected.yaml").read_text(encoding="utf-8")) or {}
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+        raise MethodKitError(f"{where} cannot be read: {str(exc).splitlines()[0]}") from exc
+    if not isinstance(data, dict) or not isinstance(data.get("input"), str) or not data["input"]:
+        raise MethodKitError(f"{where}: `input:` is the file next to it, e.g. `input: example.dat`")
+    path = (folder / data["input"]).resolve()
+    if path.parent != folder.resolve() or not path.is_file():
+        raise MethodKitError(f"{where}: `input: {data['input']}` must be a file in {KNOWN_ANSWER}/ "
+                             "itself")
+    expect = data.get("expect")
+    if not isinstance(expect, list) or not expect:
+        raise MethodKitError(f"{where}: `expect:` is a list of {{key, value, tolerance}}")
+    for i, item in enumerate(expect):
+        number = isinstance(item, dict) and isinstance(item.get("value"), (int, float)) \
+            and not isinstance(item.get("value"), bool)
+        if not isinstance(item, dict) or not isinstance(item.get("key"), str) or "value" not in item \
+                or (number and not isinstance(item.get("tolerance"), (int, float))):
+            raise MethodKitError(f"{where}: expect[{i}] needs `key`, `value` and, for a number, "
+                                 "`tolerance` (e.g. {key: summary.y_max, value: 3.61, "
+                                 "tolerance: 0.01})")
+    return {**data, "path": path}
+
+
+def _compare_known(expect: list[dict[str, Any]], data: dict[str, Any]) -> list[dict[str, Any]]:
+    """One row per expected value: {key, expected, got, ok}."""
+    rows = []
+    for item in expect:
+        want = item["value"]
+        try:
+            got = value_at(data, item["key"])
+        except KeyError:
+            rows.append({"key": item["key"], "expected": want, "got": "(not in results.json)",
+                         "ok": False})
+            continue
+        numeric = isinstance(want, (int, float)) and not isinstance(want, bool)
+        ok = (isinstance(got, (int, float)) and not isinstance(got, bool)
+              and abs(got - want) <= item["tolerance"]) if numeric else got == want
+        rows.append({"key": item["key"], "expected": want, "got": got, "ok": bool(ok),
+                     **({"tolerance": item["tolerance"]} if numeric else {})})
+    return rows
+
+
+def _known_answer(results: list, name: str, module, config: dict | None,
+                  work_dir: Path | None) -> None:
+    """Run the method on known_answer/<input> (a folder under logs/, never analysis/ or the
+    data folder) and compare the numbers with expected.yaml."""
+    try:
+        known = _known_answer_file(name)
+    except MethodKitError as exc:
+        _check(results, "known answer: expected.yaml", False, str(exc))
+        return
+    pipeline = work_dir is None
+    out = (PROJECT_ROOT / config["logs_dir"] / "method-check"
+           / f"{name}-known-answer-{utc_now().replace(':', '')}") if pipeline \
+        else Path(work_dir) / "known_answer"
+    try:
+        module.run(known["path"], out, settings=None, settings_sources=None, context={
+            "sample_id": known.get("sample_id"), "measurement_id": measurement_id(known["path"].name),
+            "relative_path": known["path"].name, "method": name}, pipeline=pipeline)
+        data = json.loads((out / "results.json").read_text(encoding="utf-8"))
+    except Exception as exc:
+        _check(results, "known answer: run", False, f"{type(exc).__name__}: {exc}")
+        return
+    rows = _compare_known(known["expect"], data)
+    for row in rows:
+        if not row["ok"]:
+            _check(results, f"known answer: {row['key']}", False,
+                   f"expected {row['expected']}" + (f" ± {row['tolerance']}" if "tolerance" in row
+                                                    else "") + f", got {row['got']}")
+    if all(row["ok"] for row in rows):
+        _check(results, "known answer", True, f"{len(rows)} value(s) as expected "
+               f"({known['path'].name})")
+
+
+def check(name: str, example: Path | None = None, config: dict | None = None,
           work_dir: Path | None = None) -> dict[str, Any]:
-    """Outputs go to logs/method-check/ (pipeline write rules) or, for tests, work_dir."""
+    """Outputs go to logs/method-check/ (pipeline write rules) or, for tests, work_dir.
+    `example` None: the input of the lab method's known_answer/."""
     results: list[dict[str, Any]] = []
     spec = load_methods().get(name)
     if not _check(results, "registry entry", spec is not None, "methods.yaml → methods." + name):
@@ -284,6 +411,13 @@ def check(name: str, example: Path, config: dict | None = None,
     if spec.get("kind") == "imported":
         raise MethodKitError(f"{name} is an imported analysis (made outside labpipe): there is "
                              "no method code to check; `labpipe replay` checks its files")
+    if example is None:
+        try:
+            example = _known_answer_file(name)["path"] if spec.get("lab") else None
+        except MethodKitError as exc:
+            raise MethodKitError(f"{exc}; or give --example FILE") from exc
+        if example is None:
+            raise MethodKitError("give --example FILE (an input file of the method)")
     for key in ("patterns", "module", "config"):
         _check(results, f"registry: {key}", spec.get(key), str(spec.get(key)))
     lab = bool(spec.get("lab"))
@@ -382,11 +516,18 @@ def check(name: str, example: Path, config: dict | None = None,
     after = (sha256_file(example), example.stat().st_mtime_ns,
              sorted(p.name for p in example.parent.iterdir()))
     _check(results, "raw file and its folder untouched", after == before)
+    warnings = []
+    if lab:
+        if (PROJECT_ROOT / "lab" / "methods" / name / KNOWN_ANSWER).is_dir():
+            _known_answer(results, name, module, config, work_dir)
+        else:
+            warnings.append(f"no known-answer test: add lab/methods/{name}/{KNOWN_ANSWER}/ with "
+                            "one input file and expected.yaml (the values it must give, with "
+                            "tolerances); a number that drifts then fails this check")
     stray = sorted({p.name for p in work.iterdir()} - {"run1", "run2"})
     _check(results, "writes only into the output folder", not stray, f"unexpected: {stray}")
     page = (PROJECT_ROOT / "lab" / "methods" / name / "README.md" if lab
             else CODE_ROOT / "docs" / "methods" / f"{name}.md")
-    warnings = []
     if reason := reading_the_plot_missing(page):     # a warning: the method works without it
         warnings.append(f"{reason} in {page.name}: write 3-5 bullets on how to read the figure "
                         "(axes, lines, colours, good vs look again); agents explain the plot "

@@ -67,7 +67,7 @@ All commands print JSON.
 | `labpipe agents sync` | Generate the harness's agent files from `agents/` and `lab/agents/` (in a project: the whole `project sync`) |
 | `labpipe automation run \| status` | One automatic pass (by hand; in container mode the container's watcher does this) / settings and last events. `automation setup` (timings, container at login, removes old native units) is run by the user; `automation watch` is the container's own entry point |
 | `labpipe methods import NAME --folder F --files "*.png,*.csv" --description D` | The user's own analyses made outside labpipe (figure, table, text) into the report: creates, in the project, the entry (`kind: imported`), `lab/methods/NAME/README.md` (the description form), `config.yaml` and `lab/agents/NAME-analyst.md`; never overwrites. See "Your own analyses" below |
-| `labpipe methods new \| check` | New method (only in a method-design task with the user): in a project into `lab/` (the lab's own), in the repository into the code |
+| `labpipe methods new \| check \| list` | New method (only in a method-design task with the user): in a project into `lab/` (the lab's own, with a `known_answer/` test that `check` runs), in the repository into the code. `list`: the methods, a disabled one (`disable: [eds]` in `lab/methods.yaml`) as off |
 | `labpipe methods versions` | Per method: analysis version, plot version, the modules in each (read-only) |
 | `labpipe container setup \| start [--replace] \| stop \| status \| logs \| login \| popups` | Container mode (`docs/settings/container.md`); the user runs `setup`, `login` and `popups` (they ask questions or install a service) |
 | `labpipe shell` | An agent session inside the container (the user runs it) |

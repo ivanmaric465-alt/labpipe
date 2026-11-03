@@ -231,9 +231,29 @@ of `lab/methods/…` it runs the old code but records the version of the new sou
   - **Disable a shipped method per project:** `disable: [eds]` in the project's
     `lab/methods.yaml`. Nothing is recognised, analysed or reported for it; `labpipe methods
     list` shows it as off.
+    **Built:** `disable:` is read by `labmethods.disabled()` (errors for an unknown name, a lab
+    method's name, a non-list) and applied in `load_methods()`, so versions, agents sync, doctor,
+    report, compare, dataset and the scanner never see the method. Files it would have claimed
+    (asked of `registry.disabled_methods()` only when no enabled method claims them) are *left
+    out silently* (scan count `disabled`; `inventory` "left out: method eds is disabled in
+    lab/methods.yaml"), not "not recognised": the user chose it, so no notification. Existing
+    entries stay in the manifest untouched (scan skips them, and does not mark them missing while
+    the file exists); `pending`, `analyze --pending`, `requeue`, the report, the review queue,
+    notes todo and the automation's work and notifications skip them; `analyze_entry` and
+    `replot_entry` answer `skipped` with the reason. New `labpipe methods list` (shipped, lab,
+    imported, and the off ones). The commented `# disable: [eds]` line is in the header of a
+    `lab/methods.yaml` that `methods new|import` creates.
   - **Known-answer test:** `labpipe methods new NAME` also writes `lab/methods/NAME/known_answer/`
     (an example input and `expected.yaml`: values with tolerances); `labpipe methods check` runs
     it and fails when a number drifts.
+    **Built:** the scaffold writes `known_answer/{README.md,expected.yaml,example<ext>}`; the
+    example is the template's two-column file (10 points) and the expected values are what the
+    template gives (`summary.n_points|y_max|x_at_y_max`), so a new method passes at once.
+    `methods check NAME` (in the container, as before) runs `run()` on it into
+    `logs/method-check/NAME-known-answer-<time>/` and compares dotted keys (`a.b[0].c`) with
+    `value ± tolerance` (a number needs `tolerance`; other values are compared for equality);
+    failures list key, expected, got. `--example` is now optional: the known-answer input
+    stands in. No `known_answer/`: a warning. Shipped methods and dev mode are untouched.
   - **Packages:** `lab/requirements.txt` (pinned versions) in the project; `labpipe container
     build` adds a layer on top of labpipe's image for that project only. Recorded in provenance;
     never in labpipe's own image.

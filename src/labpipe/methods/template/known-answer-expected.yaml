@@ -1,0 +1,10 @@
+# One file whose correct result you know, and the values labpipe must give for it.
+# `labpipe methods check {{method}}` runs the method on it and compares. Replace the example
+# with a file of yours (a measurement with a published or hand-calculated answer).
+input: example{{extension}}      # the file, next to this one
+sample_id: S-1
+expect:
+  # key: where the number is in results.json (a.b, a.b[0] for a list item)
+  - {key: summary.n_points, value: 10, tolerance: 0}
+  - {key: summary.y_max, value: 3.61, tolerance: 0.01}
+  - {key: summary.x_at_y_max, value: 2.0, tolerance: 0.01}

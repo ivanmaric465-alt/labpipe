@@ -59,7 +59,7 @@ from labpipe.labmethods import source_hash
 from labpipe.locking import try_exclusive
 from labpipe.notes import todo as notes_todo
 from labpipe.provenance import code_version, utc_now
-from labpipe.registry import load_methods, skip_reason, user_ignore
+from labpipe.registry import disabled_methods, load_methods, skip_reason, user_ignore
 from labpipe.safety import (PROJECT_ROOT, SetupError, assert_pipeline_writable, in_container,
                             load_pipeline_config, set_local_block)
 
@@ -200,10 +200,11 @@ def _notify_news(config: dict, before: dict[str, tuple],
     """Notify about what newly needs the user since `before`; returns the new state."""
     from labpipe.pipeline import review_queue
     entries = mf.load(config)["entries"]
+    off = set(disabled_methods())
 
     def new(status: str) -> list[dict]:
         return sorted((e for eid, e in entries.items() if e.get("status") == status
-                       and before.get(eid) != (status, e.get("status_reason"))),
+                       and e["method"] not in off and before.get(eid) != (status, e.get("status_reason"))),
                       key=lambda e: e["relative_path"])
 
     needs_review, failed, stale = new("needs_review"), new("failed"), new("stale")
@@ -245,7 +246,8 @@ def _notify_news(config: dict, before: dict[str, tuple],
 
 
 def _work(config: dict) -> dict[str, list[str]]:
-    entries = mf.load(config)["entries"].values()
+    off = set(disabled_methods())
+    entries = [e for e in mf.load(config)["entries"].values() if e["method"] not in off]
     return {"pending": sorted(e["entry_id"] for e in entries if e.get("status") == "pending"),
             "notes": [row["entry_id"] for row in notes_todo(config)],
             "needs_review": sorted(e["entry_id"] for e in entries

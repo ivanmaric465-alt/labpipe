@@ -19,7 +19,8 @@ labpipe project sync          # after a change in lab/ (`labpipe update` does it
 | "we call the support Vulcan", "answer in Croatian" | a sentence in `lab/LAB.md` (added to the end of `AGENTS.md` and `CLAUDE.md`), then `labpipe project sync` |
 | "the XRD analyst should always give Å" | `lab/agents/xrd-analyst.md`: plain sentences, appended to that role |
 | "add our own XRD reference phase" | `labpipe xrd refs add file.cif --id NAME --structure-type …`: kept in `lab/references/xrd/` (docs/methods/xrd.md → Reference phases) |
-| "we want to analyse a technique labpipe has no method for" | `labpipe methods new <name> --example FILE --description TEXT`: writes `lab/methods.yaml`, `lab/methods/<name>/` (code, `config.yaml`, `README.md` = its page) and `lab/agents/<name>-analyst.md`; then `labpipe methods check`, `labpipe project sync`. Steps: `docs/ADDING_A_METHOD.md` |
+| "we want to analyse a technique labpipe has no method for" | `labpipe methods new <name> --example FILE --description TEXT`: writes `lab/methods.yaml`, `lab/methods/<name>/` (code, `config.yaml`, `README.md` = its page) and `lab/agents/<name>-analyst.md`, `lab/methods/<name>/known_answer/` (a file with a known result; `labpipe methods check` fails when a number drifts); then `labpipe methods check`, `labpipe project sync`. Steps: `docs/ADDING_A_METHOD.md` |
+| "we never measure EDS" | `disable: [eds]` at the top of `lab/methods.yaml`: nothing is recognised, analysed or reported for it; `labpipe methods list` shows it as off. Only shipped methods; remove the line to bring it back |
 | "we need our own agent role" | `lab/agents/<name>.md` starting with frontmatter (`name`, `role`, `description`, `capabilities`); see `lab/agents/README.md` |
 | "a second project" | `labpipe project new <another folder>`: its own settings, results, container and port |
 

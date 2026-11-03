@@ -18,7 +18,7 @@ import yaml
 from labpipe import manifest as mf
 from labpipe import migrations
 from labpipe.scanner import sample_id_for
-from labpipe.registry import classify, load_methods, skip_reason, user_ignore
+from labpipe.registry import classify, disabled_methods, disabled_reason, load_methods, skip_reason, user_ignore
 from labpipe.safety import PROJECT_ROOT
 
 
@@ -42,6 +42,7 @@ def data_folder(config: dict, root: dict) -> str | None:
 
 def inventory(config: dict, examples: int = 3) -> dict[str, Any]:
     methods = load_methods()
+    off = disabled_methods()
     ignored = user_ignore()
     overrides = _overrides(config)
     known = Counter(e["raw_root"] for e in mf.load(config)["entries"].values())
@@ -69,6 +70,9 @@ def inventory(config: dict, examples: int = 3) -> dict[str, Any]:
                     skipped[skip] += 1
                     continue
                 method, kind = classify(relative, methods, root=path)
+                if method is None and (switched_off := classify(relative, off, root=path)[0]):
+                    skipped[disabled_reason(switched_off)] += 1
+                    continue
                 if method is None:
                     unknown[extension] += 1
                     if len(unknown_examples[extension]) < examples:

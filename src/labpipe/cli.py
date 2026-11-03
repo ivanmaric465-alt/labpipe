@@ -8,7 +8,8 @@
   labpipe readonly-view --source PATH       print this OS's commands for a read-only view (runs nothing)
   labpipe inventory                         what labpipe recognises in the data folder(s)
   labpipe methods new NAME --example F --description D   scaffold a new analysis method
-  labpipe methods check NAME --example F    run a method on an example and verify its contract
+  labpipe methods check NAME [--example F]  run a method on an example and verify its contract (a lab method: and its known_answer/)
+  labpipe methods list                      the methods; off ones are marked (disable: in lab/methods.yaml)
   labpipe methods import NAME --folder F --files "*.png,*.csv" --description D   take your own analyses (made outside labpipe) into the report
   labpipe methods versions                  analysis and plot version of every method
   labpipe scan [--baseline]                 update manifest.json from the raw roots
@@ -61,7 +62,7 @@ from labpipe import __version__
 from labpipe import manifest as mf
 from labpipe import container, pipeline, scanner
 from labpipe.labmethods import MethodsError
-from labpipe.registry import load_methods, shipped_methods
+from labpipe.registry import disabled_methods, load_methods, shipped_methods
 from labpipe import safety
 from labpipe.safety import CODE_ROOT, PROJECT_ROOT, SetupError, load_pipeline_config
 
@@ -152,7 +153,10 @@ def cmd_methods(args, config) -> int:
                 args.name, args.folder, args.files, args.description,
                 sample_from=args.sample_from, analyst=not args.no_analyst, raw_roots=roots))
             return 0
-        result = methods_kit.check(args.name, Path(args.example), config)
+        if args.action == "list":
+            _print(methods_kit.listing())
+            return 0
+        result = methods_kit.check(args.name, Path(args.example) if args.example else None, config)
     except methods_kit.MethodKitError as exc:
         _print({"error": str(exc)})
         return 1
@@ -376,9 +380,11 @@ def cmd_scan(args, config) -> int:
 
 def cmd_pending(args, config) -> int:
     data = mf.load(config)
+    off = set(disabled_methods())       # their entries stay as they are, nothing is done for them
     rows = [{"entry_id": e["entry_id"], "method": e["method"], "subagent": e.get("subagent"),
              "sample_id": e["sample_id"], "relative_path": e["relative_path"]}
-            for e in data["entries"].values() if e.get("status") == "pending"]
+            for e in data["entries"].values()
+            if e.get("status") == "pending" and e["method"] not in off]
     rows.sort(key=lambda row: (row["method"], row["relative_path"]))
     _print(_batch(rows))
     return 0
@@ -431,7 +437,9 @@ def cmd_method_check(args, config) -> int:
 
 def cmd_analyze(args, config) -> int:
     data = mf.load(config)
+    off = set(disabled_methods())
     pending = sorted((e for e in data["entries"].values() if e.get("status") == "pending"
+                      and e["method"] not in off
                       and (not args.method or e["method"] == args.method)),
                      key=lambda e: e["relative_path"])
     if args.limit:
@@ -446,8 +454,11 @@ def cmd_analyze(args, config) -> int:
 
 def cmd_requeue(args, config) -> int:
     changed = []
+    off = set(disabled_methods())
     with mf.locked(config) as data:
         for entry in data["entries"].values():
+            if entry["method"] in off:
+                continue
             if ((args.stale and entry.get("status") == "stale")
                     or (args.baseline and entry.get("status") == "baseline")
                     or entry["entry_id"] == args.entry):
@@ -688,8 +699,12 @@ def build_parser() -> argparse.ArgumentParser:
     method_check = methods_parser.add_parser("check", help="run a method on an example file "
                                              "and verify its contract")
     method_check.add_argument("name")
-    method_check.add_argument("--example", required=True)
+    method_check.add_argument("--example", help="an input file (default: the one in the method's "
+                              "known_answer/, which is also compared with its expected values)")
     method_check.set_defaults(func=cmd_methods)
+    methods_parser.add_parser("list", help="the methods: shipped, the lab's own, and those the "
+                              "project switched off (disable: in lab/methods.yaml)").set_defaults(
+        func=cmd_methods, needs_config=False)
     methods_parser.add_parser("versions", help="analysis version and plot version of every "
                               "method, with the modules in each").set_defaults(
         func=cmd_methods, needs_config=False)

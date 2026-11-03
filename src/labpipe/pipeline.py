@@ -41,7 +41,7 @@ from labpipe import settings as settings_mod
 from labpipe import versions as versions_mod
 from labpipe.locking import try_exclusive
 from labpipe.provenance import code_version, sha256_file, utc_now
-from labpipe.registry import input_companions, load_methods
+from labpipe.registry import disabled_methods, disabled_reason, input_companions, load_methods
 from labpipe.safety import PROJECT_ROOT, assert_pipeline_writable, atomic_write_text
 
 RUNNABLE = {"pending"}
@@ -164,6 +164,8 @@ def _analyze_locked(config: dict, eid: str, *, rerun: bool) -> dict[str, Any]:
                     "reason": f"status is {entry['status']}, not {sorted(allowed)}"}
         entry["output_dir"] = mf.choose_output_dir(config, data, entry)   # once; kept
         entry = json.loads(json.dumps(entry))  # snapshot outside the lock
+    if entry["method"] not in methods and entry["method"] in disabled_methods():
+        return {"entry_id": eid, "status": "skipped", "reason": disabled_reason(entry["method"])}
     spec = methods[entry["method"]]
     root = next(r for r in config["raw_roots"] if r["id"] == entry["raw_root"])
     input_path = Path(root["path"]) / entry["relative_path"]
@@ -373,6 +375,8 @@ def _replot_locked(config: dict, eid: str) -> dict[str, Any]:
             return {"entry_id": eid, "status": "skipped",
                     "reason": f"status is {entry['status']}, not done"}
         entry = json.loads(json.dumps(entry))
+    if entry["method"] not in methods and entry["method"] in disabled_methods():
+        return {"entry_id": eid, "status": "skipped", "reason": disabled_reason(entry["method"])}
     final = output_dir_for(config, entry)
     method_dir = final.parent
     if not (final / "results.json").is_file():
@@ -506,7 +510,10 @@ def review_queue(config: dict) -> dict[str, Any]:
     groups: dict[str, list[dict[str, Any]]] = {"needs_review": [], "failed": [],
                                                "done_flagged": [], "stale": [],
                                                "plot_outdated": [], "plot_problem": []}
+    off = set(disabled_methods())
     for entry in data["entries"].values():
+        if entry.get("method") in off:
+            continue
         status = entry.get("status")
         if status == "needs_review":
             groups["needs_review"].append(entry)

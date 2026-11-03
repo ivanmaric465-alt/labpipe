@@ -167,10 +167,7 @@ def _check(name: str, spec: Any, shipped: dict[str, Any]) -> dict[str, Any]:
     return {**spec, "lab": True}
 
 
-def load(shipped: dict[str, Any], project: Path | None = None) -> dict[str, dict[str, Any]]:
-    """The project's own methods (empty without lab/methods.yaml); `shipped` are the names
-    already taken. Raises MethodsError, naming the file, for anything wrong. `project`: only
-    to read another project's entries (then nothing becomes importable)."""
+def _read(project: Path | None) -> dict[str, Any]:
     path = Path(project or project_root()) / REGISTRY_FILE
     if not path.is_file():
         return {}
@@ -178,7 +175,37 @@ def load(shipped: dict[str, Any], project: Path | None = None) -> dict[str, dict
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
         raise MethodsError(f"{REGISTRY_FILE} cannot be read: {str(exc).splitlines()[0]}") from exc
-    entries = data.get("methods") if isinstance(data, dict) else None
+    return data if isinstance(data, dict) else {}
+
+
+def disabled(shipped: dict[str, Any], project: Path | None = None) -> list[str]:
+    """`disable: [eds]` of lab/methods.yaml: the shipped methods this project switches off
+    (empty without the key). Raises MethodsError for a name that is not a shipped method, or
+    for something that is not a list of names."""
+    names = _read(project).get("disable")
+    if names is None:
+        return []
+    if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+        raise MethodsError(f"{REGISTRY_FILE}: `disable:` must be a list of shipped method names, "
+                           "e.g. `disable: [eds]`")
+    entries = _read(project).get("methods")
+    for name in names:
+        if name not in shipped:
+            own = isinstance(entries, dict) and name in entries
+            raise MethodsError(
+                f"{REGISTRY_FILE}: `disable:` names '{name}', which is "
+                + ("a method of this lab: only shipped methods can be disabled (remove a lab "
+                   "method from the file instead)" if own else
+                   f"not a shipped method (shipped: {', '.join(sorted(shipped))})"))
+    return list(dict.fromkeys(names))
+
+
+def load(shipped: dict[str, Any], project: Path | None = None) -> dict[str, dict[str, Any]]:
+    """The project's own methods (empty without lab/methods.yaml); `shipped` are the names
+    already taken. Raises MethodsError, naming the file, for anything wrong. `project`: only
+    to read another project's entries (then nothing becomes importable)."""
+    data = _read(project)
+    entries = data.get("methods")
     if entries is None:
         return {}
     if not isinstance(entries, dict):
