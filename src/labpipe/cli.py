@@ -38,7 +38,7 @@
   labpipe notes retire --entry ID [...]     move notes.md to _superseded/ so the analyst rewrites it
   labpipe container setup|build|start|stop|status|logs|login   the container (Podman or Docker)
   labpipe shell [claude|codex]              agent session inside the container
-  labpipe guard                             Claude Code PreToolUse hook (event JSON on stdin)
+  labpipe guard                             the agent tool's hook before each tool call (event JSON on stdin)
   labpipe context init|index                create context/ from templates / extract the text of context/documents/
   labpipe postdoc start "Q"|verify RUN|list|run "Q" [--budget-usd N]   overall analysis on request
 

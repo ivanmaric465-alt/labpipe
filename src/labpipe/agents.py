@@ -7,7 +7,7 @@ harness-only features (Claude Code: maxTurns, hooks, skills, ...) stay usable. c
 agents chooses the harness and a model per role:
 
     agents:
-      harness: claude-code           # claude-code | opencode
+      harness: claude-code           # claude-code | codex | opencode
       models:                        # provider/model, or inherit (the session's model)
         supervisor: anthropic/claude-haiku-5-5
         analyst: anthropic/claude-sonnet-5-5
