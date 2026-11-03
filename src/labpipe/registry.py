@@ -43,10 +43,25 @@ def shipped_methods() -> dict[str, dict[str, Any]]:
 
 
 def load_methods() -> dict[str, dict[str, Any]]:
-    """The shipped methods, then the project's own (lab/methods.yaml; `"lab": True`). Raises
-    labmethods.MethodsError (a SetupError) for a broken or clashing lab/methods.yaml."""
+    """The shipped methods (without those the project disables: `disable: [eds]` in
+    lab/methods.yaml), then the project's own (`"lab": True`). Raises labmethods.MethodsError
+    (a SetupError) for a broken or clashing lab/methods.yaml."""
     shipped = shipped_methods()
-    return {**shipped, **labmethods.load(shipped)}
+    lab = labmethods.load(shipped)
+    off = set(labmethods.disabled(shipped))
+    return {**{n: s for n, s in shipped.items() if n not in off}, **lab}
+
+
+def disabled_methods() -> dict[str, dict[str, Any]]:
+    """The shipped methods this project switched off, by name (their entries, to tell which
+    files they would have claimed)."""
+    shipped = shipped_methods()
+    return {n: shipped[n] for n in labmethods.disabled(shipped)}
+
+
+def disabled_reason(name: str) -> str:
+    """Why a file a disabled method would have claimed is left out."""
+    return f"method {name} is disabled in {labmethods.REGISTRY_FILE}"
 
 
 USER_IGNORE_FILE = "config/ignore.yaml"

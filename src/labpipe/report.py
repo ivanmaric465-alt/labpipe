@@ -52,7 +52,7 @@ from labpipe import manifest as mf
 from labpipe import settings as settings_mod
 from labpipe.notes import verify_entry
 from labpipe.provenance import code_version, utc_now
-from labpipe.registry import load_methods
+from labpipe.registry import disabled_methods, load_methods
 from labpipe.safety import PROJECT_ROOT, atomic_write_text
 
 CSS = """
@@ -1154,8 +1154,10 @@ def build(config: dict) -> dict[str, Any]:
     methods = load_methods()
     configured = report_settings(methods)
     data = mf.load(config)
+    off = set(disabled_methods())       # `disable:` in lab/methods.yaml: left out of the report
     entries = sorted((e for e in data["entries"].values()
-                      if e.get("status") in ("done", "stale") and e.get("output_dir")),
+                      if e.get("status") in ("done", "stale") and e.get("output_dir")
+                      and e.get("method") not in off),
                      key=_sample_key)
     statuses = Counter(e["status"] for e in data["entries"].values())
     gone = {(e.get("raw_root"), e["relative_path"]) for e in data["entries"].values()

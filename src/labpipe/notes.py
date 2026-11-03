@@ -187,8 +187,9 @@ def record_check(config: dict, result: dict[str, Any]) -> None:
 
 def todo(config: dict) -> list[dict[str, Any]]:
     """Analysed entries whose notes.md is missing or describes another results.json."""
-    from labpipe.registry import load_methods
+    from labpipe.registry import disabled_methods, load_methods
     without_notes = {name for name, spec in load_methods().items() if spec.get("notes") is False}
+    without_notes |= set(disabled_methods())    # switched off for this project
     rows = []
     for entry in mf.load(config)["entries"].values():
         if entry.get("status") not in ("done", "stale") or not entry.get("output_dir"):

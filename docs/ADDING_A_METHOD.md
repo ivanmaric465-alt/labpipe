@@ -43,6 +43,7 @@ Creates (never overwrites). In a project, only inside `lab/`, never in the code:
 | `lab/methods.yaml` → `sem` (dev: `methods.yaml`) | patterns from the example's extension; narrow them if needed |
 | `lab/agents/sem-analyst.md` (dev: `agents/sem-analyst.md`) | what to look at in the plot, what the notes say (worded by `docs/WRITING.md`, which the role already points to) |
 | `lab/methods/sem/README.md` (dev: `docs/methods/sem.md`) | the design note |
+| project only: `lab/methods/sem/known_answer/` | `expected.yaml`, an example input and a README: replace them with one file whose result you know (step 4) |
 | dev only: `tests/test_sem.py` | a synthetic example with a known answer |
 
 In a project the entry's `module` is `labpipe_lab.sem.analyze` and its `config` is `lab/methods/sem/config.yaml`. Add more modules (`summary.py`, `plot.py`) to the same folder and name them `labpipe_lab.sem.summary` in the entry. A lab method may import labpipe's own modules (`labpipe.naming`, `labpipe.plotting.acs`, …) and its own (`labpipe_lab.sem.…`). Rules for names: lower-case letters, digits and `_`; not a shipped method's name (an error names both files) and not a labpipe command (`scan`, `report`, …).
@@ -111,7 +112,8 @@ Reused code from another project: port it into the package and record the source
 ## 4. Check
 
 ```bash
-labpipe methods check sem --example "/path/to/S-1 a001.tif"
+labpipe methods check sem                                      # a lab method: runs its known_answer/ too
+labpipe methods check sem --example "/path/to/S-1 a001.tif"    # the contract, on another file
 pytest                  # dev mode
 ```
 
@@ -122,7 +124,31 @@ In container mode `methods check` runs in the container (it needs the analysis p
 - the example is recognised as this method;
 - `results.json`, `plot.png`, `plot.pdf`, `provenance.json` exist; `results.json` has schema, status, units and well-formed checks;
 - provenance hashes match, and a second run from the recorded settings gives identical files;
-- the raw file and its folder are untouched.
+- the raw file and its folder are untouched;
+- a lab method: the known answer (below).
+
+### Known-answer test (lab methods)
+
+`labpipe methods new` writes `lab/methods/<name>/known_answer/`: one input file and `expected.yaml`, the values the method must give for it. `methods check` runs `run()` on that file (into `logs/method-check/`, never `analysis/` or your data folder) and compares each value with `value ± tolerance`; a drifting number fails the check and names the key, what was expected and what came out.
+
+```yaml
+input: example.dat          # a file in known_answer/
+sample_id: S-1
+expect:                     # key: a dotted path in results.json; peaks[0].center reaches into lists
+  - {key: results.a, value: 3.61, tolerance: 0.01}
+```
+
+The scaffold's example fits the template code, so a new method passes out of the box. When you replace the analysis, replace the file and the numbers with a measurement whose answer you know independently (a published value, a hand calculation), and keep them: any later change to the code is checked against them. A number without `tolerance` is compared for equality (text, `status`); a method without `known_answer/` gets a warning, not an error. Shipped methods have their tests in `tests/`.
+
+### Switching off a shipped method
+
+A project that never measures EDS can switch it off. In `lab/methods.yaml`:
+
+```yaml
+disable: [eds]
+```
+
+Only shipped methods can be named (an unknown name, a lab method or something that is not a list is an error naming the file; remove a lab method from the file instead). A disabled method is left out everywhere: its files are not recognised and are not reported as unrecognised (`labpipe inventory` lists them as left out, "method eds is disabled in lab/methods.yaml"), nothing is scanned, analysed, reported, compared or given to an analyst for it, and `labpipe methods list` shows it as `off`. Entries it already has stay in `manifest.json` and its results on disk stay untouched; remove the line and they are back in the report.
 
 ## 5. Use
 

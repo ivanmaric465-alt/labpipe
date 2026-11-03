@@ -216,8 +216,8 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | Entry | `cli.py` | argparse commands; forwards host commands into the container in container mode |
 | State | `manifest.py` | load, save and lock `manifest.json`; status changes; the output folder rule (`choose_output_dir`, `other_owner`, `shared_output_dirs`) |
 | | `scanner.py` | raw roots → manifest; settle time, hashes, duplicates (identical content of one method; for an imported kind only within one sample; also the files of one measurement of an imported kind, and its sample from the folder name), a moved file keeps its analysis (`_keep_moved_analyses`), out of date because a companion file changed, stale (analysis version or settings), plot out of date (plot version or settings), unrecognised files |
-| | `registry.py` | `methods.yaml` and the lab's `lab/methods.yaml` (shipped first): patterns, `recognise:` and `companions:` hooks, ignore rules |
-| | `labmethods.py` | the lab's own methods: reads and checks `lab/methods.yaml`, makes `labpipe_lab.<name>` importable; fills in an entry `kind: imported` (module, summary, settings file, analyst) |
+| | `registry.py` | `methods.yaml` and the lab's `lab/methods.yaml` (shipped first, minus those the project switches off with `disable: [eds]`; `disabled_methods()` names them, so their files are left out, not "not recognised"; their manifest entries are kept and skipped by scan, analyse, pending, report and notes): patterns, `recognise:` and `companions:` hooks, ignore rules |
+| | `labmethods.py` | the lab's own methods: reads and checks `lab/methods.yaml` (also `disable:`), makes `labpipe_lab.<name>` importable; fills in an entry `kind: imported` (module, summary, settings file, analyst) |
 | | `naming.py` | sample ID and measurement ID from file names |
 | | `inventory.py` | what is recognised in the data folder (read-only) |
 | Analysis | `pipeline.py` | run a method on an entry; staging, `_superseded/`, `_failed/`; replot; review queue. Publication is one step: a lock per entry (`logs/locks/<entry_id>.lock`, a second run is skipped), the summary checked against the staged files, the inputs hashed again before publishing (changed: pending, no attempt counted), a journal (`logs/publishing/<entry_id>.json`) around the two renames that `recover_publications` rolls back at the start of every scan |
@@ -258,7 +258,7 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | | `installer.py` | `labpipe setup --first`: the installer's questions (tools present, agent tool, models, login, first project, start) |
 | | `release.py` | the version, `CHANGELOG.md` (parse, entries between two versions), release tags and the state of a git checkout; `labpipe --version` |
 | | `roview.py` | commands for a read-only view (native mode) |
-| | `methods_kit.py` | `methods new | check`: scaffold and check a method (in a project: into `lab/`); `methods import`: the entry, description page, settings and analyst role for your own analyses (project only, never overwrites) |
+| | `methods_kit.py` | `methods new | check | list`: scaffold and check a method (in a project: into `lab/`, with a `known_answer/` that `check` runs on the method, comparing the numbers of `results.json` with `expected.yaml`, under `logs/method-check/`); list the methods (a disabled one as off); `methods import`: the entry, description page, settings and analyst role for your own analyses (project only, never overwrites) |
 | Support | `safety.py` | code and project roots, install and config folders, dev mode, write checks, atomic writes, container path mapping |
 | | `locking.py` | cross-platform file lock |
 

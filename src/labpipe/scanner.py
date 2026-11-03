@@ -68,7 +68,8 @@ from labpipe import settings as settings_mod
 from labpipe import versions as versions_mod
 from labpipe.naming import DEFAULT_SEPARATORS, derive_sample_id, entry_id, measurement_id
 from labpipe.provenance import code_version, sha256_file, utc_now
-from labpipe.registry import classify, input_companions, load_methods, skip_reason, user_ignore
+from labpipe.registry import (classify, disabled_methods, input_companions, load_methods, skip_reason,
+                              user_ignore)
 from labpipe.safety import PROJECT_ROOT
 
 
@@ -285,6 +286,7 @@ def _walk(root: Path):
 
 def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
     methods = load_methods()
+    off = disabled_methods()        # `disable:` in lab/methods.yaml: their files are left alone
     overrides = _overrides(config)
     settle_seconds = 60 * config["settle_minutes"]
     max_attempts = config["max_attempts_per_hash"]
@@ -334,6 +336,9 @@ def scan(config: dict, *, baseline: bool = False) -> dict[str, Any]:
                     relative, methods, root=root_path)
                 if method is None and skip:
                     counts["ignored_by_you"] += 1
+                    continue
+                if method is None and classify(relative, off, root=root_path)[0]:
+                    counts["disabled"] += 1     # not recognised, not reported: you switched it off
                     continue
                 if skip:
                     kind = "ignore"
