@@ -234,7 +234,7 @@ AGENTS.md  CLAUDE.md                  generated: the code's text + "This lab's a
 | `comparekinds/` | the figure kinds `dots`, `lines`, `bars`, `images`, one module each: `render(spec, stem)` (matplotlib, ACS, deterministic), `html(spec, fig_id)` (inline SVG with checkboxes; marks carry `data-m`/`data-s`, no script of its own: the report's script switches them), `check`, `caption`, `inventory`; spec schemas in their docstrings |
 | | `notes.py` | `notes verify` (numbers vs results; `CHECKS_VERSION`, `notes_check` in the manifest), `todo`, `retire` |
 | | `postdoc.py` | postdoc runs: start, verify (`CHECKS_VERSION`), freshness, list, headless run |
-| | `context.py` | `context/` init and text index of documents |
+| | `context.py` | `context/` init and text index of documents; bounded (links and anything resolving outside `documents/` never read; limits on file size, DOCX unpacking and entries, `pdftotext` time and pages, DOCX table rows and cells, text length, each recorded with its reason, truncation as `=== truncated ... ===` and `truncated: true` in `index.json`) |
 | Agents | `agents.py` | `agents/*.md` (+ the lab's overlays and extra roles) → harness files, models per role |
 | | `project.py` | `project new`; `project sync`: the generated files of a project, `generated.json`, status for doctor |
 | | `guard.py` | hook: refuses writes outside the allowed paths, to generated files, raw-data access, disallowed commands; reads only in strict forms (`READ_FORMS`) |

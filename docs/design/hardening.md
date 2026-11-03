@@ -223,7 +223,22 @@ of `lab/methods/…` it runs the old code but records the version of the new sou
 
 - **Context documents:** symlinks out of `context/documents/` are refused, and unpacking and
   tables are bounded.
+
+  **Built:** `context.documents()` walks without following links and lists links as entries;
+  `link_problem` refuses a link anywhere on the path or a resolved path outside `documents/`
+  (no read, no hash; `postdoc.current_inputs` uses the same rule). Limits are constants at the
+  top of `context.py`: 50 MB per file, 20 MB unpacked `word/document.xml` (header checked, then a
+  capped read, since a header can lie), 1000 DOCX entries, 120 s and 500 pages for `pdftotext`,
+  1,000,000 characters of text (marker + `truncated: true`). "Tables": `dataset.json` holds only
+  numbers and paths per measurement (the data itself, not free text), so nothing there was cut;
+  the unbounded table was a DOCX table, which went into the text as every cell, unlimited. Now one
+  line per row (cells joined by ` | `), at most 200 rows and 500 characters per cell, with a marker.
+  This changes how DOCX tables read in `.text/` (before: one line per cell).
 - **Setup** says plainly that context read by the postdoc goes to the AI provider.
+
+  **Built:** SETUP.md (Project context), AGENTS.md (Project context and the postdoc),
+  docs/settings/context.md, both context templates and the `note` of `labpipe context init` name
+  the agent tool's provider generically and say not to put documents there that may not leave the lab.
 - **Agent tools:** a short capability table (Claude Code, Codex, OpenCode: install,
   container, unattended runs, cost cap), shown when choosing one.
 - **Generic agent text** follows the registry (`subagent: null`, `notes: false`).

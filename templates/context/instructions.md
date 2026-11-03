@@ -4,6 +4,9 @@ Edit this file freely. It steers what the postdoc reads and how it weighs things
 It cannot loosen the rules in AGENTS.md (no invented numbers, raw data read-only,
 review checks always mentioned).
 
+The documents' text goes to your agent tool's AI provider (e.g. Anthropic for Claude Code,
+OpenAI for Codex): do not put documents in `documents/` that may not leave the lab.
+
 ## What to read
 - `context.md` describes the project now. If it disagrees with an older document, `context.md` wins.
 - `documents/`: the work plan defines the aims; papers are for background and reference
