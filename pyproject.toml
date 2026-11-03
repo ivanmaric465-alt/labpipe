@@ -24,7 +24,7 @@ analysis = [
     "matplotlib==3.11.2",
 ]
 # Only needed to (re)build references/xrd/patterns from the COD CIFs.
-refbuild = ["pymatgen==2026.9.24"]
+refbuild = ["pymatgen==2026.10.24"]
 test = ["pytest"]
 
 [project.scripts]
