@@ -9,7 +9,7 @@
 schema: labpipe.docmap/1
 areas:
   structure:        # a module or file added, removed or moved
-    on: added or removed
+    "on": added or removed   # quoted: a bare on is read as true
     code: ["src/labpipe/*.py", "src/labpipe/plotting/*.py", "methods.yaml", "container/*", "install.sh",
            "install.ps1", "uninstall.sh", "scripts/*"]
     docs: [docs/ARCHITECTURE.md]

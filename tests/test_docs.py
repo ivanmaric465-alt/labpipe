@@ -68,6 +68,15 @@ def test_docmap_paths_exist_and_cover_every_module():
     assert uncovered == [], f"modules in no docs/docmap.yaml area: {uncovered}"
 
 
+def test_docmap_areas_have_only_known_keys():
+    """A bare `on:` is read by YAML as the boolean true, and the area then counted every edit."""
+    docmap = yaml.safe_load(_text("docs/docmap.yaml"))
+    for name, area in docmap["areas"].items():
+        assert set(area) <= {"code", "docs", "on"}, f"docs/docmap.yaml [{name}]: keys {list(area)}"
+        assert area.get("on", "added or removed") == "added or removed", f"[{name}] on: {area['on']!r}"
+    assert docmap["areas"]["structure"]["on"] == "added or removed"
+
+
 
 def test_every_document_is_in_the_docmap():
     """A new Markdown document belongs to an area (the code it describes), a linked group (the
