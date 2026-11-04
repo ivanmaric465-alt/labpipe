@@ -5,7 +5,8 @@
 Refuses unless the tree is clean, the branch is main, "Unreleased" in CHANGELOG.md is not empty and
 X.Y.Z is greater than the current version. Then it moves Unreleased under `## vX.Y.Z — <today>`
 (a new empty Unreleased), sets `__version__` and pyproject's `version`, and commits
-"Release vX.Y.Z". It never tags, pushes or publishes: it PRINTS those commands for you to run.
+"Release vX.Y.Z" with a `Docs-checked:` line for the docmap areas only the version number touched
+(so scripts/check_docs.py passes on main). It never tags, pushes or publishes: it PRINTS those commands for you to run.
 --dry-run shows the changelog change and changes nothing. docs/RELEASING.md has the whole flow.
 """
 
@@ -21,8 +22,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "scripts"))
 
+import yaml                                 # noqa: E402
+
+import check_docs                           # noqa: E402
 from labpipe import __version__, release   # noqa: E402
+
+RELEASED_FILES = ("CHANGELOG.md", "src/labpipe/__init__.py", "pyproject.toml")
 
 EMPTY_UNRELEASED = "## Unreleased\n\n" + "".join(f"### {p}\n\n" for p in release.PARTS)
 
@@ -53,6 +60,15 @@ def bump(text: str, pattern: str, version: str) -> str:
     if count != 1:
         raise release.ReleaseError(f"could not find the version to change with {pattern!r}")
     return new
+
+
+def docs_checked(docmap: dict, paths: tuple[str, ...] = RELEASED_FILES) -> list[str]:
+    """The docmap areas whose code the release commit changes (only the version number) and
+    whose docs it does not: they go on the commit's `Docs-checked:` line."""
+    return [name for name, area in docmap["areas"].items()
+            if area.get("on") != "added or removed"
+            and any(check_docs._matches(p, area["code"]) for p in paths)
+            and not any(check_docs._matches(p, area["docs"]) for p in paths)]
 
 
 def _git(*args: str) -> str:
@@ -91,8 +107,12 @@ def main(argv: list[str] | None = None) -> int:
         file = ROOT / path
         file.write_text(bump(file.read_text(encoding="utf-8"), pattern, version),
                         encoding="utf-8", newline="\n")
-    _git("add", "CHANGELOG.md", "src/labpipe/__init__.py", "pyproject.toml")
-    _git("commit", "-m", f"Release v{version}")
+    _git("add", *RELEASED_FILES)
+    docmap = yaml.safe_load((ROOT / "docs" / "docmap.yaml").read_text(encoding="utf-8"))
+    areas = docs_checked(docmap)
+    message = f"Release v{version}" + (
+        "\n\nOnly the version number changed there.\nDocs-checked: " + ", ".join(areas) if areas else "")
+    _git("commit", "-m", message)
     print(f"Committed 'Release v{version}'. Nothing is tagged or pushed. Run:\n\n"
           f"git tag -a v{version} -m \"labpipe v{version}\"\n"
           f"git push origin main v{version}\n"

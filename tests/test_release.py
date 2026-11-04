@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 from labpipe import __version__, release
 
@@ -259,6 +260,22 @@ def test_release_bumps_both_version_lines():
         == 'x\n__version__ = "0.2.0"\n'
     assert 'version = "0.2.0"' in make_release.bump('[project]\nversion = "0.1.0"\n',
                                                     r'^(version = ")[^"]*(")', "0.2.0")
+
+
+def test_release_commit_names_the_areas_only_the_version_touched():
+    docmap = {"areas": {
+        "version": {"code": ["src/labpipe/__init__.py"], "docs": ["docs/ARCHITECTURE.md"]},
+        "packaging": {"code": ["pyproject.toml"], "docs": ["docs/SETUP.md"]},
+        "changelog": {"code": ["pyproject.toml"], "docs": ["CHANGELOG.md"]},    # its doc changes too
+        "layout": {"code": ["src/labpipe/*.py"], "docs": ["README.md"], "on": "added or removed"},
+        "other": {"code": ["src/labpipe/scanner.py"], "docs": ["README.md"]}}}
+    assert make_release.docs_checked(docmap) == ["version", "packaging"]
+
+
+def test_release_commit_passes_the_real_docs_check():
+    docmap = yaml.safe_load((ROOT / "docs" / "docmap.yaml").read_text(encoding="utf-8"))
+    areas = make_release.docs_checked(docmap)
+    assert {"structure", "setup", "locking"} <= set(areas)     # what failed CI after v0.2.0, v0.3.0
 
 
 # ---- scripts/check_updates.py --------------------------------------------------------------

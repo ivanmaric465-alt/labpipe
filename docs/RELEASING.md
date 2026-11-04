@@ -34,7 +34,7 @@ python scripts/release.py 0.2.0 --dry-run    # shows the changelog change
 python scripts/release.py 0.2.0              # commits "Release v0.2.0"; tags and pushes nothing
 ```
 
-It refuses unless the tree is clean, the branch is `main`, Unreleased has entries and the version is greater than `__version__`. It moves Unreleased under the new heading, sets `__version__` (`src/labpipe/__init__.py`, the single source) and `version` in `pyproject.toml` (a test keeps them equal), and prints the commands to run yourself:
+It refuses unless the tree is clean, the branch is `main`, Unreleased has entries and the version is greater than `__version__`. It moves Unreleased under the new heading, sets `__version__` (`src/labpipe/__init__.py`, the single source) and `version` in `pyproject.toml` (a test keeps them equal), commits with a `Docs-checked:` line for the docmap areas only the version number touched (so the docs check passes on main), and prints the commands to run yourself:
 
 ```bash
 git tag -a v0.2.0 -m "labpipe v0.2.0"
