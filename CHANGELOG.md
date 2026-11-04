@@ -6,9 +6,17 @@ What changed in each release, in four fixed parts. How it is kept: [docs/RELEASI
 
 ### Changes results
 
-- `eds`: a negative element value (INCA can report e.g. Ru −0.1 wt% after background subtraction) now counts as 0 in the metal basis instead of inflating the other metals when renormalised to 100. The element stays with 0 (`metal_basis.taken_as_zero` lists it; the bar chart and summary show it as n.d.), the table as recorded is unchanged, and a new review check `negative_value` asks you to look at the spectrum. The `low_concentration` check now also lists its elements (`elements`), which the report's tables use. Reports without negative values give the same numbers, but are marked out of date.
-
 ### Settings migrated
+
+### New
+
+### Needs your action
+
+## v0.3.0 — 2026-11-04
+
+### Changes results
+
+- `eds`: a negative element value (INCA can report e.g. Ru −0.1 wt% after background subtraction) now counts as 0 in the metal basis instead of inflating the other metals when renormalised to 100. The element stays with 0 (`metal_basis.taken_as_zero` lists it; the bar chart and summary show it as n.d.), the table as recorded is unchanged, and a new review check `negative_value` asks you to look at the spectrum. The `low_concentration` check now also lists its elements (`elements`), which the report's tables use. Reports without negative values give the same numbers, but are marked out of date.
 
 ### New
 
@@ -29,9 +37,7 @@ What changed in each release, in four fixed parts. How it is kept: [docs/RELEASI
 - Comparison figures for EDS and SEM: `eds` draws the composition bars (one 100 % bar per measurement, fixed colour per element, the nominal as a grey bar under it; replaces the `eds.at.*` dot plots, which now show the nominal when asked for) and `sem` the grid of images by gallery magnification, in "Compare samples". No analysis or plot result changes.
 - Your own analyses in the report (no results change): figures, tables and notes you made elsewhere (an Origin fit exported as PNG and CSV) go into the data folder, and `labpipe methods import NAME --folder F --files "*.png,*.csv,*.md" --description D` (or: tell your agent "include my Raman fits from Raman/fits") takes them in, as a kind of analysis of your project with its own analyst agent. Files with the same name before the extension are one measurement (the sample from the file name, or `--sample-from folder`). labpipe copies and hashes them (tables as text, exactly as written), checks what a reader needs (units in the header, a description, a table for a figure) and shows them on a card marked "your analysis, made outside labpipe"; named `quantities` from a table column reach `labpipe dataset` and the comparison figures. It never redoes your analysis, and `labpipe replay` checks the files instead of redrawing them. Excel is not read yet (export CSV). The unrecognised-files messages name the command. docs/methods/imported.md.
 - `uninstall.sh` (Linux, macOS): lists what it removes (labpipe's containers, volumes, images, the stored login, the pop-up unit, the installation, the link, your defaults; `--keep-config`), asks once, `--dry-run` only shows. Projects and data are never touched; `podman-restart.service` (shared by all your Podman containers) and a read-only view are only named. The README is shorter (what you need first; the agent does the rest); the full native install moved to `docs/NATIVE.md`, the project folder layout to `docs/settings/project.md`.
-
 - Data and project never overlap: `project new` refuses a data folder inside the project (as it refused the project inside the data), `labpipe doctor` reports an overlap as an error, and `container start` / `setup` refuse with the reason (the container mounts the project writable, so data inside it would have been writable). No results change.
-
 - Review flags of code-only methods reach you: the SEM gallery lists them under "Check before using" (image, check code, message) and marks the image, the overview row counts "N to check", the watcher notifies once per measurement ("N SEM measurement(s) to check", also in `logs/review_queue.md`); the same for the lab's own methods without an analyst. No results change.
 - Edited lab method code is never run stale: the watcher analyses code-only methods one fresh process per measurement (a process that dies is recorded as failed with its error output) and restarts when `lab/methods/` or `lab/methods.yaml` changes. No results change.
 - A file moved or renamed in the data folder takes its output folder along and is analysed again there; `labpipe doctor` warns while an output folder still holds the analysis of two files (`shared_output_dirs`). Fixed: a moved file used to be taken for a duplicate of its own old place, so it was never analysed again and dropped out of the report.
