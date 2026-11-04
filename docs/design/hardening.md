@@ -1,7 +1,7 @@
 # Hardening after an external review (design)
 
-Status: approved 2026-10-22 (user: "write the design note, start with A"). Groups A and B are
-merged (B on 2026-11-03); C is built (branch `hardening-c`) and waits for review.
+Status: approved 2026-10-22 (user: "write the design note, start with A"). Groups A, B and C are
+merged (B on 2026-11-03, C on 2026-11-04).
 
 An external review (2026-10-22) checked the code and ran parts of it in isolation. Each
 finding below was checked against the code before it went in here. Its main point stands: the
