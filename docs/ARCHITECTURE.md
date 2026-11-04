@@ -153,7 +153,7 @@ Users install releases, never `main`: `install.sh` / `install.ps1` in the instal
 
 - `__version__` in `src/labpipe/__init__.py` is the version; `pyproject.toml` repeats it (a test keeps them equal). `labpipe --version` prints it with the tag at HEAD, or the commit.
 - `CHANGELOG.md` has four fixed parts per release (changes results, settings migrated, new, needs your action); `release.py` parses it for `labpipe update`.
-- CI: `scripts/check_release.py` fails when a shipped method's analysis version changed without a "Changes results" bullet naming it (excuse: commit line `Results-unchanged: <method> <reason>`). `scripts/release.py` makes the release commit and prints the tag and push commands. Dependabot and `scripts/check_updates.py` (weekly workflow) open pull requests for new pins; they reach users only in a release. All in `docs/RELEASING.md`.
+- CI: `scripts/check_release.py` fails when a shipped method's analysis version changed without a "Changes results" bullet naming it (excuse: commit line `Results-unchanged: <method> <reason>`). `scripts/release.py` makes the release commit (with a `Docs-checked:` line for the docmap areas only the version number touched) and prints the tag and push commands. Dependabot and `scripts/check_updates.py` (weekly workflow) open pull requests for new pins; they reach users only in a release. All in `docs/RELEASING.md`.
 
 ## Repository layout (the code)
 

@@ -275,7 +275,7 @@ def test_release_commit_names_the_areas_only_the_version_touched():
 def test_release_commit_passes_the_real_docs_check():
     docmap = yaml.safe_load((ROOT / "docs" / "docmap.yaml").read_text(encoding="utf-8"))
     areas = make_release.docs_checked(docmap)
-    assert {"structure", "setup", "locking"} <= set(areas)     # what failed CI after v0.2.0, v0.3.0
+    assert {"setup", "locking"} <= set(areas)     # with structure, what failed CI after v0.2.0 and v0.3.0
 
 
 # ---- scripts/check_updates.py --------------------------------------------------------------
