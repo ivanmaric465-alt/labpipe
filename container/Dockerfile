@@ -4,7 +4,7 @@
 # image hash covers: src, default config, methods.yaml, references, agents, templates, docs,
 # AGENTS.md/CLAUDE.md, .claude/.codex/.agents sources, hooks, container/, pyproject.toml), so
 # the lab's own files in a repository never get into the image.
-FROM docker.io/library/python@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
+FROM docker.io/library/python@sha256:8c9a3bf2d6dea60d60a2ae2a07c2b2fb1e7d8daed64b146b6792c74ae0d62ac4
 # (python:3.14-slim = Debian 13 trixie, Python 3.14.8, multi-arch index digest)
 
 ARG DEBIAN_FRONTEND=noninteractive
